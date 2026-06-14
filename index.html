@@ -1293,6 +1293,56 @@
 
         const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbx9urobHrcoPTfTKwzlBQY2_Upq1DkOp1yTnk8_MauPJ1Qlr_iEXGmQJAveEkjL3Ske/exec";
 
+        // ── Reemplazar google.script.run por fetch real a Apps Script ──
+        // Esto hace que GitHub Pages se comunique con Google Sheets correctamente
+        window.google = {
+            script: {
+                run: {
+                    _fn: null,
+                    _ok: null,
+                    _fail: null,
+                    withSuccessHandler: function(fn) { this._ok = fn; return this; },
+                    withFailureHandler: function(fn) { this._fail = fn; return this; },
+                    _call: function(accion, params) {
+                        var ok   = this._ok;
+                        var fail = this._fail;
+                        this._ok = null; this._fail = null;
+                        var url = URL_SCRIPT + "?accion=" + encodeURIComponent(accion);
+                        fetch(url, {
+                            method: "POST",
+                            headers: { "Content-Type": "text/plain" },
+                            body: JSON.stringify(params || {})
+                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) { if (ok) ok(data); })
+                        .catch(function(e) {
+                            console.warn("[GAS fetch error]", accion, e.message);
+                            if (fail) fail(e);
+                            // fallback offline si falla la red
+                            if (ok) {
+                                if (accion === 'validarEntradaHuerta') ok({ valido: false });
+                                else if (accion === 'obtenerInventarioCompleto') ok({ productos: [], vendidos: [] });
+                                else if (accion === 'obtenerEmpleadosServidor') ok({ lista: [] });
+                                else if (accion === 'obtenerHistorialOrdenes') ok({ lista: [] });
+                                else ok({ exito: false, error: "Sin conexión" });
+                            }
+                        });
+                    },
+                    validarEntradaHuerta:     function(pin)     { this._call('validarEntradaHuerta', { pin: pin }); },
+                    obtenerInventarioCompleto: function()        { this._call('obtenerInventarioCompleto', {}); },
+                    obtenerEmpleadosServidor:  function()        { this._call('obtenerEmpleadosServidor', {}); },
+                    obtenerHistorialOrdenes:   function()        { this._call('obtenerHistorialOrdenes', {}); },
+                    guardarOrdenServicio:      function(datos)   { this._call('guardarOrdenServicio', datos); },
+                    editarOrdenServicio:       function(cambios) { this._call('editarOrdenServicio', cambios); },
+                    actualizarEstatusEquipo:   function(f, e)    { this._call('actualizarEstatusEquipo', { folio: f, estatus: e }); },
+                    guardarProductoServidor:   function(p, m, f) { this._call('guardarProductoServidor', p); },
+                    eliminarProductoServidor:  function(id)      { this._call('eliminarProductoServidor', { id: id }); },
+                    guardarEmpleadoServidor:   function(c, f)    { this._call('guardarEmpleadoServidor', c); },
+                    obtenerKilometrosMaps:     function(dest)    { this._call('obtenerKilometrosMaps', { destino: dest }); }
+                }
+            }
+        };
+
         // TOASTS DE NOTIFICACIONES
         function showToast(title, message, type) {
             if (!type) type = 'success';
