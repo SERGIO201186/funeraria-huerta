@@ -18,10 +18,54 @@
 // FUNCIÓN PRINCIPAL: Servir la interfaz gráfica
 // ─────────────────────────────────────────────
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('index')
+  return HtmlService.createHtmlOutputFromFile('panel')
     .setTitle('Funeraria Huerta - Panel Operativo')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+// ─────────────────────────────────────────────
+// doPost: recibe peticiones fetch desde GitHub Pages
+// El frontend manda: ?accion=nombreFuncion + body JSON con parámetros
+// ─────────────────────────────────────────────
+function doPost(e) {
+  var headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Type": "application/json"
+  };
+
+  try {
+    var accion = e.parameter.accion || "";
+    var params = {};
+    try { params = JSON.parse(e.postData.contents || "{}"); } catch(ex) {}
+
+    var resultado;
+
+    if      (accion === "validarEntradaHuerta")      resultado = validarEntradaHuerta(params.pin);
+    else if (accion === "obtenerInventarioCompleto")  resultado = obtenerInventarioCompleto();
+    else if (accion === "obtenerEmpleadosServidor")   resultado = obtenerEmpleadosServidor();
+    else if (accion === "obtenerHistorialOrdenes")    resultado = obtenerHistorialOrdenes();
+    else if (accion === "guardarOrdenServicio")       resultado = guardarOrdenServicio(params);
+    else if (accion === "editarOrdenServicio")        resultado = editarOrdenServicio(params);
+    else if (accion === "actualizarEstatusEquipo")    resultado = actualizarEstatusEquipo(params.folio, params.estatus);
+    else if (accion === "guardarProductoServidor")    resultado = guardarProductoServidor(params);
+    else if (accion === "eliminarProductoServidor")   resultado = eliminarProductoServidor(params.id);
+    else if (accion === "guardarEmpleadoServidor")    resultado = guardarEmpleadoServidor(params);
+    else if (accion === "obtenerKilometrosMaps")      resultado = obtenerKilometrosMaps(params.destino);
+    else resultado = { error: "Acción desconocida: " + accion };
+
+    return ContentService
+      .createTextOutput(JSON.stringify(resultado))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch(err) {
+    Logger.log("Error en doPost: " + err.toString());
+    return ContentService
+      .createTextOutput(JSON.stringify({ error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 // ─────────────────────────────────────────────
