@@ -18,7 +18,7 @@
 // FUNCIÓN PRINCIPAL: Servir la interfaz gráfica
 // ─────────────────────────────────────────────
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('panel')
+  return HtmlService.createHtmlOutputFromFile('index')
     .setTitle('Funeraria Huerta - Panel Operativo')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
