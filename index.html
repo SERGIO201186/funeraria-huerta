@@ -1291,7 +1291,7 @@
             };
         }
 
-        const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzbU9ssVJ_MdK8-rg49ZwwWsy4Zjt76c9bUEQZDb3Zk2pPUG3PUKUZ__jNUq6J1WrRf/exec";
+        const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbx9urobHrcoPTfTKwzlBQY2_Upq1DkOp1yTnk8_MauPJ1Qlr_iEXGmQJAveEkjL3Ske/exec";
 
         // ── Reemplazar google.script.run por fetch real a Apps Script ──
         // Esto hace que GitHub Pages se comunique con Google Sheets correctamente
@@ -1587,6 +1587,9 @@
                 .obtenerHistorialOrdenes();
 
             renderizarHistorialODS();
+
+            // Inicializar modo offline-first
+            _inicializarOfflineFirst();
         }
 
         function actualizarCatalogosDesplegables() {
@@ -2371,64 +2374,131 @@
         }
 
         // GUARDADO DE ODS EN EL SERVIDOR (ACTIVA IMPRESIÓN AUTOMÁTICA VERTICAL AL GUARDAR)
+        // ══════════════════════════════════════
+        // FIRMA DIGITAL — Canvas para el cliente
+        // ══════════════════════════════════════
+        var _firmaDataURL = null;
+
+        function abrirModalFirma(onFirmado) {
+            // Crear modal de firma si no existe
+            var existente = document.getElementById('modal-firma-cliente');
+            if (existente) existente.remove();
+
+            var modal = document.createElement('div');
+            modal.id = 'modal-firma-cliente';
+            modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.85);display:flex;align-items:center;justify-content:center;z-index:9999;';
+            modal.innerHTML = `
+                <div style="background:white;border-radius:14px;width:95%;max-width:500px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.4);">
+                    <div style="background:#0f172a;color:white;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+                        <div>
+                            <div style="font-size:0.7rem;opacity:0.7;text-transform:uppercase;">Firma Digital</div>
+                            <strong style="font-size:1rem;">Firma del Contratante</strong>
+                        </div>
+                        <button onclick="document.getElementById('modal-firma-cliente').remove()" style="background:rgba(255,255,255,0.1);border:none;color:white;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1rem;">✕</button>
+                    </div>
+                    <div style="padding:16px;">
+                        <p style="margin:0 0 10px;font-size:0.8rem;color:#64748b;text-align:center;">Firme con el dedo o el mouse en el recuadro</p>
+                        <canvas id="canvas-firma" width="460" height="180"
+                            style="border:2px dashed #cbd5e1;border-radius:8px;width:100%;touch-action:none;cursor:crosshair;display:block;background:#fafafa;"></canvas>
+                        <div style="display:flex;gap:8px;margin-top:12px;">
+                            <button onclick="limpiarFirma()" style="flex:1;padding:10px;background:#f1f5f9;border:none;border-radius:8px;cursor:pointer;font-size:0.8rem;color:#475569;">
+                                <i class="fas fa-eraser"></i> Limpiar
+                            </button>
+                            <button onclick="confirmarFirma()" style="flex:2;padding:10px;background:#15803d;color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:bold;">
+                                <i class="fas fa-check"></i> Confirmar Firma
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // Inicializar canvas de firma
+            var canvas = document.getElementById('canvas-firma');
+            var ctx = canvas.getContext('2d');
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 2.5;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            var dibujando = false;
+            var vacio = true;
+
+            function getPos(e) {
+                var rect = canvas.getBoundingClientRect();
+                var scaleX = canvas.width / rect.width;
+                var scaleY = canvas.height / rect.height;
+                var src = e.touches ? e.touches[0] : e;
+                return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
+            }
+
+            canvas.addEventListener('mousedown',  function(e) { dibujando=true; var p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
+            canvas.addEventListener('mousemove',  function(e) { if(!dibujando) return; var p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); vacio=false; });
+            canvas.addEventListener('mouseup',    function()  { dibujando=false; });
+            canvas.addEventListener('mouseleave', function()  { dibujando=false; });
+            canvas.addEventListener('touchstart', function(e) { e.preventDefault(); dibujando=true; var p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }, {passive:false});
+            canvas.addEventListener('touchmove',  function(e) { e.preventDefault(); if(!dibujando) return; var p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); vacio=false; }, {passive:false});
+            canvas.addEventListener('touchend',   function()  { dibujando=false; });
+
+            window.limpiarFirma = function() { ctx.clearRect(0,0,canvas.width,canvas.height); vacio=true; };
+            window.confirmarFirma = function() {
+                if (vacio) { alert('Por favor firme antes de confirmar.'); return; }
+                _firmaDataURL = canvas.toDataURL('image/png');
+                document.getElementById('modal-firma-cliente').remove();
+                if (onFirmado) onFirmado();
+            };
+        }
+
         function procesarGuardadoODS() {
-            const finado = document.getElementById('c-finado').value.trim().toUpperCase();
+            const finado      = document.getElementById('c-finado').value.trim().toUpperCase();
             const contratante = document.getElementById('c-nombre').value.trim().toUpperCase();
-            const telefono = document.getElementById('c-tel1').value.trim();
+            const telefono    = document.getElementById('c-tel1').value.trim();
 
             if (!finado || !contratante || !telefono) {
                 showToast("Campos obligatorios", "Complete el contratante, fallecido y teléfono de contacto.", "warning");
                 return;
             }
 
+            // Pedir firma digital y luego confirmar guardado
+            abrirModalFirma(function() {
+                showConfirmModal(
+                    "Guardar Orden de Servicio",
+                    "¿Confirmas el registro y emisión de la Orden de Servicio?",
+                    function() { _ejecutarGuardadoODS(finado, contratante, telefono); }
+                );
+            });
+        }
+
+        function _ejecutarGuardadoODS(finado, contratante, telefono) {
             showConfirmModal(
-                "Guardar Orden de Servicio", 
-                "¿Confirmas el registro y emisión de la Orden de Servicio? Se guardará e imprimirá de inmediato.", 
+                "Guardar Orden de Servicio",
+                "¿Confirmas el registro y emisión de la Orden de Servicio? Se guardará e imprimirá de inmediato.",
                 function() {
                     const datos = {
                         vendedor: usuarioActivo ? usuarioActivo.nombre : "OPERADOR",
                         cliente: contratante,
                         telefono: telefono,
                         finado: finado,
-                        // Dirección completa del titular
                         domicilio: (document.getElementById('c-calle').value.toUpperCase() + ", COL. " +
                                     document.getElementById('c-colonia').value.toUpperCase() + ", " +
                                     document.getElementById('c-localidad').value.toUpperCase() + ", " +
                                     document.getElementById('c-municipio').value.toUpperCase()).trim().replace(/^,\s*/, ''),
-                        // Financiero
                         subtotal: parseFloat(document.getElementById('f-subtotal').value) || 0,
                         descuento: parseFloat(document.getElementById('f-descuento').value) || 0,
                         iva: parseFloat(document.getElementById('f-iva').value) || 0,
                         total: parseFloat(document.getElementById('f-total').value) || 0,
                         anticipo: parseFloat(document.getElementById('f-anticipo').value) || 0,
                         restante: parseFloat(document.getElementById('f-restante').value) || 0,
-                        // Pagaré
                         pagoParcial: document.getElementById('chk-pago-parcial').checked,
                         pagareRfc: (function() { var el = document.getElementById('pagare-deudor-rfc'); return el ? el.value.trim().toUpperCase() : ''; })(),
                         pagareVencimiento: (function() { var el = document.getElementById('pagare-vencimiento'); return el ? el.value : ''; })(),
-                        // Servicio
                         modalidad: document.getElementById('s-modalidad-principal').value,
                         ataudId: (document.getElementById('s-modalidad-principal').value === 'INHUMACION')
-                                    ? (document.getElementById('ods-ataud-id').value.trim().toUpperCase())
+                                    ? (document.getElementById('ods-ataud-id') ? document.getElementById('ods-ataud-id').value.trim().toUpperCase() : '')
                                     : (document.getElementById('ods-urna-id') ? document.getElementById('ods-urna-id').value.trim().toUpperCase() : ''),
                         urnaId: (function() { var el = document.getElementById('ods-urna-id'); return el ? el.value.trim().toUpperCase() : ''; })(),
-                        // Embalsamado
-                        embalsamado: (function() {
-                            var chk = document.querySelector('.chk-embalsamado-nuevo:checked');
-                            return chk ? chk.value : 'NINGUNO';
-                        })(),
-                        // Trámites (lista separada por comas)
+                        embalsamado: (function() { var chk = document.querySelector('.chk-embalsamado-nuevo:checked'); return chk ? chk.value : 'NINGUNO'; })(),
                         tramites: Array.from(document.querySelectorAll('.chk-tramite-nuevo:checked')).map(function(c) { return c.value; }).join(', '),
-                        // Marcapasos
-                        marcapasos: (function() {
-                            var chk = document.getElementById('c-marcapasos');
-                            if (chk && chk.checked) {
-                                var det = document.getElementById('c-marcapasos-detalle');
-                                return det ? det.value.trim().toUpperCase() : 'SÍ';
-                            }
-                            return 'NO';
-                        })(),
-                        // Velación
+                        marcapasos: (function() { var chk = document.getElementById('c-marcapasos'); if (chk && chk.checked) { var det = document.getElementById('c-marcapasos-detalle'); return det ? det.value.trim().toUpperCase() : 'SÍ'; } return 'NO'; })(),
                         velacionTipo: (function() { var r = document.querySelector('input[name="vel-tipo-opcion"]:checked'); return r ? r.value : 'DOMICILIO'; })(),
                         velBiombo: document.getElementById('vel-dom-biombo') ? document.getElementById('vel-dom-biombo').checked : false,
                         velBase: document.getElementById('vel-dom-base') ? document.getElementById('vel-dom-base').checked : false,
@@ -2437,87 +2507,122 @@
                         velSalaNombre: (function() { var el = document.getElementById('vel-sala-select'); return el ? (el.options[el.selectedIndex] ? el.options[el.selectedIndex].value : '') : ''; })(),
                         velCruzPremium: document.getElementById('vel-opt-cruz') ? document.getElementById('vel-opt-cruz').checked : false,
                         velCiriosPremium: document.getElementById('vel-opt-cirios') ? document.getElementById('vel-opt-cirios').checked : false,
-                        // Destino final
                         destinoFinal: (function() {
                             var esForaneo = document.getElementById('chk-dest-foraneo') && document.getElementById('chk-dest-foraneo').checked;
-                            if (esForaneo) {
-                                var d = document.getElementById('d-foraneo-nombre');
-                                var km = document.getElementById('d-foraneo-km');
-                                return 'FORÁNEO: ' + (d ? d.value.toUpperCase() : '') + ' (' + (km ? km.value : '0') + ' KM)';
-                            }
+                            if (esForaneo) { var d = document.getElementById('d-foraneo-nombre'); var km = document.getElementById('d-foraneo-km'); return 'FORÁNEO: ' + (d ? d.value.toUpperCase() : '') + ' (' + (km ? km.value : '0') + ' KM)'; }
                             var mod = document.getElementById('s-modalidad-principal').value;
-                            if (mod === 'INHUMACION') {
-                                var p = document.getElementById('d-panteon-local'); return 'LOCAL: ' + (p ? p.value.toUpperCase() : '');
-                            } else {
-                                var c = document.getElementById('d-crematorio-local'); return 'LOCAL CREMATORIO: ' + (c ? c.value.toUpperCase() : '');
-                            }
+                            if (mod === 'INHUMACION') { var p = document.getElementById('d-panteon-local'); return 'LOCAL: ' + (p ? p.value.toUpperCase() : ''); }
+                            var c = document.getElementById('d-crematorio-local'); return 'LOCAL CREMATORIO: ' + (c ? c.value.toUpperCase() : '');
                         })(),
-                        // Fechas logísticas
                         fechaInstalacion: (function() { var el = document.getElementById('lbl-vel-instalacion'); return el ? el.innerText : ''; })(),
                         fechaRecoleccion: (function() { var el = document.getElementById('lbl-vel-recoleccion'); return el ? el.innerText : ''; })(),
-                        // ── Logística de Sepelio (NUEVOS) ──
-                        lugarSepelio:   (document.getElementById('log-lugar-sepelio')  || {value:''}).value.trim().toUpperCase(),
-                        salidaTraslado: (document.getElementById('log-salida-traslado') || {value:''}).value,
-                        horaMisa:       (document.getElementById('log-hora-misa')       || {value:''}).value,
-                        horaSepelio:    (document.getElementById('log-hora-sepelio')    || {value:''}).value,
-                        kmTraslado:     (function() { var el = document.getElementById('d-foraneo-km'); return el ? (parseFloat(el.value)||0) : 0; })(),
-                        costoTraslado:  (function() { var el = document.getElementById('d-foraneo-costo'); return el ? (parseFloat(el.value)||0) : 0; })(),
-                        // Observaciones
-                        observaciones: document.getElementById('f-observaciones').value,
-                        pagareActivo: document.getElementById('chk-pago-parcial').checked
+                        lugarSepelio:    (document.getElementById('log-lugar-sepelio')   || {value:''}).value.trim().toUpperCase(),
+                        salidaTraslado:  (document.getElementById('log-salida-traslado') || {value:''}).value,
+                        horaMisa:        (document.getElementById('log-hora-misa')        || {value:''}).value,
+                        horaSepelio:     (document.getElementById('log-hora-sepelio')     || {value:''}).value,
+                        kmTraslado:      (function() { var el = document.getElementById('d-foraneo-km');    return el ? (parseFloat(el.value)||0) : 0; })(),
+                        costoTraslado:   (function() { var el = document.getElementById('d-foraneo-costo'); return el ? (parseFloat(el.value)||0) : 0; })(),
+                        observaciones:   document.getElementById('f-observaciones').value,
+                        pagareActivo:    document.getElementById('chk-pago-parcial').checked,
+                        firmaCliente:    _firmaDataURL || ''
                     };
 
-                    google.script.run
-                        .withSuccessHandler(function(res) {
-                            if (res && res.exito) {
-                                showToast("Orden Guardada", `Registrada con Folio: ${res.folio}`, "success");
-                                
-                                // Insertar en historial local con todos los datos operativos
-                                HISTORIAL_ORDENES.unshift({
-                                    folio:            res.folio,
-                                    vendedor:         datos.vendedor,
-                                    cliente:          datos.cliente,
-                                    finado:           datos.finado,
-                                    telefono:         datos.telefono,
-                                    domicilio:        datos.domicilio,
-                                    total:            datos.total,
-                                    anticipo:         datos.anticipo,
-                                    restante:         datos.restante,
-                                    modalidad:        datos.modalidad,
-                                    velacionTipo:     datos.velacionTipo,   // ← corregido (antes usaba datos.modalidad)
-                                    logisticaVel:     datos.velBiombo || datos.velBase || datos.velCristo ? 'EQUIPO DOMICILIO' : 'SALA',
-                                    equipoDetalle:    [
-                                                        datos.velBiombo  ? 'BIOMBO' : '',
-                                                        datos.velBase    ? 'BASE' : '',
-                                                        datos.velCristo  ? 'CRISTO' : '',
-                                                        datos.velCruzPremium   ? 'CRUZ DE MADERA' : '',
-                                                        datos.velCiriosPremium ? 'CIRIOS' : '',
-                                                        datos.velCandeleros > 0 ? 'CANDELEROS x'+datos.velCandeleros : ''
-                                                      ].filter(Boolean).join(', ') || (datos.velSalaNombre ? 'SALA: '+datos.velSalaNombre : '—'),
-                                    destinoFinal:     datos.destinoFinal,
-                                    lugarSepelio:     datos.lugarSepelio,
-                                    fechaInstalacion: datos.fechaInstalacion,
-                                    fechaRecoleccion: datos.fechaRecoleccion,
-                                    salidaTraslado:   datos.salidaTraslado,
-                                    horaMisa:         datos.horaMisa,
-                                    horaSepelio:      datos.horaSepelio,
-                                    kmTraslado:       datos.kmTraslado,
-                                    costoTraslado:    datos.costoTraslado,
-                                    estatusEquipo:    'ACTIVO'
-                                });
-                                renderizarHistorialODS();
-                                
-                                // MANDAR A IMPRIMIR AUTOMÁTICAMENTE AL GUARDAR
-                                imprimirContratoYPagare(res.folio);
-                                
-                                navegarA('vista-logistica', document.getElementById('menu-btn-logistica'));
-                            } else {
-                                showToast("Error al guardar", res.error || "Fallo del servidor", "error");
-                            }
-                        })
-                        .guardarOrdenServicio(datos);
+                    // ── Online: guardar en servidor ──
+                    if (navigator.onLine) {
+                        google.script.run
+                            .withSuccessHandler(function(res) {
+                                if (res && res.exito) {
+                                    showToast("Orden Guardada", "Registrada con Folio: " + res.folio, "success");
+                                    HISTORIAL_ORDENES.unshift(_construirEntradaHistorial(res.folio, datos, false));
+                                    _guardarHistorialLocal();
+                                    renderizarHistorialODS();
+                                    actualizarAlertasRecoleccionDashboard();
+                                    imprimirContratoYPagare(res.folio, datos);
+                                    navegarA('vista-logistica', document.getElementById('menu-btn-logistica'));
+                                } else {
+                                    showToast("Error al guardar", (res && res.error) || "Fallo del servidor", "error");
+                                }
+                            })
+                            .withFailureHandler(function(err) {
+                                showToast("Error de red", "Se guardó offline para sincronizar luego.", "warning");
+                                _guardarODSOffline(datos);
+                            })
+                            .guardarOrdenServicio(datos);
+                    } else {
+                        // ── Offline: encolar ──
+                        _guardarODSOffline(datos);
+                    }
                 }
             );
+        }
+
+        function _guardarODSOffline(datos) {
+            var folioTemp = 'ODS-PEND-' + Date.now();
+            datos._folioTemp = folioTemp;
+            HISTORIAL_ORDENES.unshift(_construirEntradaHistorial(folioTemp, datos, true));
+            _guardarHistorialLocal();
+            _encolarOffline('nuevaOrden', datos);
+            renderizarHistorialODS();
+            actualizarContadoresMen();
+            showToast("ODS guardada offline", "Folio temporal: " + folioTemp + ". Se sincronizará al conectarse.", "warning");
+            navegarA('vista-logistica', document.getElementById('menu-btn-logistica'));
+        }
+
+        function _construirEntradaHistorial(folio, datos, pendiente) {
+            return {
+                folio:            folio,
+                vendedor:         datos.vendedor,
+                cliente:          datos.cliente,
+                finado:           datos.finado,
+                telefono:         datos.telefono,
+                domicilio:        datos.domicilio,
+                total:            datos.total,
+                anticipo:         datos.anticipo,
+                restante:         datos.restante,
+                modalidad:        datos.modalidad,
+                velacionTipo:     datos.velacionTipo,
+                equipoDetalle:    [
+                    datos.velBiombo  ? 'BIOMBO' : '',
+                    datos.velBase    ? 'BASE' : '',
+                    datos.velCristo  ? 'CRISTO' : '',
+                    datos.velCruzPremium   ? 'CRUZ DE MADERA' : '',
+                    datos.velCiriosPremium ? 'CIRIOS' : '',
+                    datos.velCandeleros > 0 ? 'CANDELEROS x'+datos.velCandeleros : ''
+                ].filter(Boolean).join(', ') || (datos.velSalaNombre ? 'SALA: '+datos.velSalaNombre : '—'),
+                destinoFinal:     datos.destinoFinal,
+                lugarSepelio:     datos.lugarSepelio,
+                fechaInstalacion: datos.fechaInstalacion,
+                fechaRecoleccion: datos.fechaRecoleccion,
+                salidaTraslado:   datos.salidaTraslado,
+                horaMisa:         datos.horaMisa,
+                horaSepelio:      datos.horaSepelio,
+                kmTraslado:       datos.kmTraslado,
+                costoTraslado:    datos.costoTraslado,
+                estatusEquipo:    'ACTIVO',
+                _pendiente:       pendiente || false
+            };
+        }
+
+        // Actualizar contadores del menú lateral
+        function actualizarContadoresMen() {
+            var hoy = new Date();
+
+            // Contar equipos activos próximos a vencer (≤3 días) o vencidos
+            var equiposAlerta = HISTORIAL_ORDENES.filter(function(o) {
+                if (o.velacionTipo !== 'DOMICILIO' || o.estatusEquipo === 'RECOGIDO' || !o.fechaRecoleccion) return false;
+                var diff = Math.ceil((new Date(o.fechaRecoleccion) - hoy) / 86400000);
+                return diff <= 3;
+            }).length;
+
+            // Contar pagos pendientes (restante > 0)
+            var pagosPendientes = HISTORIAL_ORDENES.filter(function(o) {
+                return (parseFloat(o.restante) || 0) > 0;
+            }).length;
+
+            var badgeEquipo = document.getElementById('badge-equipos-menu');
+            var badgePagos  = document.getElementById('badge-pagos-menu');
+            if (badgeEquipo) { badgeEquipo.innerText = equiposAlerta; badgeEquipo.style.display = equiposAlerta > 0 ? 'inline' : 'none'; }
+            if (badgePagos)  { badgePagos.innerText  = pagosPendientes; badgePagos.style.display  = pagosPendientes > 0 ? 'inline' : 'none'; }
         }
 
         // ALERTAS DE RECOLECCIÓN (12 DÍAS)
@@ -3513,54 +3618,9 @@
             }
         }
 
-        // ── Guardar ODS offline-first (nuevo flujo) ──
-        // Interceptamos procesarGuardadoODS para agregar soporte offline
-        var _originalProcesarGuardadoODS = procesarGuardadoODS;
-
-        // Override: si está offline, guardar localmente con folio temporal
-        function procesarGuardadoODS() {
-            if (navigator.onLine) {
-                // Flujo normal — el original ya maneja todo
-                _originalProcesarGuardadoODS();
-                return;
-            }
-
-            // ── MODO OFFLINE ──
-            var finado      = document.getElementById('c-finado').value.trim().toUpperCase();
-            var contratante = document.getElementById('c-nombre').value.trim().toUpperCase();
-            var telefono    = document.getElementById('c-tel1').value.trim();
-
-            if (!finado || !contratante || !telefono) {
-                showToast("Campos obligatorios", "Complete contratante, fallecido y teléfono.", "warning");
-                return;
-            }
-
-            showConfirmModal(
-                "Guardar Offline",
-                "Sin conexión. La ODS se guardará localmente y se enviará a Google Sheets al reconectarse.",
-                function() {
-                    var folioTemp = 'ODS-PEND-' + Date.now();
-                    var datos = _recolectarDatosODS(contratante, finado, telefono);
-                    datos._folioTemp = folioTemp;
-
-                    // Guardar en historial local con marca de pendiente
-                    HISTORIAL_ORDENES.unshift(Object.assign({}, datos, {
-                        folio: folioTemp,
-                        estatusEquipo: 'ACTIVO',
-                        _pendiente: true
-                    }));
-                    _guardarHistorialLocal();
-                    renderizarHistorialODS();
-                    actualizarAlertasRecoleccionDashboard();
-
-                    // Encolar para sync
-                    _encolarOffline('nuevaOrden', datos);
-
-                    showToast("ODS guardada offline", "Folio temporal: " + folioTemp, "warning");
-                    navegarA('vista-logistica', document.getElementById('menu-btn-logistica'));
-                }
-            );
-        }
+        // ── Guardar ODS offline-first ──
+        // La lógica offline está integrada en procesarGuardadoODS directamente (ver función original)
+        // Este bloque solo registra el Service Worker y el listener de reconexión
 
         // Helper: recolectar todos los datos del formulario ODS
         function _recolectarDatosODS(contratante, finado, telefono) {
@@ -3621,16 +3681,9 @@
             navigator.serviceWorker.register('sw.js').then(function(reg) {
                 console.log('[SW] Registrado:', reg.scope);
             }).catch(function(err) {
-                console.warn('[SW] No disponible en Apps Script — usar versión GitHub:', err.message);
+                console.warn('[SW] No disponible en Apps Script:', err.message);
             });
         }
-
-        // ── Llamar inicialización offline al cargar sesión ──
-        var _origInicializar = inicializarTablasYComponentes;
-        inicializarTablasYComponentes = function() {
-            _origInicializar();
-            _inicializarOfflineFirst();
-        };
 
     </script>
 </body>
