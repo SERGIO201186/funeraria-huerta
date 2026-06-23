@@ -1413,7 +1413,7 @@
             };
         }
 
-        const URL_SCRIPT = "https://script.google.com/macros/s/AKfycby-Nb1Kga-L7RcNBp-trJLLMiKwl19Ud04zF3-RNiZ_MNm6usHpi2cYW5Tpz3UI3eYB/exec";
+        const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbx9urobHrcoPTfTKwzlBQY2_Upq1DkOp1yTnk8_MauPJ1Qlr_iEXGmQJAveEkjL3Ske/exec";
 
         // ── Reemplazar google.script.run por fetch real a Apps Script ──
         // Esto hace que GitHub Pages se comunique con Google Sheets correctamente
@@ -1620,12 +1620,12 @@
                         document.getElementById('user-role').innerText = usuarioActivo.puesto;
                         document.getElementById('saludo-dinamico').innerText = "Panel de Control Operativo — " + usuarioActivo.nombre;
                         
-                        if (usuarioActivo.puesto === "ADMINISTRADOR") {
-                            document.getElementById('menu-btn-empleados').style.display = 'flex';
-                            document.getElementById('panel-admin-inventario').style.display = 'block';
+                        if (usuarioActivo.puesto === "ADMINISTRADOR" || usuarioActivo.puesto === "ADMINISTRADOR GENERAL") {
+                            var btnEmp = document.getElementById('menu-btn-empleados');
+                            if (btnEmp) btnEmp.style.display = 'flex';
                         } else {
-                            document.getElementById('menu-btn-empleados').style.display = 'none';
-                            document.getElementById('panel-admin-inventario').style.display = 'none';
+                            var btnEmp = document.getElementById('menu-btn-empleados');
+                            if (btnEmp) btnEmp.style.display = 'none';
                         }
 
                         inicializarTablasYComponentes();
@@ -1795,82 +1795,16 @@
             }).join('');
         }
 
-        // INVENTARIO FÍSICO
+        // INVENTARIO FÍSICO — funciones conservadas pero blindadas
+        // (la vista fue reemplazada por la Tienda Virtual, estas no se llaman pero evitan errores)
         function filtrarSubInventario(tipoProd) {
-            categoriaActualInventario = tipoProd;
-            document.querySelectorAll('.btn-sub-inv').forEach(function(b) { b.classList.remove('active'); });
-            
-            if(tipoProd === 'ATAUDES') document.getElementById('btn-inv-ataudes').classList.add('active');
-            if(tipoProd === 'URNAS') document.getElementById('btn-inv-urnas').classList.add('active');
-            if(tipoProd === 'OTROS') document.getElementById('btn-inv-otros').classList.add('active');
-            if(tipoProd === 'VENDIDOS') document.getElementById('btn-inv-vendidos').classList.add('active');
-
-            const isAdmin = usuarioActivo && usuarioActivo.puesto === "ADMINISTRADOR";
-            document.querySelectorAll('.col-admin-accion').forEach(function(el) {
-                el.style.display = (isAdmin && tipoProd !== 'VENDIDOS') ? 'table-cell' : 'none';
-            });
-
-            let listaAMostrar = (tipoProd === 'VENDIDOS') ? ARTICULOS_VENDIDOS : PRODUCTOS.filter(function(p) { return p.tipo === tipoProd; });
-            const cuerpoTabla = document.getElementById('tabla-inventario-cuerpo');
-            if(!cuerpoTabla) return;
-            
-            if(tipoProd === 'VENDIDOS') {
-                cuerpoTabla.innerHTML = listaAMostrar.map(function(p) {
-                    return `
-                        <tr style="border-bottom:1px solid #f1f5f9;">
-                            <td style="padding:10px; font-weight:bold; color:var(--primary);">${p.id || 'N/A'}</td>
-                            <td style="padding:10px;">${p.nombre} <br><small style="color:#64748b; text-transform:none;">ADQUIRIDO POR: ${p.comprador}</small></td>
-                            <td style="padding:10px; font-weight:bold;">$${p.precio.toLocaleString()}</td>
-                            <td style="padding:10px; font-weight:bold; color:var(--accent);">${p.fecha}</td>
-                        </tr>
-                    `;
-                }).join('');
-            } else {
-                cuerpoTabla.innerHTML = listaAMostrar.map(function(p) {
-                    return `
-                        <tr style="border-bottom:1px solid #f1f5f9;">
-                            <td style="padding:10px; font-weight:bold; color:var(--primary);">${p.id}</td>
-                            <td style="padding:10px;">${p.nombre}</td>
-                            <td style="padding:10px; font-weight:bold;">$${p.precio.toLocaleString()}</td>
-                            <td style="padding:10px; color:${p.stock <= 2 ? 'var(--danger)' : 'var(--text-dark)'}; font-weight:bold;">${p.stock} PZ</td>
-                            ${isAdmin ? `
-                            <td style="padding:10px;">
-                                <button onclick="eliminarProductoInventario('${p.id}')" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:6px; cursor:pointer;">
-                                    <i class="fas fa-trash-alt"></i>
-                                </button>
-                            </td>` : ''}
-                        </tr>
-                    `;
-                }).join('');
-            }
+            var cuerpoTabla = document.getElementById('tabla-inventario-cuerpo');
+            if (!cuerpoTabla) return; // Vista eliminada, no hacer nada
         }
 
         function agregarProductoInventario() {
-            const id = document.getElementById('inv-nuevo-id').value.trim().toUpperCase();
-            const tipo = document.getElementById('inv-nuevo-tipo').value;
-            const nombre = document.getElementById('inv-nuevo-nombre').value.trim().toUpperCase();
-            const precio = parseFloat(document.getElementById('inv-nuevo-precio').value) || 0;
-            const stock = parseInt(document.getElementById('inv-nuevo-stock').value) || 0;
-
-            if(!id || !nombre) {
-                showToast("Falta información", "Defina un ID y una descripción válida", "warning");
-                return;
-            }
-
-            const p = { id: id, tipo: tipo, nombre: nombre, precio: precio, stock: stock };
-
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res && res.exito) {
-                        showToast("Éxito", "Producto añadido al catálogo", "success");
-                        document.getElementById('inv-nuevo-id').value = "";
-                        document.getElementById('inv-nuevo-nombre').value = "";
-                        inicializarTablasYComponentes();
-                    } else {
-                        showToast("Error", res.error || "Ocurrió un error", "error");
-                    }
-                })
-                .guardarProductoServidor(p, "", false);
+            // Vista eliminada — usar Tienda Virtual
+            showToast("Info", "El inventario ahora se gestiona desde la Tienda Virtual", "warning");
         }
 
         function eliminarProductoInventario(idProducto) {
@@ -3391,7 +3325,7 @@
                     </div>
 
 
-                    <!-- HOJA 3: PAGARÉ MERCANTIL PROFESIONAL (SI ESTÁ ACTIVO) -->
+                    <!-- HOJA 3: PAGARÉ MERCANTIL9 PROFESIONAL (SI ESTÁ ACTIVO) -->
                     ${esPagareActivo ? `
                     <div class="page">
                         <div class="pagare-wrapper">
