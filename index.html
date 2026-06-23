@@ -1429,24 +1429,30 @@
                         var ok   = this._ok;
                         var fail = this._fail;
                         this._ok = null; this._fail = null;
-                        var url = URL_SCRIPT + "?accion=" + encodeURIComponent(accion);
-                        fetch(url, {
+
+                        // Mandar TODO en el body como JSON — Apps Script lee de postData.contents
+                        var body = JSON.stringify(Object.assign({ accion: accion }, params || {}));
+
+                        fetch(URL_SCRIPT, {
                             method: "POST",
-                            headers: { "Content-Type": "text/plain" },
-                            body: JSON.stringify(params || {})
+                            headers: { "Content-Type": "text/plain;charset=utf-8" },
+                            body: body
                         })
-                        .then(function(r) { return r.json(); })
+                        .then(function(r) {
+                            // Apps Script puede devolver redirect 302 — seguirlo
+                            if (!r.ok && r.status !== 302) throw new Error("HTTP " + r.status);
+                            return r.json();
+                        })
                         .then(function(data) { if (ok) ok(data); })
                         .catch(function(e) {
                             console.warn("[GAS fetch error]", accion, e.message);
                             if (fail) fail(e);
-                            // fallback offline si falla la red
                             if (ok) {
                                 if (accion === 'validarEntradaHuerta') ok({ valido: false });
                                 else if (accion === 'obtenerInventarioCompleto') ok({ productos: [], vendidos: [] });
                                 else if (accion === 'obtenerEmpleadosServidor') ok({ lista: [] });
                                 else if (accion === 'obtenerHistorialOrdenes') ok({ lista: [] });
-                                else ok({ exito: false, error: "Sin conexión" });
+                                else ok({ exito: false, error: "Sin conexión al servidor" });
                             }
                         });
                     },
