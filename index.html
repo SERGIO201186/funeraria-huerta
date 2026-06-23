@@ -1413,7 +1413,7 @@
             };
         }
 
-        const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzehMYOWdGkiIXMcOqKB16Ls38pwXB8Peh1wrHz90BvnSkcg2lXho0ZHukHX9PrajFi/exec";
+        const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbx9urobHrcoPTfTKwzlBQY2_Upq1DkOp1yTnk8_MauPJ1Qlr_iEXGmQJAveEkjL3Ske/exec";
 
         // ── Reemplazar google.script.run por fetch real a Apps Script ──
         // Esto hace que GitHub Pages se comunique con Google Sheets correctamente
@@ -1430,29 +1430,56 @@
                         var fail = this._fail;
                         this._ok = null; this._fail = null;
 
-                        // Mandar TODO en el body como JSON — Apps Script lee de postData.contents
-                        var body = JSON.stringify(Object.assign({ accion: accion }, params || {}));
+                        // Acciones de LECTURA → GET (sin CORS, funciona desde cualquier origen)
+                        var accionesGET = [
+                            'validarEntradaHuerta',
+                            'obtenerInventarioCompleto',
+                            'obtenerEmpleadosServidor',
+                            'obtenerHistorialOrdenes',
+                            'obtenerEquiposVelacion',
+                            'obtenerPagosPendientes',
+                            'obtenerKilometrosMaps'
+                        ];
 
-                        fetch(URL_SCRIPT, {
-                            method: "POST",
-                            headers: { "Content-Type": "text/plain;charset=utf-8" },
-                            body: body
-                        })
-                        .then(function(r) {
-                            // Apps Script puede devolver redirect 302 — seguirlo
-                            if (!r.ok && r.status !== 302) throw new Error("HTTP " + r.status);
-                            return r.json();
+                        var esGET = accionesGET.indexOf(accion) >= 0;
+                        var url, fetchOpts;
+
+                        if (esGET) {
+                            // GET con parámetros en query string
+                            var qs = "accion=" + encodeURIComponent(accion);
+                            Object.keys(params || {}).forEach(function(k) {
+                                qs += "&" + encodeURIComponent(k) + "=" + encodeURIComponent(String((params||{})[k]));
+                            });
+                            url = URL_SCRIPT + "?" + qs;
+                            fetchOpts = { method: "GET", redirect: "follow" };
+                        } else {
+                            // POST con JSON en body (para escrituras con datos grandes)
+                            var body = Object.assign({ accion: accion }, params || {});
+                            url = URL_SCRIPT;
+                            fetchOpts = {
+                                method: "POST",
+                                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                                body: JSON.stringify(body),
+                                redirect: "follow"
+                            };
+                        }
+
+                        fetch(url, fetchOpts)
+                        .then(function(r) { return r.text(); })
+                        .then(function(txt) {
+                            try { return JSON.parse(txt); }
+                            catch(e) { throw new Error("Respuesta no JSON: " + txt.substring(0,100)); }
                         })
                         .then(function(data) { if (ok) ok(data); })
                         .catch(function(e) {
-                            console.warn("[GAS fetch error]", accion, e.message);
+                            console.warn("[GAS error]", accion, e.message);
                             if (fail) fail(e);
                             if (ok) {
-                                if (accion === 'validarEntradaHuerta') ok({ valido: false });
+                                if (accion === 'validarEntradaHuerta') ok({ valido: false, error: e.message });
                                 else if (accion === 'obtenerInventarioCompleto') ok({ productos: [], vendidos: [] });
                                 else if (accion === 'obtenerEmpleadosServidor') ok({ lista: [] });
                                 else if (accion === 'obtenerHistorialOrdenes') ok({ lista: [] });
-                                else ok({ exito: false, error: "Sin conexión al servidor" });
+                                else ok({ exito: false, error: "Sin conexión: " + e.message });
                             }
                         });
                     },
