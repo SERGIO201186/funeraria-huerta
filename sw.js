@@ -5,7 +5,7 @@
  * Offline: si no hay red, sirve desde caché como respaldo.
  */
 
-const CACHE_NAME = 'huerta-v2.0';
+const CACHE_NAME = 'huerta-v3.0';
 
 // Archivos que se cachean al instalar el SW (shell de la app)
 const ASSETS_ESTATICOS = [
