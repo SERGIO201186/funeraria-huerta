@@ -21,7 +21,7 @@ function doGet() {
   return HtmlService.createHtmlOutputFromFile('index')
     .setTitle('Funeraria Huerta - Panel Operativo')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
 }
 
 // ─────────────────────────────────────────────
@@ -29,17 +29,30 @@ function doGet() {
 // El frontend manda: ?accion=nombreFuncion + body JSON con parámetros
 // ─────────────────────────────────────────────
 function doPost(e) {
-  var headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Content-Type": "application/json"
-  };
-
   try {
-    var accion = e.parameter.accion || "";
+    // Guardia: si e llega undefined (ping de health-check de Apps Script)
+    if (!e) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ ok: true, msg: "Apps Script activo." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Leer el body — el frontend manda todo en postData.contents como JSON
     var params = {};
-    try { params = JSON.parse(e.postData.contents || "{}"); } catch(ex) {}
+    try {
+      if (e.postData && e.postData.contents) {
+        params = JSON.parse(e.postData.contents);
+      }
+    } catch(ex) {
+      Logger.log("Error parseando body JSON: " + ex.toString());
+    }
+
+    // La acción viene dentro del body: { accion: "...", ...resto }
+    // También acepta e.parameter.accion como fallback (compatibilidad)
+    var accion = params.accion || (e.parameter && e.parameter.accion) || "";
+
+    // Remover 'accion' del objeto params para que no interfiera con los datos
+    delete params.accion;
 
     var resultado;
 
@@ -54,7 +67,11 @@ function doPost(e) {
     else if (accion === "eliminarProductoServidor")   resultado = eliminarProductoServidor(params.id);
     else if (accion === "guardarEmpleadoServidor")    resultado = guardarEmpleadoServidor(params);
     else if (accion === "obtenerKilometrosMaps")      resultado = obtenerKilometrosMaps(params.destino);
-    else resultado = { error: "Acción desconocida: " + accion };
+    else if (accion === "obtenerEquiposVelacion")     resultado = obtenerEquiposVelacion();
+    else if (accion === "obtenerPagosPendientes")     resultado = obtenerPagosPendientes();
+    else if (accion === "registrarPago")              resultado = registrarPago(params.folio, params.montoPago);
+    else if (accion === "")                           resultado = { ok: true, msg: "Sin acción." };
+    else                                              resultado = { error: "Acción desconocida: " + accion };
 
     return ContentService
       .createTextOutput(JSON.stringify(resultado))
@@ -115,6 +132,19 @@ function obtenerHoja(nombreHoja) {
     }
     else if (nombreHoja === "ORDENES") {
       sheet.getRange(1, 1, 1, CABECERAS_ORDENES.length).setValues([CABECERAS_ORDENES]);
+    }
+    else if (nombreHoja === "EQUIPOS_VELACION") {
+      sheet.getRange(1, 1, 1, 9).setValues([[
+        "FOLIO ODS", "FALLECIDO", "CONTRATANTE", "DOMICILIO",
+        "EQUIPO DETALLE", "FECHA INSTALACIÓN", "FECHA RECOLECCIÓN",
+        "DÍAS RESTANTES", "ESTATUS"
+      ]]);
+    }
+    else if (nombreHoja === "PAGOS_PENDIENTES") {
+      sheet.getRange(1, 1, 1, 8).setValues([[
+        "FOLIO ODS", "FECHA REGISTRO", "CONTRATANTE", "FALLECIDO",
+        "TOTAL SERVICIO", "ANTICIPO PAGADO", "SALDO PENDIENTE", "ESTATUS PAGO"
+      ]]);
     }
 
     const lastCol = sheet.getLastColumn();
@@ -627,5 +657,116 @@ function obtenerKilometrosMaps(destinoForaneo) {
   } catch (error) {
     Logger.log("Error en obtenerKilometrosMaps: " + error.toString());
     return 0;
+  }
+}
+
+// ─────────────────────────────────────────────
+// 13. EQUIPOS DE VELACIÓN EN DOMICILIO
+// ─────────────────────────────────────────────
+function obtenerEquiposVelacion() {
+  try {
+    const sheet = obtenerHoja("ORDENES");
+    const data  = sheet.getDataRange().getValues();
+    const hoy   = new Date();
+    const lista = [];
+
+    for (let i = 1; i < data.length; i++) {
+      const velTipo = String(data[i][23] || '');
+      const estatus = String(data[i][35] || 'ACTIVO');
+      if (velTipo !== 'DOMICILIO') continue;
+
+      const fechaRec    = data[i][27];
+      let diasRestantes = null;
+      let urgencia      = 'NORMAL';
+
+      if (fechaRec) {
+        const fRec = new Date(fechaRec);
+        diasRestantes = Math.ceil((fRec - hoy) / 86400000);
+        if      (diasRestantes < 0)  urgencia = 'VENCIDO';
+        else if (diasRestantes <= 2) urgencia = 'URGENTE';
+        else if (diasRestantes <= 5) urgencia = 'PROXIMO';
+      }
+
+      lista.push({
+        folio:            String(data[i][0]),
+        fallecido:        String(data[i][4] || ''),
+        contratante:      String(data[i][3] || ''),
+        domicilio:        String(data[i][5] || ''),
+        equipoDetalle:    String(data[i][28] || data[i][24] || '—'),
+        fechaInstalacion: String(data[i][26] || ''),
+        fechaRecoleccion: fechaRec ? String(fechaRec).split('T')[0] : '',
+        diasRestantes:    diasRestantes,
+        urgencia:         urgencia,
+        estatus:          estatus
+      });
+    }
+
+    const orden = { VENCIDO: 0, URGENTE: 1, PROXIMO: 2, NORMAL: 3 };
+    lista.sort(function(a, b) { return (orden[a.urgencia]||3) - (orden[b.urgencia]||3); });
+    return { lista: lista };
+  } catch (error) {
+    Logger.log("Error en obtenerEquiposVelacion: " + error.toString());
+    return { lista: [], error: error.toString() };
+  }
+}
+
+// ─────────────────────────────────────────────
+// 14. PAGOS PENDIENTES POR COBRAR
+// ─────────────────────────────────────────────
+function obtenerPagosPendientes() {
+  try {
+    const sheet = obtenerHoja("ORDENES");
+    const data  = sheet.getDataRange().getValues();
+    const lista = [];
+
+    for (let i = 1; i < data.length; i++) {
+      const saldo = parseFloat(data[i][13]) || 0;
+      if (saldo <= 0) continue;
+
+      lista.push({
+        folio:        String(data[i][0]),
+        fechaRegistro: String(data[i][1]).split('T')[0],
+        contratante:  String(data[i][3] || ''),
+        fallecido:    String(data[i][4] || ''),
+        total:        parseFloat(data[i][11]) || 0,
+        anticipo:     parseFloat(data[i][12]) || 0,
+        saldo:        saldo,
+        tienePagare:  data[i][14] === 'SÍ',
+        vencePagare:  String(data[i][16] || '')
+      });
+    }
+
+    lista.sort(function(a, b) { return b.saldo - a.saldo; });
+    const totalPendiente = lista.reduce(function(s, o) { return s + o.saldo; }, 0);
+    return { lista: lista, totalPendiente: totalPendiente };
+  } catch (error) {
+    Logger.log("Error en obtenerPagosPendientes: " + error.toString());
+    return { lista: [], totalPendiente: 0, error: error.toString() };
+  }
+}
+
+// ─────────────────────────────────────────────
+// 15. REGISTRAR ABONO / PAGO PARCIAL O TOTAL
+// ─────────────────────────────────────────────
+function registrarPago(folio, montoPago) {
+  try {
+    if (!folio || !montoPago) return { exito: false, error: "Datos incompletos." };
+    const sheet = obtenerHoja("ORDENES");
+    const data  = sheet.getDataRange().getValues();
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() !== String(folio).trim()) continue;
+      const anticipo      = parseFloat(data[i][12]) || 0;
+      const total         = parseFloat(data[i][11]) || 0;
+      const nuevoAnticipo = Math.min(anticipo + parseFloat(montoPago), total);
+      const nuevoSaldo    = Math.max(total - nuevoAnticipo, 0);
+      sheet.getRange(i + 1, 13).setValue(nuevoAnticipo);
+      sheet.getRange(i + 1, 14).setValue(nuevoSaldo);
+      return { exito: true, nuevoAnticipo: nuevoAnticipo, nuevoSaldo: nuevoSaldo };
+    }
+    return { exito: false, error: "Folio no encontrado." };
+  } catch (error) {
+    Logger.log("Error en registrarPago: " + error.toString());
+    return { exito: false, error: error.toString() };
   }
 }
