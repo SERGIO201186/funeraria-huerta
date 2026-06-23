@@ -27,6 +27,9 @@
         }
         
         body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); margin: 0; color: var(--text-dark); overflow-x: hidden; }
+
+        /* Eliminar delay táctil de 300ms en toda la app — crítico para PWA */
+        button, a, label, [onclick] { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
         
         /* RESTRICCIÓN: Mayúsculas obligatorias en campos de texto */
         input, select, textarea { width: 100%; padding: 11px; border: 2px solid #e2e8f0; border-radius: 6px; box-sizing: border-box; font-size: 0.9rem; transition: all 0.2s ease; }
@@ -250,15 +253,14 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            /* Eliminar delay táctil de 300ms en mobile/PWA */
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+            user-select: none;
+            -webkit-user-select: none;
         }
-        .pin-btn:hover {
-            background: #f1f5f9;
-            border-color: #cbd5e1;
-        }
-        .pin-btn:active {
-            transform: scale(0.95);
-            background: #e2e8f0;
-        }
+        .pin-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
+        .pin-btn:active { transform: scale(0.93); background: var(--primary); color: white; border-color: var(--primary); }
 
         /* ── MODAL DE EDICIÓN DE ODS ── */
         .modal-edit-overlay {
@@ -467,18 +469,18 @@
             </div>
 
             <div class="pinpad" id="pinpad-layout">
-                <button class="pin-btn" onclick="teclearNumero('1')">1</button>
-                <button class="pin-btn" onclick="teclearNumero('2')">2</button>
-                <button class="pin-btn" onclick="teclearNumero('3')">3</button>
-                <button class="pin-btn" onclick="teclearNumero('4')">4</button>
-                <button class="pin-btn" onclick="teclearNumero('5')">5</button>
-                <button class="pin-btn" onclick="teclearNumero('6')">6</button>
-                <button class="pin-btn" onclick="teclearNumero('7')">7</button>
-                <button class="pin-btn" onclick="teclearNumero('8')">8</button>
-                <button class="pin-btn" onclick="teclearNumero('9')">9</button>
-                <button class="pin-btn" style="background:transparent; color:var(--danger);" onclick="resetearVisualizadorPin()"><i class="fas fa-times"></i></button>
-                <button class="pin-btn" onclick="teclearNumero('0')">0</button>
-                <button class="pin-btn" style="background:transparent; color:#64748b;" onclick="borrarUltimoDigito()"><i class="fas fa-backspace"></i></button>
+                <button class="pin-btn" ontouchstart="e=arguments[0];e.preventDefault();teclearNumero('1')" onclick="teclearNumero('1')">1</button>
+                <button class="pin-btn" ontouchstart="e=arguments[0];e.preventDefault();teclearNumero('2')" onclick="teclearNumero('2')">2</button>
+                <button class="pin-btn" ontouchstart="e=arguments[0];e.preventDefault();teclearNumero('3')" onclick="teclearNumero('3')">3</button>
+                <button class="pin-btn" ontouchstart="e=arguments[0];e.preventDefault();teclearNumero('4')" onclick="teclearNumero('4')">4</button>
+                <button class="pin-btn" ontouchstart="e=arguments[0];e.preventDefault();teclearNumero('5')" onclick="teclearNumero('5')">5</button>
+                <button class="pin-btn" ontouchstart="e=arguments[0];e.preventDefault();teclearNumero('6')" onclick="teclearNumero('6')">6</button>
+                <button class="pin-btn" ontouchstart="e=arguments[0];e.preventDefault();teclearNumero('7')" onclick="teclearNumero('7')">7</button>
+                <button class="pin-btn" ontouchstart="e=arguments[0];e.preventDefault();teclearNumero('8')" onclick="teclearNumero('8')">8</button>
+                <button class="pin-btn" ontouchstart="e=arguments[0];e.preventDefault();teclearNumero('9')" onclick="teclearNumero('9')">9</button>
+                <button class="pin-btn" style="background:transparent;color:var(--danger);" ontouchstart="e=arguments[0];e.preventDefault();resetearVisualizadorPin()" onclick="resetearVisualizadorPin()"><i class="fas fa-times"></i></button>
+                <button class="pin-btn" ontouchstart="e=arguments[0];e.preventDefault();teclearNumero('0')" onclick="teclearNumero('0')">0</button>
+                <button class="pin-btn" style="background:transparent;color:#64748b;" ontouchstart="e=arguments[0];e.preventDefault();borrarUltimoDigito()" onclick="borrarUltimoDigito()"><i class="fas fa-backspace"></i></button>
             </div>
         </div>
     </div>
@@ -1420,7 +1422,7 @@
         window.google = {
             script: {
                 run: {
-                    _fn: null
+                    _fn: null,
                     _ok: null,
                     _fail: null,
                     withSuccessHandler: function(fn) { this._ok = fn; return this; },
