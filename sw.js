@@ -1,15 +1,15 @@
 /**
  * SERVICE WORKER — Funeraria Huerta PWA
- * Estrategia: Cache-first para assets estáticos, Network-first para datos.
- * Offline: sirve desde caché, encola operaciones para sync posterior.
+ * v2: Network-first para HTML (siempre intenta traer la versión más nueva).
+ * Cache-first solo para assets estáticos (fuentes, íconos).
+ * Offline: si no hay red, sirve desde caché como respaldo.
  */
 
-const CACHE_NAME    = 'huerta-v1.4';
-const CACHE_OFFLINE = 'huerta-offline-v1.4';
+const CACHE_NAME = 'huerta-v2.0';
 
 // Archivos que se cachean al instalar el SW (shell de la app)
 const ASSETS_ESTATICOS = [
-  './panel.html',
+  './index.html',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -18,12 +18,11 @@ const ASSETS_ESTATICOS = [
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/webfonts/fa-solid-900.ttf'
 ];
 
-// ── INSTALL: pre-cachear assets ──
+// ── INSTALL: pre-cachear assets y activar de inmediato ──
 self.addEventListener('install', function(event) {
   console.log('[SW] Instalando versión:', CACHE_NAME);
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      // Cachear assets críticos — ignorar errores individuales
       return Promise.allSettled(
         ASSETS_ESTATICOS.map(function(url) {
           return cache.add(url).catch(function(e) {
@@ -32,26 +31,25 @@ self.addEventListener('install', function(event) {
         })
       );
     }).then(function() {
-      return self.skipWaiting();
+      return self.skipWaiting(); // activa esta versión sin esperar a cerrar pestañas
     })
   );
 });
 
-// ── ACTIVATE: limpiar cachés viejos ──
+// ── ACTIVATE: limpiar TODOS los cachés viejos y tomar control inmediato ──
 self.addEventListener('activate', function(event) {
   console.log('[SW] Activado:', CACHE_NAME);
   event.waitUntil(
     caches.keys().then(function(keys) {
       return Promise.all(
-        keys.filter(function(key) {
-          return key !== CACHE_NAME && key !== CACHE_OFFLINE;
-        }).map(function(key) {
-          console.log('[SW] Eliminando caché viejo:', key);
-          return caches.delete(key);
-        })
+        keys.filter(function(key) { return key !== CACHE_NAME; })
+            .map(function(key) {
+              console.log('[SW] Eliminando caché viejo:', key);
+              return caches.delete(key);
+            })
       );
     }).then(function() {
-      return self.clients.claim();
+      return self.clients.claim(); // toma control de todas las pestañas/app abiertas YA
     })
   );
 });
@@ -60,12 +58,11 @@ self.addEventListener('activate', function(event) {
 self.addEventListener('fetch', function(event) {
   var url = new URL(event.request.url);
 
-  // Google Apps Script — no se puede cachear (CORS), dejar pasar
+  // Google Apps Script — nunca cachear, siempre red
   if (url.hostname.includes('script.google.com') ||
       url.hostname.includes('googleapis.com')) {
     event.respondWith(
       fetch(event.request).catch(function() {
-        // Offline: devolver respuesta JSON de error controlado
         return new Response(
           JSON.stringify({ exito: false, error: 'Sin conexión al servidor Google.' }),
           { headers: { 'Content-Type': 'application/json' } }
@@ -75,7 +72,7 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
-  // CDN fonts/icons — Cache-first
+  // CDN fonts/icons — Cache-first (rara vez cambian)
   if (url.hostname.includes('cdnjs.cloudflare.com') ||
       url.hostname.includes('fonts.googleapis.com') ||
       url.hostname.includes('fonts.gstatic.com')) {
@@ -84,45 +81,38 @@ self.addEventListener('fetch', function(event) {
         if (cached) return cached;
         return fetch(event.request).then(function(response) {
           var clone = response.clone();
-          caches.open(CACHE_NAME).then(function(cache) {
-            cache.put(event.request, clone);
-          });
+          caches.open(CACHE_NAME).then(function(cache) { cache.put(event.request, clone); });
           return response;
-        }).catch(function() {
-          return new Response('', { status: 503 });
-        });
+        }).catch(function() { return new Response('', { status: 503 }); });
       })
     );
     return;
   }
 
-  // panel.html y assets locales — Cache-first con actualización en background
+  // HTML / JS / JSON propio — NETWORK-FIRST: siempre intenta traer lo último
+  // Esto es lo que soluciona el problema de la app instalada viendo versiones viejas
   event.respondWith(
-    caches.match(event.request).then(function(cached) {
-      var networkFetch = fetch(event.request).then(function(response) {
+    fetch(event.request)
+      .then(function(response) {
         if (response && response.status === 200) {
           var clone = response.clone();
-          caches.open(CACHE_NAME).then(function(cache) {
-            cache.put(event.request, clone);
-          });
+          caches.open(CACHE_NAME).then(function(cache) { cache.put(event.request, clone); });
         }
         return response;
-      }).catch(function() {
-        return null;
-      });
-
-      // Retornar caché inmediatamente, actualizar en background
-      return cached || networkFetch;
-    })
+      })
+      .catch(function() {
+        // Solo si NO hay internet, usar caché como respaldo
+        return caches.match(event.request).then(function(cached) {
+          return cached || caches.match('./index.html');
+        });
+      })
   );
 });
 
 // ── SYNC: Background Sync cuando se recupera la conexión ──
 self.addEventListener('sync', function(event) {
   if (event.tag === 'sync-ordenes') {
-    console.log('[SW] Background Sync activado: sync-ordenes');
     event.waitUntil(
-      // Notificar a todos los clientes activos para que ejecuten la sincronización
       self.clients.matchAll().then(function(clients) {
         clients.forEach(function(client) {
           client.postMessage({ type: 'TRIGGER_SYNC' });
