@@ -4020,12 +4020,41 @@
             return url;
         }
 
-        // ── Registrar Service Worker ──
+        // ── Registrar Service Worker con auto-actualización ──
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').then(function(reg) {
                 console.log('[SW] Registrado:', reg.scope);
+
+                // Revisar si hay actualización disponible cada vez que se abre la app
+                reg.update();
+
+                // Si ya hay un SW esperando (nueva versión lista), activarlo
+                if (reg.waiting) {
+                    reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+
+                // Detectar cuando se encuentra una nueva versión mientras la app está abierta
+                reg.addEventListener('updatefound', function() {
+                    var nuevoSW = reg.installing;
+                    if (!nuevoSW) return;
+                    nuevoSW.addEventListener('statechange', function() {
+                        if (nuevoSW.state === 'installed' && navigator.serviceWorker.controller) {
+                            // Hay una versión nueva lista — recargar automáticamente
+                            showToast('Actualización disponible', 'Cargando la versión más reciente...', 'success');
+                            setTimeout(function() { window.location.reload(); }, 1200);
+                        }
+                    });
+                });
             }).catch(function(err) {
                 console.warn('[SW] No disponible:', err.message);
+            });
+
+            // Si el controlador del SW cambia (nueva versión tomó control), recargar una sola vez
+            var _swRecargado = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function() {
+                if (_swRecargado) return;
+                _swRecargado = true;
+                window.location.reload();
             });
         }
 
