@@ -1413,7 +1413,7 @@
             };
         }
 
-        const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzehMYOWdGkiIXMcOqKB16Ls38pwXB8Peh1wrHz90BvnSkcg2lXho0ZHukHX9PrajFi/exec";
+        const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbx9urobHrcoPTfTKwzlBQY2_Upq1DkOp1yTnk8_MauPJ1Qlr_iEXGmQJAveEkjL3Ske/exec";
 
         // ── Reemplazar google.script.run por fetch real a Apps Script ──
         // Esto hace que GitHub Pages se comunique con Google Sheets correctamente
@@ -2770,630 +2770,375 @@
         }
 
         // IMPRESIÓN OFICIAL CONTRATO Y PAGARÉ EN ORIENTACIÓN VERTICAL CON FOLIO ROJO ENCUADRADO
-        function imprimirContratoYPagare(folioSuministrado) {
-            const folio = folioSuministrado || "CONTRATO-TEMP-2026";
-            const contratante = document.getElementById('c-nombre').value.toUpperCase() || "SIN NOMBRE";
-            const finado = document.getElementById('c-finado').value.toUpperCase() || "SIN NOMBRE";
-            const telefono = document.getElementById('c-tel1').value || "S/N";
-            
+        function imprimirContratoYPagare(folioSuministrado, datosGuardados) {
+            // Usar folio real pasado como parámetro, nunca el temporal
+            const folio = (folioSuministrado && !String(folioSuministrado).includes('PEND'))
+                ? folioSuministrado
+                : (folioSuministrado || "BORRADOR-" + new Date().toLocaleDateString('es-MX').replace(/\//g,'-'));
+
+            // Leer datos del formulario o de los datos guardados
+            const contratante = (datosGuardados && datosGuardados.cliente)
+                ? datosGuardados.cliente
+                : (document.getElementById('c-nombre').value.toUpperCase() || "SIN NOMBRE");
+            const finado = (datosGuardados && datosGuardados.finado)
+                ? datosGuardados.finado
+                : (document.getElementById('c-finado').value.toUpperCase() || "SIN NOMBRE");
+            const telefono = (datosGuardados && datosGuardados.telefono)
+                ? datosGuardados.telefono
+                : (document.getElementById('c-tel1').value || "S/N");
+
             const calle = document.getElementById('c-calle').value.toUpperCase();
-            const col = document.getElementById('c-colonia').value.toUpperCase();
-            const loc = document.getElementById('c-localidad').value.toUpperCase();
-            const mun = document.getElementById('c-municipio').value.toUpperCase();
+            const col   = document.getElementById('c-colonia').value.toUpperCase();
+            const loc   = document.getElementById('c-localidad').value.toUpperCase();
+            const mun   = document.getElementById('c-municipio').value.toUpperCase();
             const direccionCompleta = `${calle}, COL. ${col}, ${loc}, ${mun}`;
 
-            const subtotal = parseFloat(document.getElementById('f-subtotal').value) || 0;
+            const subtotal  = parseFloat(document.getElementById('f-subtotal').value)  || 0;
             const descuento = parseFloat(document.getElementById('f-descuento').value) || 0;
-            const iva = parseFloat(document.getElementById('f-iva').value) || 0;
-            const total = parseFloat(document.getElementById('f-total').value) || 0;
-            const anticipo = parseFloat(document.getElementById('f-anticipo').value) || 0;
-            const restante = parseFloat(document.getElementById('f-restante').value) || 0;
+            const iva       = parseFloat(document.getElementById('f-iva').value)       || 0;
+            const total     = parseFloat(document.getElementById('f-total').value)     || 0;
+            const anticipo  = parseFloat(document.getElementById('f-anticipo').value)  || 0;
+            const restante  = parseFloat(document.getElementById('f-restante').value)  || 0;
 
             const esPagareActivo = document.getElementById('chk-pago-parcial').checked;
-            const pagareVenc = document.getElementById('pagare-vencimiento').value || "--/--/----";
-            const pagareRfc = document.getElementById('pagare-deudor-rfc').value.toUpperCase() || "S/N";
-            const pagareLetra = document.getElementById('pagare-cantidad-letra').value || "S/N";
+            const pagareVenc     = document.getElementById('pagare-vencimiento').value || "--/--/----";
+            const pagareRfc      = document.getElementById('pagare-deudor-rfc').value.toUpperCase() || "S/N";
+            const pagareLetra    = document.getElementById('pagare-cantidad-letra').value || "S/N";
 
-            // EXTRACTOR DINÁMICO DE PRODUCTOS Y ARTÍCULOS DETALLADOS
+            // ARTÍCULOS
             let articulosHTML = "";
             let itemsCount = 1;
             const modalidad = document.getElementById('s-modalidad-principal').value;
-            
+
             if (modalidad === "INHUMACION") {
-                const ataudSel = document.getElementById('s-inhumacion-ataud');
-                const ataudNom = ataudSel.value || "ATAÚD POR DEFINIR";
-                const ataudCost = parseFloat(document.getElementById('s-inhumacion-costo').value) || 0;
-                articulosHTML += `<tr>
-                    <td>${itemsCount++}</td>
-                    <td><strong>ADQUISICIÓN DE ATAÚD:</strong> ${ataudNom}</td>
-                    <td style="text-align: right;">$${ataudCost.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
-                </tr>`;
+                const ataudSel  = document.getElementById('s-inhumacion-ataud');
+                const ataudNom  = ataudSel ? ataudSel.value : "ATAÚD POR DEFINIR";
+                const ataudCost = parseFloat((document.getElementById('s-inhumacion-costo') || {value:'0'}).value) || 0;
+                articulosHTML += `<tr><td>${itemsCount++}</td><td><strong>ADQUISICIÓN DE ATAÚD:</strong> ${ataudNom}</td><td style="text-align:right;">$${ataudCost.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
             } else {
-                const subtipo = document.getElementById('s-subtipo-cremacion').value;
-                const extraCrem = parseFloat(document.getElementById('s-costo-cremacion-extra').value) || 0;
-                articulosHTML += `<tr>
-                    <td>${itemsCount++}</td>
-                    <td><strong>SERVICIO DE CREMACIÓN:</strong> ${subtipo.replace('_', ' ')}</td>
-                    <td style="text-align: right;">$${extraCrem.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
-                </tr>`;
-
-                const urnaSel = document.getElementById('s-cremacion-urna');
-                const urnaNom = urnaSel.value || "URNA POR DEFINIR";
-                const urnaCost = parseFloat(document.getElementById('s-cremacion-costo-urna').value) || 0;
-                articulosHTML += `<tr>
-                    <td>${itemsCount++}</td>
-                    <td><strong>ADQUISICIÓN DE URNA:</strong> ${urnaNom}</td>
-                    <td style="text-align: right;">$${urnaCost.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
-                </tr>`;
-
-                const ataudCremSel = document.getElementById('s-cremacion-ataud');
-                const ataudCremNom = ataudCremSel.value;
-                const ataudCremCost = parseFloat(document.getElementById('s-cremacion-costo-ataud').value) || 0;
-                if (ataudCremCost > 0 && ataudCremNom) {
-                    articulosHTML += `<tr>
-                        <td>${itemsCount++}</td>
-                        <td><strong>ATAÚD DE CREMACIÓN/DONACIÓN:</strong> ${ataudCremNom}</td>
-                        <td style="text-align: right;">$${ataudCremCost.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
-                    </tr>`;
-                }
-
-                // Exceso de Peso
-                const pesoSel = document.getElementById('s-peso-adicional').value;
-                if (pesoSel !== "0") {
-                    let costoPeso = 0;
-                    let descPeso = "EXCESO DE PESO";
-                    if (pesoSel === "OTRO") {
-                        costoPeso = parseFloat(document.getElementById('s-peso-otro-costo').value) || 0;
-                        descPeso += " (MANUAL ESPECÍFICO)";
-                    } else {
-                        costoPeso = parseFloat(pesoSel) || 0;
-                        descPeso += ` (${document.getElementById('s-peso-adicional').options[document.getElementById('s-peso-adicional').selectedIndex].text})`;
-                    }
-                    if (costoPeso > 0) {
-                        articulosHTML += `<tr>
-                            <td>${itemsCount++}</td>
-                            <td><strong>ADICIONAL POR LOGÍSTICA:</strong> ${descPeso}</td>
-                            <td style="text-align: right;">$${costoPeso.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
-                        </tr>`;
-                    }
-                }
+                const subtipo   = (document.getElementById('s-subtipo-cremacion') || {value:'CREMACION'}).value;
+                const extraCrem = parseFloat((document.getElementById('s-costo-cremacion-extra') || {value:'0'}).value) || 0;
+                articulosHTML += `<tr><td>${itemsCount++}</td><td><strong>SERVICIO DE CREMACIÓN:</strong> ${subtipo.replace('_',' ')}</td><td style="text-align:right;">$${extraCrem.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
+                const urnaSel  = document.getElementById('s-cremacion-urna');
+                const urnaNom  = urnaSel ? urnaSel.value : "URNA POR DEFINIR";
+                const urnaCost = parseFloat((document.getElementById('s-cremacion-costo-urna') || {value:'0'}).value) || 0;
+                articulosHTML += `<tr><td>${itemsCount++}</td><td><strong>ADQUISICIÓN DE URNA:</strong> ${urnaNom}</td><td style="text-align:right;">$${urnaCost.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
             }
 
-            // Embalsamado
             document.querySelectorAll('.chk-embalsamado-nuevo:checked').forEach(function(c) {
                 const precio = parseFloat(c.getAttribute('data-precio') || 0);
-                articulosHTML += `<tr>
-                    <td>${itemsCount++}</td>
-                    <td><strong>PREPARACIÓN / EMBALSAMADO:</strong> OPCIÓN TÉCNICA - ${c.value.replace('_', ' ')}</td>
-                    <td style="text-align: right;">$${precio.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
-                </tr>`;
+                articulosHTML += `<tr><td>${itemsCount++}</td><td><strong>EMBALSAMADO:</strong> ${c.value.replace('_',' ')}</td><td style="text-align:right;">$${precio.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
             });
 
-            // Trámites
             document.querySelectorAll('.chk-tramite-nuevo:checked').forEach(function(c) {
                 const precio = parseFloat(c.getAttribute('data-precio') || 0);
-                articulosHTML += `<tr>
-                    <td>${itemsCount++}</td>
-                    <td><strong>GESTIÓN DE TRÁMITE GUBERNAMENTAL:</strong> ${c.value.replace(/_/g, ' ')}</td>
-                    <td style="text-align: right;">$${precio.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
-                </tr>`;
+                articulosHTML += `<tr><td>${itemsCount++}</td><td><strong>TRÁMITE:</strong> ${c.value.replace(/_/g,' ')}</td><td style="text-align:right;">$${precio.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
             });
 
-            // Velación
-            const velTipo = document.querySelector('input[name="vel-tipo-opcion"]:checked').value;
+            const velRadio = document.querySelector('input[name="vel-tipo-opcion"]:checked');
+            const velTipo  = velRadio ? velRadio.value : 'DOMICILIO';
             if (velTipo === 'DOMICILIO') {
                 let domEquipos = [];
-                if (document.getElementById('vel-dom-biombo').checked) domEquipos.push("BIOMBO");
-                if (document.getElementById('vel-dom-base').checked) domEquipos.push("BASE");
-                if (document.getElementById('vel-dom-cristo').checked) domEquipos.push("CRISTO");
-                const cantCandeleros = parseInt(document.getElementById('vel-dom-candeleros').value) || 0;
-                if (cantCandeleros > 0) domEquipos.push(`${cantCandeleros} CANDELEROS`);
-                
-                articulosHTML += `<tr>
-                    <td>${itemsCount++}</td>
-                    <td><strong>VELACIÓN EN DOMICILIO (PRÉSTAMO):</strong> INSTALACIÓN DE EQUIPOS (${domEquipos.join(', ') || 'NINGUNO'})</td>
-                    <td style="text-align: right;">$0.00</td>
-                </tr>`;
+                if (document.getElementById('vel-dom-biombo')  && document.getElementById('vel-dom-biombo').checked)  domEquipos.push("BIOMBO");
+                if (document.getElementById('vel-dom-base')    && document.getElementById('vel-dom-base').checked)    domEquipos.push("BASE");
+                if (document.getElementById('vel-dom-cristo')  && document.getElementById('vel-dom-cristo').checked)  domEquipos.push("CRISTO");
+                const cantC = parseInt((document.getElementById('vel-dom-candeleros') || {value:'0'}).value) || 0;
+                if (cantC > 0) domEquipos.push(`${cantC} CANDELEROS`);
+                articulosHTML += `<tr><td>${itemsCount++}</td><td><strong>VELACIÓN EN DOMICILIO:</strong> EQUIPOS EN COMODATO (${domEquipos.join(', ') || 'SIN EQUIPO'})</td><td style="text-align:right;">$0.00</td></tr>`;
             } else {
                 const salaSelect = document.getElementById('vel-sala-select');
-                const salaNombre = salaSelect.value || "SALA INTERNA";
-                const salaCosto = parseFloat(document.getElementById('vel-sala-costo-input').value) || 0;
-                articulosHTML += `<tr>
-                    <td>${itemsCount++}</td>
-                    <td><strong>VELACIÓN EN SALA INSTITUCIONAL:</strong> USO DE INSTALACIONES - ${salaNombre}</td>
-                    <td style="text-align: right;">$${salaCosto.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
-                </tr>`;
+                const salaNombre = salaSelect ? salaSelect.value : "SALA INTERNA";
+                const salaCosto  = parseFloat((document.getElementById('vel-sala-costo-input') || {value:'0'}).value) || 0;
+                articulosHTML += `<tr><td>${itemsCount++}</td><td><strong>USO DE SALA DE VELACIÓN:</strong> ${salaNombre}</td><td style="text-align:right;">$${salaCosto.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
             }
 
-            // Cruz y Cirios
-            if (document.getElementById('vel-opt-cruz').checked) {
-                articulosHTML += `<tr>
-                    <td>${itemsCount++}</td>
-                    <td><strong>INSUMO ENTREGADO:</strong> CRUZ DE MADERA DE VELACIÓN</td>
-                    <td style="text-align: right;">$0.00</td>
-                </tr>`;
-            }
-            if (document.getElementById('vel-opt-cirios').checked) {
-                articulosHTML += `<tr>
-                    <td>${itemsCount++}</td>
-                    <td><strong>INSUMO ENTREGADO:</strong> CIRIOS PARAFINA EXTRAGRANDE</td>
-                    <td style="text-align: right;">$0.00</td>
-                </tr>`;
+            const destForaneo = document.getElementById('chk-dest-foraneo') && document.getElementById('chk-dest-foraneo').checked;
+            if (destForaneo) {
+                const costoForaneo = parseFloat((document.getElementById('d-foraneo-costo') || {value:'0'}).value) || 0;
+                const nomForaneo   = (document.getElementById('d-foraneo-nombre') || {value:''}).value.toUpperCase();
+                if (costoForaneo > 0) articulosHTML += `<tr><td>${itemsCount++}</td><td><strong>TRASLADO FORÁNEO:</strong> ${nomForaneo}</td><td style="text-align:right;">$${costoForaneo.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
             }
 
-            // Destino Final (Local o Foráneo)
-            const destLocalChk = document.getElementById('chk-dest-local').checked;
-            if (destLocalChk) {
-                const panteonLoc = document.getElementById('d-panteon-local').value.trim();
-                const crematLoc = document.getElementById('d-crematorio-local').value.trim();
-                if (panteonLoc) {
-                    articulosHTML += `<tr>
-                        <td>${itemsCount++}</td>
-                        <td><strong>DESTINO FINAL LOCAL:</strong> INHUMACIÓN EN PANTEÓN - ${panteonLoc}</td>
-                        <td style="text-align: right;">$0.00</td>
-                    </tr>`;
-                }
-                if (crematLoc) {
-                    articulosHTML += `<tr>
-                        <td>${itemsCount++}</td>
-                        <td><strong>DESTINO FINAL LOCAL:</strong> INCINERACIÓN EN CREMATORIO - ${crematLoc}</td>
-                        <td style="text-align: right;">$0.00</td>
-                    </tr>`;
-                }
-            } else {
-                const destForaneo = document.getElementById('d-foraneo-nombre').value.trim();
-                const kmForaneo = document.getElementById('d-foraneo-km').value;
-                const costoForaneo = parseFloat(document.getElementById('d-foraneo-costo').value) || 0;
-                articulosHTML += `<tr>
-                    <td>${itemsCount++}</td>
-                    <td><strong>TRASLADO FORÁNEO ADICIONAL:</strong> DESTINO A ${destForaneo} (${kmForaneo} KILÓMETROS RECORRIDOS)</td>
-                    <td style="text-align: right;">$${costoForaneo.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
-                </tr>`;
-            }
-
-            // Otros cargos
-            const otroConcepto = document.getElementById('t-otros-concepto').value.trim();
-            const otroCosto = parseFloat(document.getElementById('t-otros-costo').value) || 0;
+            const otroConcepto = (document.getElementById('t-otros-concepto') || {value:''}).value.trim();
+            const otroCosto    = parseFloat((document.getElementById('t-otros-costo') || {value:'0'}).value) || 0;
             if (otroCosto > 0 || otroConcepto) {
-                articulosHTML += `<tr>
-                    <td>${itemsCount++}</td>
-                    <td><strong>CONCEPTOS ADICIONALES EXTRA:</strong> ${otroConcepto || 'SERVICIOS COMPLEMENTARIOS'}</td>
-                    <td style="text-align: right;">$${otroCosto.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
-                </tr>`;
+                articulosHTML += `<tr><td>${itemsCount++}</td><td><strong>ADICIONALES:</strong> ${otroConcepto || 'SERVICIOS COMPLEMENTARIOS'}</td><td style="text-align:right;">$${otroCosto.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
             }
 
-            // ── Productos seleccionados desde la Tienda Virtual (SKU) ──
             if (window._productosEnODS && window._productosEnODS.length > 0) {
                 window._productosEnODS.forEach(function(item) {
-                    articulosHTML += `<tr>
-                        <td>${itemsCount++}</td>
-                        <td><strong>${(item.categoria||'ARTÍCULO').toUpperCase()}:</strong> ${item.nombre} <span style="font-size:0.75rem; color:#64748b; font-family:monospace;">[SKU: ${item.sku}]</span></td>
-                        <td style="text-align: right;">$${(item.precio||0).toLocaleString('es-MX', {minimumFractionDigits:2})}</td>
-                    </tr>`;
+                    articulosHTML += `<tr><td>${itemsCount++}</td><td><strong>${(item.categoria||'ARTÍCULO').toUpperCase()}:</strong> ${item.nombre} <span style="font-size:9px;color:#64748b;font-family:monospace;">[SKU: ${item.sku}]</span></td><td style="text-align:right;">$${(item.precio||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
                 });
             }
 
+            const vendedor = usuarioActivo ? usuarioActivo.nombre : 'OPERADOR';
+
+            // ── FIRMA DEL CLIENTE ──
+            // Guardar una copia local antes de que se limpie
+            const firmaCapturada = _firmaDataURL;
+            const firmaImg = firmaCapturada
+                ? `<img src="${firmaCapturada}" style="max-width:180px;max-height:65px;display:block;margin:0 auto 4px;border-bottom:1px solid #0f172a;">`
+                : `<div style="height:55px;border-bottom:1px solid #94a3b8;margin-bottom:4px;"></div>`;
+
+            // ── SELLO DIGITAL DE LA EMPRESA ──
+            const ahora = new Date();
+            const fechaSello = ahora.toLocaleDateString('es-MX');
+            const selloSVG = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="100" height="100">
+                <circle cx="70" cy="70" r="66" fill="none" stroke="#166534" stroke-width="3.5"/>
+                <circle cx="70" cy="70" r="58" fill="none" stroke="#166534" stroke-width="1.5"/>
+                <path fill="#166534" d="M70 28
+                    C72 28 74 30 76 30 C78 30 80 28 82 29 C84 30 83 33 85 34 C87 35 89 34 90 36
+                    C91 38 89 40 90 42 C91 44 93 45 93 47 C93 49 91 51 91 53 C91 55 93 57 92 59
+                    C91 61 89 61 88 63 C87 65 87 67 85 68 C83 69 81 68 79 70 C77 71 77 73 75 74
+                    C73 75 71 74 70 74 C69 74 67 75 65 74 C63 73 63 71 61 70 C59 68 57 69 55 68
+                    C53 67 53 65 52 63 C51 61 49 61 48 59 C47 57 49 55 49 53 C49 51 47 49 47 47
+                    C47 45 49 44 50 42 C51 40 49 38 50 36 C51 34 53 35 55 34 C57 33 56 30 58 29
+                    C60 28 62 30 64 30 C66 30 68 28 70 28Z"/>
+                <text x="70" y="64" text-anchor="middle" font-size="11" font-weight="900" fill="white" font-family="Arial,sans-serif">SFH</text>
+                <text x="70" y="75" text-anchor="middle" font-size="7" fill="white" font-family="Arial,sans-serif">✓ AUTORIZADO</text>
+                <text x="70" y="92" text-anchor="middle" font-size="7" font-weight="bold" fill="#166534" font-family="Arial,sans-serif">SERVICIOS FUNERARIOS</text>
+                <text x="70" y="102" text-anchor="middle" font-size="7" font-weight="bold" fill="#166534" font-family="Arial,sans-serif">HUERTA S.A. DE C.V.</text>
+                <text x="70" y="112" text-anchor="middle" font-size="6" fill="#166534" font-family="Arial,sans-serif">XALAPA, VER. ${fechaSello}</text>
+                <text x="70" y="121" text-anchor="middle" font-size="5.5" fill="#94a3b8" font-family="monospace">${folio}</text>
+            </svg>`;
+
             const printWindow = window.open('', '_blank');
-            if(!printWindow) return;
+            if (!printWindow) {
+                showToast("Bloqueado", "Permite ventanas emergentes para imprimir.", "warning");
+                return;
+            }
 
-            printWindow.document.write(`
-                <!DOCTYPE html>
-                <html lang="es">
-                <head>
-                    <meta charset="UTF-8">
-                    <title>Impresión de Expediente Funeraria Huerta</title>
-                    <style>
-                        body { 
-                            font-family: 'Segoe UI', system-ui, sans-serif; 
-                            color: #1e293b; 
-                            line-height: 1.4; 
-                            background-color: #ffffff;
-                            margin: 0;
-                            padding: 0;
-                        }
-                        
-                        /* CONFIGURACIÓN DE PÁGINA INDEPENDIENTE */
-                        .page { 
-                            width: 210mm;
-                            min-height: 297mm;
-                            padding: 20mm 15mm;
-                            margin: 10px auto;
-                            box-sizing: border-box;
-                            background: white;
-                            border: 1px solid #cbd5e1;
-                            border-radius: 4px;
-                            position: relative;
-                            page-break-after: always;
-                        }
-                        
-                        @media print {
-                            body { margin: 0; padding: 0; background: none; }
-                            .page { 
-                                border: none; 
-                                box-shadow: none; 
-                                margin: 0; 
-                                padding: 15mm 10mm; 
-                                width: 100%;
-                                height: auto;
-                                min-height: 100%;
-                                page-break-after: always;
-                            }
-                            .no-print { display: none; }
-                        }
+            printWindow.document.write(`<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8">
+<title>Expediente ${folio}</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:'Segoe UI',Arial,sans-serif; color:#1e293b; font-size:10.5px; background:white; }
 
-                        .header-row {
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: center;
-                            border-bottom: 2px solid #b45309;
-                            padding-bottom: 12px;
-                            margin-bottom: 20px;
-                        }
-                        
-                        .brand h2 { margin: 0; color: #0f172a; font-size: 1.4rem; font-weight: 800; letter-spacing: 0.5px; }
-                        .brand p { margin: 2px 0 0 0; color: #475569; font-size: 0.75rem; }
+/* Carta = 215.9mm × 279.4mm — sin márgenes extra */
+@page { size: letter portrait; margin: 10mm 12mm; }
 
-                        /* CONTENEDOR EXCLUSIVO DE FOLIO EN ROJO DE 2.5 CM x 1 CM */
-                        .folio-block {
-                            display: flex;
-                            flex-direction: column;
-                            align-items: flex-end;
-                            justify-content: center;
-                        }
-                        .folio-tag {
-                            font-size: 9px;
-                            color: #000000;
-                            font-weight: bold;
-                            text-transform: uppercase;
-                            margin-bottom: 2px;
-                            letter-spacing: 0.5px;
-                        }
-                        .folio-box {
-                            width: 2.5cm;
-                            height: 1.0cm;
-                            border: 2px solid #be123c;
-                            color: #be123c;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            font-size: 11px;
-                            font-weight: bold;
-                            box-sizing: border-box;
-                            border-radius: 4px;
-                            background: #fff5f5;
-                        }
+.page {
+    width: 100%;
+    padding: 0;
+    background: white;
+    page-break-after: always;
+}
+.page:last-child { page-break-after: auto; }
 
-                        .section-title {
-                            font-size: 0.9rem;
-                            font-weight: bold;
-                            color: #0f172a;
-                            background: #f1f5f9;
-                            padding: 6px 12px;
-                            border-left: 4px solid #b45309;
-                            margin-top: 15px;
-                            margin-bottom: 10px;
-                            text-transform: uppercase;
-                        }
+/* EN PANTALLA: simular hoja carta */
+@media screen {
+    body { background:#e5e7eb; }
+    .page {
+        width: 215.9mm;
+        min-height: 279.4mm;
+        padding: 10mm 12mm;
+        margin: 10mm auto;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+}
 
-                        /* TABLAS DE INFORMACIÓN */
-                        table { 
-                            width: 100%; 
-                            border-collapse: collapse; 
-                            margin-bottom: 15px; 
-                        }
-                        th, td { 
-                            border: 1px solid #e2e8f0; 
-                            padding: 8px 10px; 
-                            text-align: left; 
-                            font-size: 0.8rem; 
-                        }
-                        th { 
-                            background: #f8fafc; 
-                            color: #0f172a; 
-                            font-weight: bold; 
-                        }
+.header-row { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2.5px solid #b45309; padding-bottom:7px; margin-bottom:9px; }
+.brand h2   { font-size:12.5px; font-weight:800; color:#0f172a; }
+.brand p    { font-size:8.5px; color:#64748b; }
+.folio-block { text-align:right; }
+.folio-tag   { font-size:7.5px; font-weight:bold; color:#64748b; display:block; margin-bottom:3px; text-transform:uppercase; }
+.folio-box   { border:2px solid #be123c; color:#be123c; font-size:11px; font-weight:bold; padding:4px 10px; border-radius:4px; background:#fff5f5; display:inline-block; white-space:nowrap; letter-spacing:0.5px; }
 
-                        /* CUADRO APARTE DE FINANZAS */
-                        .finanzas-box {
-                            border: 2px solid #0f172a;
-                            border-radius: 6px;
-                            padding: 15px;
-                            background-color: #fafaf9;
-                            margin-top: 15px;
-                        }
-                        .finanzas-grid {
-                            display: grid;
-                            grid-template-columns: repeat(3, 1fr);
-                            gap: 15px;
-                        }
-                        .finanzas-item {
-                            display: flex;
-                            flex-direction: column;
-                        }
-                        .finanzas-item span {
-                            font-size: 0.7rem;
-                            font-weight: bold;
-                            color: #475569;
-                            text-transform: uppercase;
-                        }
-                        .finanzas-item strong {
-                            font-size: 1.05rem;
-                            color: #0f172a;
-                            margin-top: 2px;
-                        }
+.section-title { font-size:8.5px; font-weight:bold; color:#0f172a; background:#f1f5f9; padding:3px 9px; border-left:3px solid #b45309; margin:7px 0 4px; text-transform:uppercase; }
 
-                        /* FIRMAS */
-                        .firma-container { 
-                            display: flex; 
-                            justify-content: space-around; 
-                            margin-top: 40px; 
-                            text-align: center; 
-                        }
-                        .firma-col { width: 220px; }
-                        .linea-firma { border-top: 1px solid #0f172a; margin-bottom: 6px; margin-top: 30px; }
+table { width:100%; border-collapse:collapse; margin-bottom:5px; }
+th, td { border:1px solid #e2e8f0; padding:3.5px 6px; font-size:9.5px; }
+th { background:#f8fafc; font-weight:bold; color:#0f172a; }
 
-                        /* ESTILO PROFESIONAL DEL PAGARÉ */
-                        .pagare-wrapper {
-                            border: 3px double #b45309;
-                            padding: 25px;
-                            border-radius: 6px;
-                            background-color: #fffdfa;
-                        }
+.finanzas-box  { border:1.5px solid #0f172a; border-radius:5px; padding:7px 10px; background:#fafaf9; margin-top:5px; }
+.finanzas-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+.finanzas-item span   { font-size:7.5px; font-weight:bold; color:#475569; text-transform:uppercase; display:block; }
+.finanzas-item strong { font-size:11.5px; color:#0f172a; display:block; }
 
-                        /* AJUSTES COMPACTOS PARA EL CONTRATO (UNA SOLA HOJA) */
-                        .clausulas-texto {
-                            font-size: 0.72rem;
-                            line-height: 1.4;
-                            text-align: justify;
-                            color: #334155;
-                            margin-bottom: 10px;
-                        }
-                        .clausulas-texto strong {
-                            color: #0f172a;
-                        }
-                    </style>
-                </head>
-                <body>
+/* FIRMAS */
+.firma-row { display:flex; justify-content:space-around; align-items:flex-end; margin-top:12px; gap:10px; }
+.firma-col { width:44%; text-align:center; }
+.firma-label { font-size:8.5px; font-weight:bold; margin-top:3px; }
+.firma-sub   { font-size:7.5px; color:#475569; }
 
-                    <!-- HOJA 1: HOJA DE SERVICIO (ODS) -->
-                    <div class="page">
-                        <div class="header-row">
-                            <div class="brand">
-                                <h2>FUNERARIA HUERTA S.A. DE C.V.</h2>
-                                <p>HOJA DE CONTROL Y COORDINACIÓN LOGÍSTICA DE SERVICIO</p>
-                            </div>
-                            <div class="folio-block">
-                                <span class="folio-tag">HOJA DE SERVICIO (ODS)</span>
-                                <div class="folio-box">${folio}</div>
-                            </div>
-                        </div>
+.clausulas { font-size:8.5px; line-height:1.5; text-align:justify; color:#334155; margin-bottom:6px; }
+.clausulas strong { color:#0f172a; }
 
-                        <!-- SECCIÓN A: DATOS SEPARADOS DEL CONTRATANTE -->
-                        <div class="section-title">DATOS IDENTIFICATIVOS DEL CONTRATANTE (TITULAR)</div>
-                        <table style="margin-bottom: 10px;">
-                            <tr>
-                                <th style="width: 25%;">NOMBRE DEL TITULAR</th>
-                                <td style="width: 45%; font-weight: bold;">${contratante}</td>
-                                <th style="width: 15%;">TELÉFONO</th>
-                                <td style="width: 15%; font-weight: bold;">${telefono}</td>
-                            </tr>
-                            <tr>
-                                <th>DOMICILIO REGISTRADO</th>
-                                <td colspan="3">${direccionCompleta}</td>
-                            </tr>
-                        </table>
+.pagare-wrapper { border:2.5px double #b45309; padding:14px; border-radius:5px; background:#fffdfa; }
+</style></head><body>
 
-                        <!-- SECCIÓN B: DATOS SEPARADOS DEL FINADO -->
-                        <div class="section-title">DATOS IDENTIFICATIVOS DEL FINADO</div>
-                        <table style="margin-bottom: 10px;">
-                            <tr>
-                                <th style="width: 25%;">FALLECIDO / FINADO</th>
-                                <td style="font-weight: bold; color: #be123c;">${finado}</td>
-                                <th style="width: 25%;">FECHA DE ATENCIÓN</th>
-                                <td>${new Date().toLocaleDateString('es-MX')}</td>
-                            </tr>
-                        </table>
+<!-- PÁGINA 1: HOJA DE SERVICIO ODS -->
+<div class="page">
+    <div class="header-row">
+        <div class="brand">
+            <h2>FUNERARIA HUERTA S.A. DE C.V.</h2>
+            <p>HOJA DE CONTROL Y COORDINACIÓN LOGÍSTICA DE SERVICIO</p>
+        </div>
+        <div class="folio-block">
+            <span class="folio-tag">HOJA DE SERVICIO (ODS)</span>
+            <div class="folio-box">${folio}</div>
+        </div>
+    </div>
 
-                        <!-- SECCIÓN C: MODALIDAD DE SERVICIO CON DESCRIPCIÓN DETALLADA DE PRODUCTOS -->
-                        <div class="section-title">MODALIDAD DE SERVICIO E INVENTARIO OPERATIVO ADQUIRIDO</div>
-                        <table style="margin-bottom: 10px;">
-                            <thead>
-                                <tr>
-                                    <th style="width: 8%;">Nº</th>
-                                    <th>DESCRIPCIÓN DEL ARTÍCULO / PRODUCTO / GESTIÓN CAPTURADA</th>
-                                    <th style="text-align: right; width: 22%;">COSTO PARCIAL</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${articulosHTML}
-                            </tbody>
-                        </table>
+    <div class="section-title">DATOS DEL CONTRATANTE (TITULAR)</div>
+    <table>
+        <tr>
+            <th style="width:22%;">NOMBRE TITULAR</th><td style="width:42%;font-weight:bold;">${contratante}</td>
+            <th style="width:12%;">TELÉFONO</th><td style="font-weight:bold;">${telefono}</td>
+        </tr>
+        <tr><th>DOMICILIO</th><td colspan="3">${direccionCompleta}</td></tr>
+    </table>
 
-                        <!-- SECCIÓN FINANCIERA EN UN CUADRO APARTE CON TODOS SUS CAMPOS -->
-                        <div class="section-title">RESUMEN DE CUENTA FINANCIERA GENERAL</div>
-                        <div class="finanzas-box">
-                            <div class="finanzas-grid">
-                                <div class="finanzas-item">
-                                    <span>SUBTOTAL EXTRAS / PRODUCTOS</span>
-                                    <strong>$${subtotal.toLocaleString('es-MX', {minimumFractionDigits: 2})}</strong>
-                                </div>
-                                <div class="finanzas-item">
-                                    <span>DESCUENTO AUTORIZADO</span>
-                                    <strong style="color: #be123c;">-$${descuento.toLocaleString('es-MX', {minimumFractionDigits: 2})}</strong>
-                                </div>
-                                <div class="finanzas-item">
-                                    <span>I.V.A. TRASLADADO (16%)</span>
-                                    <strong>$${iva.toLocaleString('es-MX', {minimumFractionDigits: 2})}</strong>
-                                </div>
-                            </div>
-                            <div class="finanzas-grid" style="margin-top: 12px; border-top: 1px dashed #cbd5e1; padding-top: 12px;">
-                                <div class="finanzas-item">
-                                    <span>TOTAL NETO LIQUIDABLE</span>
-                                    <strong style="color: #15803d; font-size: 1.15rem;">$${total.toLocaleString('es-MX', {minimumFractionDigits: 2})}</strong>
-                                </div>
-                                <div class="finanzas-item">
-                                    <span>ANTICIPO PAGADO</span>
-                                    <strong>$${anticipo.toLocaleString('es-MX', {minimumFractionDigits: 2})}</strong>
-                                </div>
-                                <div class="finanzas-item">
-                                    <span>SALDO RESTANTE POR COBRAR</span>
-                                    <strong style="color: #be123c; font-size: 1.15rem;">$${restante.toLocaleString('es-MX', {minimumFractionDigits: 2})}</strong>
-                                </div>
-                            </div>
-                        </div>
+    <div class="section-title">DATOS DEL FINADO</div>
+    <table>
+        <tr>
+            <th style="width:22%;">FALLECIDO</th><td style="font-weight:bold;color:#be123c;">${finado}</td>
+            <th style="width:22%;">FECHA ATENCIÓN</th><td>${new Date().toLocaleDateString('es-MX')}</td>
+        </tr>
+    </table>
 
-                        <div class="firma-container">
-                            <div class="firma-col">
-                                <div class="linea-firma"></div>
-                                <strong style="font-size: 0.75rem;">OPERADOR RESPONSABLE</strong>
-                            </div>
-                            <div class="firma-col">
-                                <div class="linea-firma"></div>
-                                <strong style="font-size: 0.75rem;">REPRESENTANTE LEGAL</strong>
-                            </div>
-                        </div>
-                    </div>
+    <div class="section-title">MODALIDAD DE SERVICIO E INVENTARIO ADQUIRIDO</div>
+    <table>
+        <thead><tr><th style="width:6%;">Nº</th><th>DESCRIPCIÓN DEL ARTÍCULO / GESTIÓN</th><th style="text-align:right;width:18%;">COSTO</th></tr></thead>
+        <tbody>${articulosHTML}</tbody>
+    </table>
 
+    <div class="section-title">RESUMEN FINANCIERO</div>
+    <div class="finanzas-box">
+        <div class="finanzas-grid">
+            <div class="finanzas-item"><span>SUBTOTAL</span><strong>$${subtotal.toLocaleString('es-MX',{minimumFractionDigits:2})}</strong></div>
+            <div class="finanzas-item"><span>DESCUENTO</span><strong style="color:#be123c;">-$${descuento.toLocaleString('es-MX',{minimumFractionDigits:2})}</strong></div>
+            <div class="finanzas-item"><span>IVA (16%)</span><strong>$${iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</strong></div>
+        </div>
+        <div class="finanzas-grid" style="margin-top:6px;border-top:1px dashed #cbd5e1;padding-top:6px;">
+            <div class="finanzas-item"><span>TOTAL NETO</span><strong style="color:#15803d;font-size:12px;">$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</strong></div>
+            <div class="finanzas-item"><span>ANTICIPO</span><strong>$${anticipo.toLocaleString('es-MX',{minimumFractionDigits:2})}</strong></div>
+            <div class="finanzas-item"><span>SALDO PENDIENTE</span><strong style="color:#be123c;font-size:12px;">$${restante.toLocaleString('es-MX',{minimumFractionDigits:2})}</strong></div>
+        </div>
+    </div>
 
-                    <!-- HOJA 2: CONTRATO DE ADHESIÓN (AJUSTADO ESTRICTAMENTE A UNA SOLA HOJA) -->
-                    <div class="page">
-                        <div class="header-row">
-                            <div class="brand">
-                                <h2>CONTRATO DE ADHESIÓN DE SERVICIOS FUNERARIOS</h2>
-                                <p>REGISTRADO ANTE PROFECO BAJO NORMATIVAS VIGENTES</p>
-                            </div>
-                            <div class="folio-block">
-                                <span class="folio-tag">CONTRATO DE ADHESIÓN</span>
-                                <div class="folio-box">${folio}</div>
-                            </div>
-                        </div>
+    <div style="margin-top:8px;font-size:8px;color:#64748b;border-top:1px dashed #e2e8f0;padding-top:5px;">
+        <strong>VENDEDOR:</strong> ${vendedor} &nbsp;|&nbsp; <strong>FOLIO:</strong> ${folio} &nbsp;|&nbsp; <strong>FECHA:</strong> ${new Date().toLocaleDateString('es-MX')}
+    </div>
 
-                        <p style="font-size:0.75rem; text-align: justify; margin-bottom: 12px;">
-                            Contrato que celebran por una parte <strong>SERVICIOS FUNERARIOS HUERTA S.A. DE C.V.</strong>, en adelante denominada "LA EMPRESA", y por la otra el deudor/titular cuyos datos se asientan en la Hoja de Servicio correspondiente, denominado en lo sucesivo "EL CONTRATANTE", al tenor de las siguientes cláusulas operativas:
-                        </p>
+    <div class="firma-row">
+        <div class="firma-col">
+            ${firmaImg}
+            <div class="firma-label">FIRMA DEL CONTRATANTE</div>
+            <div class="firma-sub">${contratante}</div>
+        </div>
+        <div class="firma-col">
+            ${selloSVG}
+            <div class="firma-label">REPRESENTANTE AUTORIZADO</div>
+            <div class="firma-sub">SERVICIOS FUNERARIOS HUERTA</div>
+        </div>
+    </div>
+</div>
 
-                        <!-- COMPILACIÓN DE LAS 6 CLÁUSULAS OFICIALES -->
-                        <div class="clausulas-texto">
-                            <strong>PRIMERA (OBJETO):</strong> LA EMPRESA se obliga a prestar los servicios funerarios especificados de mutuo acuerdo con EL CONTRATANTE, incluyendo la preparación estética, los trámites necesarios, la dotación de ataúd o urna descritos y la logística de velación correspondiente de acuerdo a la ley de salud vigente.
-                        </div>
+<!-- PÁGINA 2: CONTRATO DE ADHESIÓN -->
+<div class="page">
+    <div class="header-row">
+        <div class="brand">
+            <h2>CONTRATO DE ADHESIÓN DE SERVICIOS FUNERARIOS</h2>
+            <p>REGISTRADO ANTE PROFECO — NORMATIVAS VIGENTES</p>
+        </div>
+        <div class="folio-block">
+            <span class="folio-tag">CONTRATO DE ADHESIÓN</span>
+            <div class="folio-box">${folio}</div>
+        </div>
+    </div>
 
-                        <div class="clausulas-texto">
-                            <strong>SEGUNDA (PRECIO Y CONDICIONES):</strong> EL CONTRATANTE se obliga a pagar a LA EMPRESA la cantidad total neta descrita en el cuadro financiero. Los pagos se efectuarán en efectivo o mediante los canales autorizados. Cualquier servicio, artículo o logística que no esté contemplado expresamente en la orden original será cobrado de manera extraordinaria bajo la tasa del catálogo general de la funeraria.
-                        </div>
+    <p style="font-size:9px;text-align:justify;margin-bottom:7px;">
+        Contrato que celebran <strong>SERVICIOS FUNERARIOS HUERTA S.A. DE C.V.</strong> ("LA EMPRESA") y <strong>${contratante}</strong> ("EL CONTRATANTE"), para la coordinación del servicio funerario de <strong>${finado}</strong>, al tenor de las siguientes cláusulas:
+    </p>
 
-                        <div class="clausulas-texto">
-                            <strong>TERCERA (EQUIPO DE VELACIÓN EN DOMICILIO):</strong> El equipamiento de velación entregado en comodato transitorio para domicilio (biombos, bases de ataúd, candeleros, cristo) es propiedad exclusiva de LA EMPRESA. EL CONTRATANTE asume la responsabilidad civil de su cuidado por un periodo máximo de 12 días naturales fijos. El retraso o maltrato del equipo generará sanciones financieras extraordinarias.
-                        </div>
+    <div class="clausulas"><strong>PRIMERA (OBJETO):</strong> LA EMPRESA se obliga a prestar los servicios funerarios acordados, incluyendo preparación estética, trámites, dotación de ataúd o urna y logística de velación conforme a la ley de salud vigente.</div>
+    <div class="clausulas"><strong>SEGUNDA (PRECIO Y CONDICIONES):</strong> EL CONTRATANTE se obliga a pagar la cantidad total descrita en la hoja financiera. Los pagos se efectuarán en efectivo o canales autorizados. Cualquier servicio adicional será cobrado conforme al catálogo vigente.</div>
+    <div class="clausulas"><strong>TERCERA (EQUIPO EN COMODATO):</strong> El equipamiento entregado (biombos, bases, candeleros, cristo) es propiedad de LA EMPRESA. EL CONTRATANTE asume responsabilidad civil de su cuidado por un máximo de 12 días naturales. El retraso o maltrato generará cargos extraordinarios.</div>
+    <div class="clausulas"><strong>CUARTA (TRÁMITES):</strong> LA EMPRESA brindará gestoría ante autoridades sanitarias, Registro Civil o Fiscalía local. Queda exenta de responsabilidad ante demoras causadas por instituciones gubernamentales o fallas en sistemas estatales.</div>
+    <div class="clausulas"><strong>QUINTA (INCUMPLIMIENTO):</strong> En caso de retraso en la liquidación del saldo remanente, se pacta una tasa de interés moratorio del 5% mensual. El cobro podrá ejercerse mediante instrumentos legales o por medio del pagaré mercantil paralelo al presente contrato.</div>
+    <div class="clausulas"><strong>SEXTA (JURISDICCIÓN):</strong> Para la interpretación, cumplimiento y ejecución del presente acuerdo, ambas partes se someten a las leyes de Xalapa, Veracruz, renunciando a cualquier otro fuero que por razón de domicilio pudiera corresponderles.</div>
+    <div class="clausulas"><strong>SÉPTIMA (CANCELACIÓN):</strong> EL CONTRATANTE tendrá un plazo de 5 días hábiles a partir de la firma del contrato para poder cancelar la contratación de los servicios materia de este contrato, conforme al artículo 56 de la Ley Federal de Protección al Consumidor del 15 de mayo de 2000. CLÁUSULA PRIMERA. En caso de exceder este plazo, sin previo aviso por parte del titular, no se cobrará ningún cargo adicional a las aportaciones abonadas.</div>
 
-                        <div class="clausulas-texto">
-                            <strong>CUARTA (TRÁMITES Y DOCUMENTOS):</strong> LA EMPRESA brindará la debida gestoría con la diligencia correspondiente ante las autoridades sanitarias, Registro Civil o Fiscalía local para la obtención de actas de defunción o permisos de cremación/traslado. LA EMPRESA queda exenta de toda responsabilidad ante demoras causadas por las instituciones gubernamentales o fallas en sistemas estatales de Veracruz.
-                        </div>
+    <div style="margin-top:8px;font-size:8px;padding:5px 0;border-top:1px dashed #cbd5e1;">
+        <strong>FECHA:</strong> ${new Date().toLocaleDateString('es-MX')} &nbsp;&nbsp;
+        <strong>LUGAR:</strong> XALAPA, VER. &nbsp;&nbsp;
+        <strong>VENDEDOR:</strong> ${vendedor}
+    </div>
 
-                        <div class="clausulas-texto">
-                            <strong>QUINTA (INCUMPLIMIENTO DE SALDOS):</strong> En caso de retraso en la liquidación del saldo remanente insoluto, se pacta expresamente una tasa de interés moratorio del 5% mensual. El cobro del adeudo podrá ser ejercido mediante instrumentos legales o por medio del pagaré mercantil que corre de forma paralela al presente contrato de adhesión.
-                        </div>
+    <div class="firma-row" style="margin-top:14px;">
+        <div class="firma-col">
+            ${firmaImg}
+            <div class="firma-label">SUSCRIPTOR (CONTRATANTE)</div>
+            <div class="firma-sub">${contratante}</div>
+        </div>
+        <div class="firma-col">
+            ${selloSVG}
+            <div class="firma-label">FUNERARIA HUERTA S.A. DE C.V.</div>
+            <div class="firma-sub">Vendedor: ${vendedor}</div>
+        </div>
+    </div>
+</div>
 
-                        <div class="clausulas-texto">
-                            <strong>SEXTA (JURISDICCIÓN):</strong> Para todo lo relativo a la interpretación, cumplimiento y ejecución del presente acuerdo contractual, ambas partes se someten libremente a las leyes competentes de la jurisdicción de la ciudad de Xalapa, Estado de Veracruz, renunciando expresamente a cualquier otro fuero que por razón de domicilio pudiera corresponderles.
-                        </div>
+<!-- PÁGINA 3: PAGARÉ (si aplica) -->
+${esPagareActivo ? `
+<div class="page">
+    <div class="pagare-wrapper">
+        <div class="header-row" style="border-bottom:2px solid #b45309;">
+            <div class="brand">
+                <h2 style="color:#b45309;">PAGARÉ INCONDICIONAL</h2>
+                <p>TÍTULO DE CRÉDITO — LEY GENERAL DE TÍTULOS Y OPERACIONES DE CRÉDITO</p>
+            </div>
+            <div class="folio-block">
+                <span class="folio-tag">PAGARÉ MERCANTIL</span>
+                <div class="folio-box" style="border-color:#b45309;color:#b45309;background:#fffdfa;">${folio}</div>
+            </div>
+        </div>
 
-                        <div style="margin-top: 15px; border-top: 1px dashed #cbd5e1; padding-top: 12px;">
-                            <table style="width: 100%; margin: 0; border: none;">
-                                <tr style="border: none;">
-                                    <td style="border: none; width: 50%; font-size: 0.72rem; padding: 0 10px 0 0;">
-                                        <strong>FECHA DE PACTO:</strong> ${new Date().toLocaleDateString('es-MX')}<br>
-                                        <strong>LUGAR:</strong> XALAPA, VERACRUZ, MÉXICO
-                                    </td>
-                                    <td style="border: none; width: 50%; font-size: 0.72rem; padding: 0 0 0 10px;">
-                                        <strong>CLIENTE CONTRATANTE:</strong> ${contratante}<br>
-                                        <strong>FINADO COORDINADO:</strong> ${finado}
-                                    </td>
-                                </tr>
-                            </table>
-                        </div>
+        <table style="margin-bottom:14px;border:2px solid #0f172a;">
+            <tr>
+                <th style="background:#0f172a;color:white;width:18%;">IMPORTE</th>
+                <td style="font-size:13px;font-weight:bold;width:30%;">$${restante.toLocaleString('es-MX',{minimumFractionDigits:2})} M.N.</td>
+                <th style="background:#0f172a;color:white;width:22%;">VENCIMIENTO</th>
+                <td style="font-size:12px;font-weight:bold;color:#be123c;">${pagareVenc}</td>
+            </tr>
+        </table>
 
-                        <div class="firma-container" style="margin-top: 25px;">
-                            <div class="firma-col">
-                                <div class="linea-firma"></div>
-                                <strong style="font-size: 0.72rem;">SUSCRIPTOR (CONTRATANTE)</strong>
-                            </div>
-                            <div class="firma-col">
-                                <div class="linea-firma"></div>
-                                <strong style="font-size: 0.72rem;">FUNERARIA HUERTA S.A. DE C.V.</strong>
-                            </div>
-                        </div>
-                    </div>
+        <p style="text-align:justify;font-size:10px;line-height:1.6;margin-bottom:12px;">
+            Debo y pagaré incondicionalmente a la orden de <strong>SERVICIOS FUNERARIOS HUERTA S.A. DE C.V.</strong> en Xalapa, Veracruz, la cantidad de:<br>
+            <strong style="display:block;margin:7px 0;border-bottom:1px solid #cbd5e1;padding-bottom:4px;">( ${pagareLetra} )</strong>
+            Saldo insoluto de los servicios contratados el ${new Date().toLocaleDateString('es-MX')}.
+        </p>
 
+        <div style="background:#f8fafc;border:1px solid #cbd5e1;padding:9px;border-radius:4px;margin-bottom:20px;">
+            <table style="border:none;margin:0;">
+                <tr style="border:none;"><td style="border:none;padding:2px 0;font-size:9px;"><strong>SUSCRIPTOR:</strong> ${contratante}</td><td style="border:none;padding:2px 0;font-size:9px;"><strong>TELÉFONO:</strong> ${telefono}</td></tr>
+                <tr style="border:none;"><td style="border:none;padding:2px 0;font-size:9px;" colspan="2"><strong>DOMICILIO:</strong> ${direccionCompleta}</td></tr>
+                <tr style="border:none;"><td style="border:none;padding:2px 0;font-size:9px;" colspan="2"><strong>INE / RFC:</strong> ${pagareRfc}</td></tr>
+            </table>
+        </div>
 
-                    <!-- HOJA 3: PAGARÉ MERCANTIL9 PROFESIONAL (SI ESTÁ ACTIVO) -->
-                    ${esPagareActivo ? `
-                    <div class="page">
-                        <div class="pagare-wrapper">
-                            <div class="header-row" style="border-bottom: 2px solid #b45309;">
-                                <div class="brand">
-                                    <h2 style="color: #b45309; letter-spacing: 1px;">PAGARÉ INCONDICIONAL</h2>
-                                    <p>TÍTULO DE CRÉDITO BAJO LA LEY GENERAL DE TÍTULOS Y OPERACIONES DE CRÉDITO</p>
-                                </div>
-                                <div class="folio-block">
-                                    <span class="folio-tag">PAGARÉ MERCANTIL</span>
-                                    <div class="folio-box" style="border-color: #b45309; color: #b45309; background: #fffdfa;">${folio}</div>
-                                </div>
-                            </div>
+        <div class="firma-row" style="margin-top:28px;">
+            <div class="firma-col">
+                ${firmaImg}
+                <div class="firma-label" style="color:#b45309;">FIRMA DEL SUSCRIPTOR (DEUDOR)</div>
+                <div class="firma-sub">${contratante} — Acepto incondicionalmente</div>
+            </div>
+            <div class="firma-col">
+                ${selloSVG}
+                <div class="firma-label" style="color:#b45309;">FUNERARIA HUERTA S.A. DE C.V.</div>
+                <div class="firma-sub">Vendedor: ${vendedor}</div>
+            </div>
+        </div>
+    </div>
+</div>
+` : ''}
 
-                            <table style="margin-bottom: 25px; border: 2px solid #0f172a;">
-                                <tr>
-                                    <th style="background:#0f172a; color:white; width:20%;">IMPORTE</th>
-                                    <td style="font-size: 1.15rem; font-weight: bold; width: 30%;">$${restante.toLocaleString('es-MX', {minimumFractionDigits: 2})} M.N.</td>
-                                    <th style="background:#0f172a; color:white; width:25%;">VENCIMIENTO</th>
-                                    <td style="font-size: 1.05rem; font-weight: bold; color: #be123c; width: 25%;">${pagareVenc}</td>
-                                </tr>
-                            </table>
-
-                            <p style="text-align:justify; font-size:0.85rem; line-height:1.7; margin-bottom: 20px; color:#1e293b;">
-                                Debo y pagaré incondicionalmente por este Pagaré a la orden de <strong>SERVICIOS FUNERARIOS HUERTA S.A. DE C.V.</strong>, en la ciudad de Xalapa, Veracruz, la cantidad exacta de: <br>
-                                <strong style="font-size: 0.95rem; display:block; margin: 10px 0; border-bottom: 1px solid #cbd5e1; padding-bottom: 5px;">( ${pagareLetra} )</strong>
-                                que corresponde al saldo insoluto de los servicios contratados con fecha de expedición ${new Date().toLocaleDateString('es-MX')}.
-                            </p>
-
-                            <p style="text-align:justify; font-size:0.8rem; line-height:1.6; color:#475569; margin-bottom: 25px;">
-                                En caso de no liquidarse este título mercantil a su fecha de vencimiento fijada el <strong>${pagareVenc}</strong>, el deudor se obliga a pagar un interés moratorio a razón del <strong>5% mensual</strong> sobre el saldo insoluto hasta su total liquidación, reservándose el acreedor el ejercicio de cobro judicial de conformidad con el Código de Comercio vigente.
-                            </p>
-
-                            <div style="background:#f8fafc; border:1px solid #cbd5e1; padding:15px; border-radius:4px; margin-bottom: 30px;">
-                                <table style="width: 100%; border: none; margin: 0;">
-                                    <tr style="border: none;">
-                                        <td style="border: none; padding: 3px 0;"><strong>SUSCRIPTOR (DEUDOR):</strong> ${contratante}</td>
-                                        <td style="border: none; padding: 3px 0;"><strong>TELÉFONO DEUDOR:</strong> ${telefono}</td>
-                                    </tr>
-                                    <tr style="border: none;">
-                                        <td style="border: none; padding: 3px 0;" colspan="2"><strong>DOMICILIO DEUDOR:</strong> ${direccionCompleta}</td>
-                                    </tr>
-                                    <tr style="border: none;">
-                                        <td style="border: none; padding: 3px 0;" colspan="2"><strong>INE / RFC DEUDOR:</strong> ${pagareRfc}</td>
-                                    </tr>
-                                </table>
-                            </div>
-
-                            <div class="firma-container" style="margin-top: 50px;">
-                                <div class="firma-col" style="margin: 0 auto; width: 300px;">
-                                    <div class="linea-firma" style="border-top: 2px solid #b45309;"></div>
-                                    <strong style="font-size:0.85rem; color: #b45309;">FIRMA DEL SUSCRIPTOR (DEUDOR)</strong><br>
-                                    <span style="font-size:11px; color:#475569;">Acepto incondicionalmente el pago de este título</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    ` : ''}
-
-                </body>
-                </html>
-            `);
+</body></html>`);
             printWindow.document.close();
-            
-            // Lanza el cuadro de impresión automáticamente en la ventana emergente
-            setTimeout(function() {
-                printWindow.print();
-            }, 600);
+            setTimeout(function() { printWindow.print(); }, 800);
         }
 
         // ══════════════════════════════════════════════════════════
