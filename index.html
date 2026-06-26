@@ -321,16 +321,30 @@ button:active{transform:scale(.97)}
             <select id="o-tipo-crem"><option value="CON_VELACION">CON VELACIÓN</option><option value="DIRECTA">DIRECTA</option></select>
           </div>
           <div class="f">
-            <label class="lbl">Urna Disponible en Inventario *</label>
+            <label class="lbl">Paquete de Cremación Disponible *</label>
             <select id="o-urna-id" onchange="seleccionarProducto('urna')">
               <option value="">-- Cargando inventario... --</option>
             </select>
           </div>
           <div class="g2">
-            <div class="f"><label class="lbl">Urna Seleccionada</label><input id="o-urna-nom" type="text" readonly style="background:var(--bg)"/></div>
-            <div class="f"><label class="lbl">Costo Urna ($)</label><input id="o-urna-costo" type="number" min="0" readonly style="background:var(--bg)"/></div>
+            <div class="f"><label class="lbl">Paquete Seleccionado</label><input id="o-urna-nom" type="text" readonly style="background:var(--bg)"/></div>
+            <div class="f"><label class="lbl">Costo del Paquete ($)</label><input id="o-urna-costo" type="number" min="0" readonly style="background:var(--bg)"/></div>
           </div>
-          <div id="urna-sin-stock" style="display:none;font-size:12px;color:var(--amber);margin-top:4px">⚠ No hay urnas disponibles en inventario. Repórtalo a la tienda virtual.</div>
+          <div id="urna-sin-stock" style="display:none;font-size:12px;color:var(--amber);margin-top:4px">⚠ No hay paquetes disponibles en inventario. Repórtalo a la tienda virtual.</div>
+
+          <div class="div"></div>
+          <div class="f">
+            <label class="lbl">¿Cambiar la urna incluida? (costo extra, opcional)</label>
+            <select id="o-urna-cambio-id" onchange="seleccionarUrnaCambio()">
+              <option value="">-- Mantener la urna incluida en el paquete --</option>
+            </select>
+          </div>
+          <div class="g2" id="blq-urna-cambio-detalle" style="display:none">
+            <div class="f"><label class="lbl">Urna Elegida</label><input id="o-urna-cambio-nom" type="text" readonly style="background:var(--bg)"/></div>
+            <div class="f"><label class="lbl">Costo Extra ($)</label><input id="o-urna-cambio-costo" type="number" min="0" readonly style="background:var(--bg);color:var(--amber)"/></div>
+          </div>
+          <div id="urna-cambio-sin-stock" style="display:none;font-size:12px;color:var(--text3);margin-top:4px">No hay urnas adicionales disponibles en el catálogo por el momento.</div>
+
           <div class="f" style="margin-top:6px"><label class="lbl">Costo Adicional ($)</label><input id="o-crem-extra" type="number" min="0" oninput="calcTotal()"/></div>
           <div class="f" style="margin-top:6px"><label class="lbl">Exceso de Peso</label>
             <select id="o-exceso" onchange="calcTotal()">
@@ -1098,18 +1112,22 @@ async function cargarCatalogoTienda(){
   _catalogoTienda=Array.isArray(datos)?datos.filter(p=>_norm(p.segment)==='inmediato'&&_norm(p.estado||'disponible')==='disponible'):[];
   llenarSelectCatalogo('o-ataud-id','ataud');
   llenarSelectCatalogo('o-urna-id','urna');
+  llenarSelectCatalogo('o-urna-cambio-id','urna-cambio');
 }
 
 function llenarSelectCatalogo(selectId,categoriaFiltro){
   const sel=$(selectId);
   if(!sel)return;
-  // categoriaFiltro: 'ataud' -> categoría real "Inhumacion" | 'urna' -> categoría real "Cremacion"
-  const catReal=categoriaFiltro==='ataud'?'inhumacion':'cremacion';
-  const items=_catalogoTienda.filter(p=>_norm(p.categoria).includes(catReal));
+  // categoriaFiltro: 'ataud' -> categoría real "Inhumacion" | 'urna' -> "Cremacion" (paquete completo) | 'urna-cambio' -> "Urna" (pieza suelta, costo extra)
+  const mapaCategoria={ataud:'inhumacion',urna:'cremacion','urna-cambio':'urna'};
+  const catReal=mapaCategoria[categoriaFiltro]||categoriaFiltro;
+  const items=_catalogoTienda.filter(p=>_norm(p.categoria)===catReal||(catReal!=='urna'&&_norm(p.categoria).includes(catReal)));
   const valorPrevio=sel.value;
-  sel.innerHTML='<option value="">-- Selecciona del inventario --</option>'
+  const placeholder=categoriaFiltro==='urna-cambio'?'-- Mantener la urna incluida en el paquete --':'-- Selecciona del inventario --';
+  sel.innerHTML=`<option value="">${placeholder}</option>`
     + items.map(p=>`<option value="${p.id}" data-nombre="${(p.nombre||'').replace(/"/g,'&quot;')}" data-precio="${p.precio||0}">${p.nombre} — ${fmt(p.precio||0)}</option>`).join('');
-  const sinStock=$(categoriaFiltro==='ataud'?'ataud-sin-stock':'urna-sin-stock');
+  const idsSinStock={ataud:'ataud-sin-stock',urna:'urna-sin-stock','urna-cambio':'urna-cambio-sin-stock'};
+  const sinStock=$(idsSinStock[categoriaFiltro]);
   if(sinStock) sinStock.style.display=items.length===0?'block':'none';
   // Restaurar selección previa si la pieza sigue disponible (ej. al editar una orden)
   if(valorPrevio && items.some(p=>String(p.id)===String(valorPrevio))) sel.value=valorPrevio;
@@ -1126,20 +1144,36 @@ function seleccionarProducto(tipo){
   calcTotal();
 }
 
+// Cambio opcional de la urna incluida en el paquete de cremación: si se elige
+// una urna del catálogo independiente, se cobra su precio COMPLETO como costo
+// extra (no se resta nada de lo que ya incluye el paquete).
+function seleccionarUrnaCambio(){
+  const sel=$('o-urna-cambio-id');
+  const opt=sel.options[sel.selectedIndex];
+  const hayEleccion=!!sel.value;
+  $('blq-urna-cambio-detalle').style.display=hayEleccion?'flex':'none';
+  $('o-urna-cambio-nom').value=hayEleccion&&opt.dataset.nombre?opt.dataset.nombre:'';
+  $('o-urna-cambio-costo').value=hayEleccion&&opt.dataset.precio?opt.dataset.precio:0;
+  calcTotal();
+}
+
 // Reserva en la tienda la pieza elegida (ataúd y/o urna) al guardar una orden
 async function reservarPiezasDeOrden(o){
   if(o.ataudId) await tiendaApi({action:'reservar',id:o.ataudId});
   if(o.urnaId) await tiendaApi({action:'reservar',id:o.urnaId});
+  if(o.urnaCambioId) await tiendaApi({action:'reservar',id:o.urnaCambioId});
 }
 // Elimina definitivamente del inventario las piezas de una orden ya cerrada
 async function eliminarPiezasDeOrden(o){
   if(o.ataudId) await tiendaApi({action:'delete',id:o.ataudId});
   if(o.urnaId) await tiendaApi({action:'delete',id:o.urnaId});
+  if(o.urnaCambioId) await tiendaApi({action:'delete',id:o.urnaCambioId});
 }
 // Libera de vuelta a disponible las piezas de una orden cancelada/eliminada
 async function liberarPiezasDeOrden(o){
   if(o.ataudId) await tiendaApi({action:'liberar',id:o.ataudId});
   if(o.urnaId) await tiendaApi({action:'liberar',id:o.urnaId});
+  if(o.urnaCambioId) await tiendaApi({action:'liberar',id:o.urnaCambioId});
 }
 
 function toggleCandeleros(){
@@ -1189,7 +1223,7 @@ function calcTotal(){
   let sub=0;
   const mod=$('o-modalidad').value;
   if(mod==='INHUMACION') sub+=(+($('o-ataud-costo')||{value:0}).value)||0;
-  else sub+=((+($('o-urna-costo')||{value:0}).value)||0)+((+($('o-crem-extra')||{value:0}).value)||0);
+  else sub+=((+($('o-urna-costo')||{value:0}).value)||0)+((+($('o-crem-extra')||{value:0}).value)||0)+((+($('o-urna-cambio-costo')||{value:0}).value)||0);
 
   const emb=$('o-emb');
   if(emb) sub+=+(emb.options[emb.selectedIndex].dataset.c||0);
@@ -1307,6 +1341,9 @@ function recopilar(){
     urnaId:($('o-urna-id')||{value:''}).value,
     urnaNombre:($('o-urna-nom')||{value:''}).value,
     costoUrna:($('o-urna-costo')||{value:0}).value,
+    urnaCambioId:($('o-urna-cambio-id')||{value:''}).value,
+    urnaCambioNombre:($('o-urna-cambio-nom')||{value:''}).value,
+    costoUrnaCambio:($('o-urna-cambio-costo')||{value:0}).value,
     costoAdicionalCremacion:($('o-crem-extra')||{value:0}).value,
     embalsamado:emb?emb.value:'NINGUNO',
     costoEmbalsamado:emb?+(emb.options[emb.selectedIndex].dataset.c||0):0,
@@ -1393,6 +1430,7 @@ function guardarODS(){
 function limpiarODS(){
   ['o-fallecido','o-contratante','o-tel','o-calle','o-colonia','o-localidad','o-municipio',
    'o-ataud-id','o-ataud-nom','o-ataud-costo','o-urna-id','o-urna-nom','o-urna-costo','o-crem-extra',
+   'o-urna-cambio-id','o-urna-cambio-nom','o-urna-cambio-costo',
    'o-inst','o-recol','o-sala-costo','o-dest-nom','o-km','o-costo-traslado','o-otros','o-anticipo','o-desc',
    'o-anot','o-panteon','o-fecha-sepelio','o-salida','o-misa','o-sepelio',
    'o-crematorio','o-fecha-crem','o-salida-crem','o-misa-crem','o-hora-crem',
@@ -1405,6 +1443,7 @@ function limpiarODS(){
   toggleLogistica();
   const ivaEl=$('o-aplica-iva');if(ivaEl)ivaEl.checked=true;
   $('blq-cande-piezas').style.display='none';
+  $('blq-urna-cambio-detalle').style.display='none';
   $('blq-anticipo-pct').style.display='none';
   $('blq-pagare').style.display='none';
   $('km-info').style.display='none';
@@ -1756,7 +1795,9 @@ function _itemsExpediente(o){
       items.push([`ADQUISICIÓN DE ATAÚD: ${o.ataudNombre||'—'}`, +o.costoAtaud||0]);
   }else{
     if((+o.costoUrna||0)>0||o.urnaNombre)
-      items.push([`ADQUISICIÓN DE URNA: ${o.urnaNombre||'—'} (${o.tipoCremacion==='DIRECTA'?'CREMACIÓN DIRECTA':'CON VELACIÓN'})`, +o.costoUrna||0]);
+      items.push([`PAQUETE DE CREMACIÓN: ${o.urnaNombre||'—'} (${o.tipoCremacion==='DIRECTA'?'CREMACIÓN DIRECTA':'CON VELACIÓN'})`, +o.costoUrna||0]);
+    if(o.urnaCambioId&&(+o.costoUrnaCambio||0)>0)
+      items.push([`CAMBIO DE URNA INCLUIDA POR: ${o.urnaCambioNombre||'—'}`, +o.costoUrnaCambio||0]);
     if((+o.costoAdicionalCremacion||0)>0)
       items.push([`CARGO ADICIONAL DE CREMACIÓN`, +o.costoAdicionalCremacion||0]);
   }
@@ -1860,6 +1901,7 @@ function _docHojaServicio(o){
       <div class="sub">${FUNERARIA_ADDR}</div>
       <div class="sub" style="font-weight:700;margin-top:4px">HOJA DE CONTROL Y COORDINACIÓN LOGÍSTICA DE SERVICIO</div>
       <div class="tag">HOJA DE SERVICIO (ODS) — ${o.folio||_folioActual}</div>
+      <div style="font-size:8.5pt;color:#666;margin-top:5px">Asesor / Vendedor: <b>${o.creadoPor||'—'}</b></div>
     </div>
 
     <div class="doc-sec-title">Datos Identificativos del Contratante (Titular)</div>
@@ -1895,9 +1937,8 @@ function _docHojaServicio(o){
 
     <div class="doc-foot">
       <div><div style="height:55px"></div><div class="ln"></div>CONTRATANTE<br>${o.contratante||'—'}</div>
-      <div><div style="height:55px"></div><div class="ln"></div>ASESOR / VENDEDOR<br>${o.creadoPor||'—'}</div>
+      <div>${_selloHTML()}<div class="ln"></div>FUNERARIA HUERTA S.A. DE C.V.</div>
     </div>
-    <div style="text-align:center;margin-top:6px">${_selloHTML()}<div style="font-size:8pt;color:#555;margin-top:2px">FUNERARIA HUERTA S.A. DE C.V.</div></div>
   </div>`;
 }
 
