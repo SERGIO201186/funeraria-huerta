@@ -240,8 +240,8 @@ button:active{transform:scale(.97)}
     <button class="ni" onclick="navTo('pagos')"><span class="ic">💰</span>Pagos Pendientes<span class="nbdg" id="bdg-pg">0</span></button>
     <button class="ni" onclick="window.open('https://sergio201186.github.io/tienda_huerta/','_blank')"><span class="ic">🛍</span>Tienda Virtual</button>
     <div class="nav-sec">Sistema</div>
-    <button class="ni" onclick="navTo('colab')"><span class="ic">👥</span>Colaboradores</button>
-    <button class="ni" onclick="navTo('nube')"><span class="ic">☁️</span>Sincronización Nube</button>
+    <button class="ni" data-admin-only onclick="navTo('colab')"><span class="ic">👥</span>Colaboradores</button>
+    <button class="ni" data-admin-only onclick="navTo('nube')"><span class="ic">☁️</span>Sincronización Nube</button>
     <div class="sb-ft">
       <button class="ni bo" style="width:100%;justify-content:center;margin:0" onclick="logout()">🔐 Cerrar Sesión</button>
     </div>
@@ -615,6 +615,7 @@ button:active{transform:scale(.97)}
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Total por Cobrar</div>
         <div style="font-size:30px;font-weight:800;color:var(--gold)" id="total-pend">$0</div>
       </div>
+      <div id="resumen-abonos-pend" style="display:none;margin-bottom:13px"></div>
       <div id="lista-pg"><div style="color:var(--text3);font-size:13px;text-align:center;padding:30px 0">Toca Actualizar para cargar.</div></div>
     </div>
 
@@ -694,6 +695,15 @@ button:active{transform:scale(.97)}
 
   </div><!-- /main -->
 </div><!-- /app -->
+
+<!-- MODAL BIENVENIDA PERSONALIZADA -->
+<div class="mo" id="mo-bienvenida" style="pointer-events:none">
+  <div class="mb" style="text-align:center;max-width:340px;background:linear-gradient(160deg,var(--bg2),var(--bg))">
+    <div style="font-size:13px;color:var(--text2);letter-spacing:.05em;margin-bottom:6px">¡BIENVENIDO/A!</div>
+    <div id="bienvenida-nombre" style="font-size:30px;font-weight:800;color:var(--gold);line-height:1.15;margin-bottom:8px"></div>
+    <div id="bienvenida-puesto" style="font-size:13px;color:var(--text3);letter-spacing:.04em"></div>
+  </div>
+</div>
 
 <!-- MODAL DETALLE ODS -->
 <div class="mo" id="mo-ods">
@@ -850,12 +860,45 @@ function startSession(col){
   $('l-status').textContent='';ST.pin='';updDots();
   _folioActual=genFolio();
   $('folio-disp').textContent=_folioActual;
+  aplicarPermisosUI();
+  mostrarBienvenida();
   updDash();
 }
 function logout(){if(!confirm('¿Cerrar sesión?'))return;ST.user=null;$('login').style.display='flex';$('app').style.display='none';ST.pin='';updDots()}
 
+/* ── PERMISOS POR ROL ──
+   ADMINISTRADOR: acceso total.
+   VENDEDOR / CHOFER (empleados): pueden crear ODS y registrar abonos (quedan
+   pendientes de confirmar), y consultar tablero/equipos/pagos. No pueden cerrar
+   ni eliminar órdenes, ni confirmar abonos, ni entrar a Colaboradores o Nube. */
+function esAdmin(){
+  return !!(ST.user && String(ST.user.puesto||'').toUpperCase().includes('ADMINISTRADOR'));
+}
+function requiereAdmin(mensaje){
+  if(esAdmin())return true;
+  toast(mensaje||'⚠ Esta acción requiere permisos de Administrador');
+  return false;
+}
+function aplicarPermisosUI(){
+  const admin=esAdmin();
+  // Botones del menú lateral exclusivos de Administrador
+  document.querySelectorAll('[data-admin-only]').forEach(el=>{
+    el.style.display=admin?'':'none';
+  });
+}
+
+function mostrarBienvenida(){
+  const nombre=(ST.user&&(ST.user.nombreCompleto||ST.user.nombre))||'Usuario';
+  const puesto=(ST.user&&ST.user.puesto)||'';
+  $('bienvenida-nombre').textContent=nombre;
+  $('bienvenida-puesto').textContent=puesto;
+  $('mo-bienvenida').classList.add('show');
+  setTimeout(()=>{ $('mo-bienvenida').classList.remove('show'); }, 2200);
+}
+
 /* ── NAV ── */
 function navTo(p){
+  if((p==='colab'||p==='nube') && !requiereAdmin('⚠ Solo el Administrador puede acceder a esta sección')) return;
   ST.page=p;
   document.querySelectorAll('.page').forEach(el=>el.classList.remove('act'));
   document.querySelectorAll('.ni').forEach(el=>el.classList.remove('act'));
@@ -1350,16 +1393,17 @@ function verODS(folio){
       ${o.anotaciones?`<div><div style="color:var(--text3)">Anotaciones</div><div>${o.anotaciones}</div></div>`:''}
       <div class="div"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="bg bsm" onclick="cambiarEst('${o.folio}','ACTIVA')">Activa</button>
-        <button class="bo bsm" onclick="cambiarEst('${o.folio}','CERRADA')">Cerrar ODS</button>
+        ${esAdmin()?`<button class="bg bsm" onclick="cambiarEst('${o.folio}','ACTIVA')">Activa</button>`:''}
+        ${esAdmin()?`<button class="bo bsm" onclick="cambiarEst('${o.folio}','CERRADA')">Cerrar ODS</button>`:''}
         <button class="bo bsm" onclick="equipoRecogido('${o.folio}')">📦 Equipo Recogido</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');verExpedienteDeFolio('${o.folio}')">📄 Expediente</button>
-        <button class="br bsm" onclick="elimODS('${o.folio}')">🗑</button>
+        ${esAdmin()?`<button class="br bsm" onclick="elimODS('${o.folio}')">🗑</button>`:''}
       </div>
     </div>`;
   $('mo-ods').classList.add('show');
 }
 function cambiarEst(folio,est){
+  if(!requiereAdmin('⚠ Solo el Administrador puede cerrar o reactivar órdenes')) return;
   const db=lDB();const i=db.findIndex(o=>o.folio===folio);if(i<0)return;
   const o=db[i];
   const eraCerrada=o.estatus==='CERRADA';
@@ -1370,6 +1414,7 @@ function cambiarEst(folio,est){
 }
 function equipoRecogido(folio){const db=lDB();const i=db.findIndex(o=>o.folio===folio);if(i<0)return;db[i].estatusEquipo='RECOGIDO';sDB(db);closeMo('mo-ods');cargarODS();updDash();toast('Equipo marcado RECOGIDO')}
 function elimODS(folio){
+  if(!requiereAdmin('⚠ Solo el Administrador puede eliminar órdenes')) return;
   if(!confirm(`¿Eliminar ${folio}?`))return;
   const o=lDB().find(x=>x.folio===folio);
   // Si la orden no estaba cerrada, la pieza solo estaba reservada: se libera de vuelta
@@ -1405,6 +1450,23 @@ function cargarEquipos(){
 function cargarPagos(){
   const ods=lDB().filter(o=>+o.restante>0);
   $('total-pend').textContent=fmt(ods.reduce((s,o)=>s+(+o.restante||0),0));
+
+  // Resumen de abonos pendientes de confirmar (solo visible y relevante para Administrador)
+  const pendientes=lAbonos().filter(a=>a.estado==='pendiente');
+  const elPend=$('resumen-abonos-pend');
+  if(elPend){
+    if(esAdmin()&&pendientes.length){
+      const totalPend=pendientes.reduce((s,a)=>s+(+a.monto||0),0);
+      elPend.style.display='block';
+      elPend.innerHTML=`<div class="card" style="border-color:var(--amber)">
+        <div style="font-weight:700;color:var(--amber)">🕐 ${pendientes.length} abono(s) pendientes de confirmar en caja</div>
+        <div style="font-size:13px;color:var(--text2)">Suman ${fmt(totalPend)} · revísalos en cada orden abajo</div>
+      </div>`;
+    }else{
+      elPend.style.display='none';elPend.innerHTML='';
+    }
+  }
+
   $('lista-pg').innerHTML=ods.length?ods.map(o=>`<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div><div style="font-size:11px;color:var(--gold);font-weight:700">${o.folio}</div>
@@ -1502,9 +1564,10 @@ async function sincronizarTodo(silencioso=false){
       }
       if(r.colaboradores&&r.colaboradores.length)sEmp(r.colaboradores);
       if(r.abonos&&r.abonos.length){
-        const localAb=lAbonos(),idsAb=new Set(localAb.map(x=>x.id));
-        r.abonos.forEach(ra=>{if(!idsAb.has(ra.id))localAb.push(ra)});
-        sAbonos(localAb);
+        const localAb=lAbonos();
+        const porId={};localAb.forEach(a=>{porId[a.id]=a});
+        r.abonos.forEach(ra=>{porId[ra.id]=ra}); // el servidor manda la versión más reciente (incluye estado)
+        sAbonos(Object.values(porId));
       }
       ST.q=[];localStorage.setItem(QK,'[]');
       const now=new Date().toISOString();localStorage.setItem(SK,now);
@@ -1858,33 +1921,83 @@ function confirmarAbono(){
   const o=db[idx];
   const contratante=o.contratante||'';
   const pct=(+o.totalGeneral)>0?Math.round((monto/(+o.totalGeneral))*100):0;
+  // Si lo registra el Administrador, se confirma de inmediato (ya pasó por caja).
+  // Si lo registra un empleado, queda pendiente hasta que el Administrador lo confirme.
+  const confirmadoYa=esAdmin();
   const abono={
     id:`AB-${Date.now()}`,folio,contratante,monto,porcentaje:pct,
     fecha:$('ab-fecha').value||hoy(),metodo:$('ab-metodo').value,
     referencia:($('ab-ref').value||'').trim(),nota:($('ab-nota').value||'').trim(),
-    cajero:ST.user?ST.user.nombreCompleto:''
+    cajero:ST.user?ST.user.nombreCompleto:'',
+    estado:confirmadoYa?'confirmado':'pendiente'
   };
   const abonos=lAbonos();abonos.push(abono);sAbonos(abonos);
 
-  // Actualizar anticipo/restante acumulado de la ODS
-  o.anticipo=(+o.anticipo||0)+monto;
-  o.restante=Math.max((+o.totalGeneral||0)-(+o.anticipo||0),0);
-  db[idx]=o;sDB(db);
-
+  if(confirmadoYa){
+    // Actualizar anticipo/restante acumulado de la ODS solo si ya está confirmado
+    o.anticipo=(+o.anticipo||0)+monto;
+    o.restante=Math.max((+o.totalGeneral||0)-(+o.anticipo||0),0);
+    db[idx]=o;sDB(db);
+    encolar({accion:'actualizarODS',folio,datos:o});
+  }
   encolar({accion:'guardarAbono',datos:abono});
-  encolar({accion:'actualizarODS',folio,datos:o});
 
   closeMo('mo-abono');
-  toast(`✅ Abono de ${fmt(monto)} registrado para ${folio}`);
+  toast(confirmadoYa
+    ? `✅ Abono de ${fmt(monto)} confirmado para ${folio}`
+    : `🕐 Abono de ${fmt(monto)} registrado, pendiente de confirmar en caja`);
   cargarPagos();updDash();
 }
+
+// El Administrador confirma un abono que un empleado registró como pendiente:
+// recién aquí se descuenta del saldo de la orden.
+function confirmarAbonoPendiente(abonoId){
+  if(!requiereAdmin('⚠ Solo el Administrador puede confirmar abonos')) return;
+  const abonos=lAbonos();
+  const i=abonos.findIndex(a=>a.id===abonoId);
+  if(i<0){toast('Abono no encontrado');return}
+  const abono=abonos[i];
+  if(abono.estado==='confirmado'){toast('Ese abono ya estaba confirmado');return}
+  abono.estado='confirmado';abonos[i]=abono;sAbonos(abonos);
+
+  const db=lDB();const idx=db.findIndex(o=>o.folio===abono.folio);
+  if(idx>=0){
+    const o=db[idx];
+    o.anticipo=(+o.anticipo||0)+(+abono.monto||0);
+    o.restante=Math.max((+o.totalGeneral||0)-(+o.anticipo||0),0);
+    db[idx]=o;sDB(db);
+    encolar({accion:'actualizarODS',folio:o.folio,datos:o});
+  }
+  encolar({accion:'guardarAbono',datos:abono});
+  toast(`✅ Abono de ${fmt(abono.monto)} confirmado para ${abono.folio}`);
+  cargarPagos();updDash();
+}
+
+function rechazarAbonoPendiente(abonoId){
+  if(!requiereAdmin('⚠ Solo el Administrador puede rechazar abonos')) return;
+  if(!confirm('¿Rechazar este abono? No se aplicará al saldo de la orden.'))return;
+  sAbonos(lAbonos().filter(a=>a.id!==abonoId));
+  toast('Abono rechazado');
+  cargarPagos();updDash();
+}
+
 function verAbonosDe(folio){
   const abonos=lAbonos().filter(a=>a.folio===folio);
   if(!abonos.length)return '<div style="color:var(--text3);font-size:12px;margin-top:6px">Sin abonos registrados.</div>';
-  return '<div style="margin-top:8px">'+abonos.map(a=>
-    `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-top:1px solid var(--border)">
-      <span>${a.fecha} · ${a.metodo}${a.referencia?' · '+a.referencia:''}</span><span style="color:var(--green)">${fmt(a.monto)} (${a.porcentaje}%)</span>
-    </div>`).join('')+'</div>';
+  return '<div style="margin-top:8px">'+abonos.map(a=>{
+    const pendiente=a.estado==='pendiente';
+    const filaInfo=`<span>${a.fecha} · ${a.metodo}${a.referencia?' · '+a.referencia:''}</span><span style="color:${pendiente?'var(--amber)':'var(--green)'}">${fmt(a.monto)} (${a.porcentaje}%)${pendiente?' · pendiente':''}</span>`;
+    if(pendiente && esAdmin()){
+      return `<div style="padding:6px 0;border-top:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;font-size:12px">${filaInfo}</div>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <button class="bg bsm" style="flex:1" onclick="confirmarAbonoPendiente('${a.id}')">✅ Confirmar</button>
+          <button class="br bsm" style="flex:1" onclick="rechazarAbonoPendiente('${a.id}')">✕ Rechazar</button>
+        </div>
+      </div>`;
+    }
+    return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-top:1px solid var(--border)">${filaInfo}</div>`;
+  }).join('')+'</div>';
 }
 
 /* ── INIT ── */
