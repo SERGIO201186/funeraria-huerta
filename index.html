@@ -3,12 +3,82 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Huerta ODS"/>
-<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="theme-color" content="#0f172a"/>
+<link rel="manifest" id="pwa-manifest-ods">
 <title>Funeraria Huerta — Control Operativo</title>
+<script>
+// ── PWA BOOTSTRAP ──────────────────────────────────────────
+(function(){
+  // 1. Manifest dinámico como Blob
+  const manifest = {
+    name: "Funeraria Huerta — Operativo",
+    short_name: "Huerta ODS",
+    description: "Control operativo de servicios funerarios",
+    start_url: window.location.href.split('?')[0],
+    display: "standalone",
+    background_color: "#0f172a",
+    theme_color: "#0f172a",
+    orientation: "any",
+    icons: [
+      { src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='32' fill='%230f172a'/%3E%3Ctext x='96' y='130' text-anchor='middle' font-family='Georgia,serif' font-weight='900' font-size='80' fill='%23c9a84c'%3EH%3C/text%3E%3C/svg%3E", sizes:"192x192", type:"image/svg+xml" },
+      { src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='80' fill='%230f172a'/%3E%3Ctext x='256' y='360' text-anchor='middle' font-family='Georgia,serif' font-weight='900' font-size='240' fill='%23c9a84c'%3EH%3C/text%3E%3C/svg%3E", sizes:"512x512", type:"image/svg+xml", purpose:"any maskable" }
+    ]
+  };
+  const blob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
+  document.getElementById('pwa-manifest-ods').href = URL.createObjectURL(blob);
+
+  // 2. Registrar sw-ods.js (archivo separado, requerido por GitHub Pages)
+  if('serviceWorker' in navigator){
+    const base = window.location.pathname.replace(/\/[^\/]*$/,'');
+    navigator.serviceWorker.register(base + '/sw-ods.js')
+      .then(reg=>{
+        console.log('[PWA ODS] SW registrado:',reg.scope);
+        if(navigator.serviceWorker.controller){
+          navigator.serviceWorker.controller.postMessage({type:'CACHE_PAGE',url:window.location.href});
+        }
+        reg.addEventListener('updatefound',()=>{
+          const nw=reg.installing;
+          nw.addEventListener('statechange',()=>{
+            if(nw.state==='installed'&&navigator.serviceWorker.controller)
+              toast('Nueva versión disponible — recarga para actualizar.');
+          });
+        });
+      })
+      .catch(err=>console.warn('[PWA ODS] SW no disponible:',err.message));
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if(navigator.serviceWorker.controller)
+        navigator.serviceWorker.controller.postMessage({type:'CACHE_PAGE',url:window.location.href});
+    });
+  }
+
+  // 3. Capturar evento de instalación
+  let _pwaPrompt = null;
+  window.addEventListener('beforeinstallprompt',e=>{
+    e.preventDefault();
+    _pwaPrompt = e;
+    // Mostrar botón instalar en login Y en sidebar
+    ['btn-install-ods-login','btn-install-ods-nav'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.style.display='flex';
+    });
+  });
+  window.addEventListener('appinstalled',()=>{
+    _pwaPrompt=null;
+    ['btn-install-ods-login','btn-install-ods-nav'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.style.display='none';
+    });
+    toast('✅ App instalada. Ya funciona sin Internet.');
+  });
+  window._triggerPwaInstall = function(){
+    if(_pwaPrompt){ _pwaPrompt.prompt(); _pwaPrompt.userChoice.then(()=>{_pwaPrompt=null;}); }
+  };
+})();
+</script>
 <style>
 :root{
   --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;
@@ -212,6 +282,13 @@ button:active{transform:scale(.97)}
     <div class="f"><label class="lbl">Usuario</label><input id="l-user" type="text" autocomplete="username"/></div>
     <div class="f"><label class="lbl">Contraseña</label><input id="l-pass" type="password" autocomplete="current-password"/></div>
     <button class="bg" style="width:100%" onclick="doLogin()">Iniciar Sesión</button>
+    <!-- Botón PWA install — solo aparece cuando el navegador lo permite -->
+    <button id="btn-install-ods-login" onclick="_triggerPwaInstall()"
+      style="display:none;width:100%;margin-top:10px;align-items:center;justify-content:center;gap:8px;
+             background:transparent;border:1.5px solid #c9a84c44;color:#c9a84c;border-radius:10px;
+             padding:11px;font-size:13px;font-weight:700;cursor:pointer;">
+      ⬇ Instalar App en este dispositivo
+    </button>
   </div>
 
   <div class="l-status" id="l-status"></div>
@@ -243,6 +320,12 @@ button:active{transform:scale(.97)}
     <button class="ni" data-admin-only onclick="navTo('colab')"><span class="ic">👥</span>Colaboradores</button>
     <button class="ni" data-admin-only onclick="navTo('nube')"><span class="ic">☁️</span>Sincronización Nube</button>
     <div class="sb-ft">
+      <button id="btn-install-ods-nav" onclick="_triggerPwaInstall()"
+        style="display:none;width:100%;justify-content:center;margin:0 0 8px 0;align-items:center;gap:8px;
+               background:transparent;border:1.5px solid #c9a84c55;color:#c9a84c;border-radius:10px;
+               padding:10px;font-size:12px;font-weight:700;cursor:pointer;">
+        ⬇ Instalar App
+      </button>
       <button class="ni bo" style="width:100%;justify-content:center;margin:0" onclick="logout()">🔐 Cerrar Sesión</button>
     </div>
   </div>
