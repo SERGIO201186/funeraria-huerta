@@ -969,9 +969,14 @@ async function tiendaGet(){
   }
 }
 
+// Normaliza texto: minúsculas, sin espacios extra, sin acentos (para comparar categorías/segment de forma tolerante)
+function _norm(s){
+  return String(s||'').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
 async function cargarCatalogoTienda(){
   const datos=await tiendaGet();
-  _catalogoTienda=Array.isArray(datos)?datos.filter(p=>p.segment==='inmediato'&&(p.estado||'disponible')==='disponible'):[];
+  _catalogoTienda=Array.isArray(datos)?datos.filter(p=>_norm(p.segment)==='inmediato'&&_norm(p.estado||'disponible')==='disponible'):[];
   llenarSelectCatalogo('o-ataud-id','ataud');
   llenarSelectCatalogo('o-urna-id','urna');
 }
@@ -979,8 +984,9 @@ async function cargarCatalogoTienda(){
 function llenarSelectCatalogo(selectId,categoriaFiltro){
   const sel=$(selectId);
   if(!sel)return;
-  // Filtra por categoría si el producto la especifica; si no tiene categoría, se muestra en ambos
-  const items=_catalogoTienda.filter(p=>!p.categoria||p.categoria.toLowerCase().includes(categoriaFiltro));
+  // categoriaFiltro: 'ataud' -> categoría real "Inhumacion" | 'urna' -> categoría real "Cremacion"
+  const catReal=categoriaFiltro==='ataud'?'inhumacion':'cremacion';
+  const items=_catalogoTienda.filter(p=>_norm(p.categoria).includes(catReal));
   const valorPrevio=sel.value;
   sel.innerHTML='<option value="">-- Selecciona del inventario --</option>'
     + items.map(p=>`<option value="${p.id}" data-nombre="${(p.nombre||'').replace(/"/g,'&quot;')}" data-precio="${p.precio||0}">${p.nombre} — ${fmt(p.precio||0)}</option>`).join('');
