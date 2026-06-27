@@ -3,82 +3,12 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Huerta ODS"/>
+<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="theme-color" content="#0f172a"/>
-<link rel="manifest" id="pwa-manifest-ods">
 <title>Funeraria Huerta — Control Operativo</title>
-<script>
-// ── PWA BOOTSTRAP ──────────────────────────────────────────
-(function(){
-  // 1. Manifest dinámico como Blob
-  const manifest = {
-    name: "Funeraria Huerta — Operativo",
-    short_name: "Huerta ODS",
-    description: "Control operativo de servicios funerarios",
-    start_url: window.location.href.split('?')[0],
-    display: "standalone",
-    background_color: "#0f172a",
-    theme_color: "#0f172a",
-    orientation: "any",
-    icons: [
-      { src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='32' fill='%230f172a'/%3E%3Ctext x='96' y='130' text-anchor='middle' font-family='Georgia,serif' font-weight='900' font-size='80' fill='%23c9a84c'%3EH%3C/text%3E%3C/svg%3E", sizes:"192x192", type:"image/svg+xml" },
-      { src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='80' fill='%230f172a'/%3E%3Ctext x='256' y='360' text-anchor='middle' font-family='Georgia,serif' font-weight='900' font-size='240' fill='%23c9a84c'%3EH%3C/text%3E%3C/svg%3E", sizes:"512x512", type:"image/svg+xml", purpose:"any maskable" }
-    ]
-  };
-  const blob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
-  document.getElementById('pwa-manifest-ods').href = URL.createObjectURL(blob);
-
-  // 2. Registrar sw-ods.js (archivo separado, requerido por GitHub Pages)
-  if('serviceWorker' in navigator){
-    const base = window.location.pathname.replace(/\/[^\/]*$/,'');
-    navigator.serviceWorker.register(base + '/sw-ods.js')
-      .then(reg=>{
-        console.log('[PWA ODS] SW registrado:',reg.scope);
-        if(navigator.serviceWorker.controller){
-          navigator.serviceWorker.controller.postMessage({type:'CACHE_PAGE',url:window.location.href});
-        }
-        reg.addEventListener('updatefound',()=>{
-          const nw=reg.installing;
-          nw.addEventListener('statechange',()=>{
-            if(nw.state==='installed'&&navigator.serviceWorker.controller)
-              toast('Nueva versión disponible — recarga para actualizar.');
-          });
-        });
-      })
-      .catch(err=>console.warn('[PWA ODS] SW no disponible:',err.message));
-    navigator.serviceWorker.addEventListener('controllerchange',()=>{
-      if(navigator.serviceWorker.controller)
-        navigator.serviceWorker.controller.postMessage({type:'CACHE_PAGE',url:window.location.href});
-    });
-  }
-
-  // 3. Capturar evento de instalación
-  let _pwaPrompt = null;
-  window.addEventListener('beforeinstallprompt',e=>{
-    e.preventDefault();
-    _pwaPrompt = e;
-    // Mostrar botón instalar en login Y en sidebar
-    ['btn-install-ods-login','btn-install-ods-nav'].forEach(id=>{
-      const el=document.getElementById(id);
-      if(el) el.style.display='flex';
-    });
-  });
-  window.addEventListener('appinstalled',()=>{
-    _pwaPrompt=null;
-    ['btn-install-ods-login','btn-install-ods-nav'].forEach(id=>{
-      const el=document.getElementById(id);
-      if(el) el.style.display='none';
-    });
-    toast('✅ App instalada. Ya funciona sin Internet.');
-  });
-  window._triggerPwaInstall = function(){
-    if(_pwaPrompt){ _pwaPrompt.prompt(); _pwaPrompt.userChoice.then(()=>{_pwaPrompt=null;}); }
-  };
-})();
-</script>
 <style>
 :root{
   --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;
@@ -282,13 +212,6 @@ button:active{transform:scale(.97)}
     <div class="f"><label class="lbl">Usuario</label><input id="l-user" type="text" autocomplete="username"/></div>
     <div class="f"><label class="lbl">Contraseña</label><input id="l-pass" type="password" autocomplete="current-password"/></div>
     <button class="bg" style="width:100%" onclick="doLogin()">Iniciar Sesión</button>
-    <!-- Botón PWA install — solo aparece cuando el navegador lo permite -->
-    <button id="btn-install-ods-login" onclick="_triggerPwaInstall()"
-      style="display:none;width:100%;margin-top:10px;align-items:center;justify-content:center;gap:8px;
-             background:transparent;border:1.5px solid #c9a84c44;color:#c9a84c;border-radius:10px;
-             padding:11px;font-size:13px;font-weight:700;cursor:pointer;">
-      ⬇ Instalar App en este dispositivo
-    </button>
   </div>
 
   <div class="l-status" id="l-status"></div>
@@ -320,12 +243,6 @@ button:active{transform:scale(.97)}
     <button class="ni" data-admin-only onclick="navTo('colab')"><span class="ic">👥</span>Colaboradores</button>
     <button class="ni" data-admin-only onclick="navTo('nube')"><span class="ic">☁️</span>Sincronización Nube</button>
     <div class="sb-ft">
-      <button id="btn-install-ods-nav" onclick="_triggerPwaInstall()"
-        style="display:none;width:100%;justify-content:center;margin:0 0 8px 0;align-items:center;gap:8px;
-               background:transparent;border:1.5px solid #c9a84c55;color:#c9a84c;border-radius:10px;
-               padding:10px;font-size:12px;font-weight:700;cursor:pointer;">
-        ⬇ Instalar App
-      </button>
       <button class="ni bo" style="width:100%;justify-content:center;margin:0" onclick="logout()">🔐 Cerrar Sesión</button>
     </div>
   </div>
@@ -842,7 +759,23 @@ button:active{transform:scale(.97)}
     <div id="mo-contrato-body" style="background:#ccc;border-radius:8px;overflow:auto;max-height:60vh;padding:14px;display:flex;flex-direction:column;gap:14px;align-items:center"></div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="bo" style="flex:1" onclick="closeMo('mo-contrato')">Cerrar</button>
-      <button class="bg" style="flex:2" onclick="imprimirExpediente()">🖨 Imprimir / Guardar como PDF</button>
+      <button class="bg" style="flex:1" onclick="imprimirExpediente()">🖨 Imprimir</button>
+      <button class="bg" style="flex:1" onclick="enviarODSPorWhatsapp(document.getElementById('mo-contrato').dataset.folio)">📤 WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL POST-GUARDADO: ver expediente o enviar por WhatsApp -->
+<div class="mo" id="mo-post-guardado">
+  <div class="mb" style="text-align:center">
+    <button class="mc" onclick="closeMo('mo-post-guardado')">✕</button>
+    <div style="font-size:40px;margin-bottom:6px">✅</div>
+    <div class="mt2" id="post-guardado-folio">Orden guardada</div>
+    <p style="font-size:12px;color:var(--text2);margin-top:-4px;margin-bottom:14px">¿Qué deseas hacer ahora?</p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="bg" onclick="closeMo('mo-post-guardado');verExpedienteDeFolio(window._folioPostGuardado)">📄 Ver / Imprimir Expediente</button>
+      <button class="bo" onclick="closeMo('mo-post-guardado');enviarODSPorWhatsapp(window._folioPostGuardado)">📤 Enviar ODS por WhatsApp</button>
+      <button class="bo" style="opacity:.7" onclick="closeMo('mo-post-guardado')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -919,6 +852,8 @@ button:active{transform:scale(.97)}
 <!-- ════════════════════════════════════════
      SCRIPT
 ════════════════════════════════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2';
 const FUNERARIA_ADDR = "Nicolás Bravo 11, Zona Centro, C.P. 91000, Xalapa, Veracruz";
@@ -936,6 +871,15 @@ let _firmaPendiente=null;
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+(+n||0).toLocaleString('es-MX',{minimumFractionDigits:0});
 const hoy=()=>new Date().toISOString().split('T')[0];
+// Normaliza cualquier fecha que llegue como ISO completo (ej. "2026-06-26T06:00:00.000Z",
+// como a veces entrega Google Sheets) a solo "YYYY-MM-DD" para mostrarla en pantalla.
+// Si ya viene como fecha simple, o está vacía, la deja igual.
+const fechaPlano=v=>{
+  if(!v)return v;
+  const s=String(v);
+  const m=s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m?m[1]:s;
+};
 function toast(m,d=2800){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),d)}
 function lDB(){return JSON.parse(localStorage.getItem(DB)||'[]')}
 function sDB(d){localStorage.setItem(DB,JSON.stringify(d));ST.ods=d}
@@ -1101,7 +1045,7 @@ function updDash(){
     return`<div class="aeq ${d<0?'venc':''}">
       <div><div style="font-size:11px;font-weight:700;color:var(--gold)">${o.folio}</div>
       <div style="font-size:13px">${o.fallecido||'—'}</div>
-      <div style="font-size:11px;color:var(--text3)">${d<0?`Vencido hace ${-d}d`:`Recoger en ${d}d`} · ${o.fechaRecoleccion}</div></div></div>`;
+      <div style="font-size:11px;color:var(--text3)">${d<0?`Vencido hace ${-d}d`:`Recoger en ${d}d`} · ${fechaPlano(o.fechaRecoleccion)}</div></div></div>`;
   }).join(''):'<div style="color:var(--text3);font-size:13px">Sin alertas de equipos.</div>';
 
   const url=localStorage.getItem(UK);const ls=localStorage.getItem(SK);
@@ -1502,11 +1446,11 @@ function guardarODS(){
   _firmaPendiente=null;
   _folioActual=genFolio();
   limpiarODS();updDash();navTo('tablero');
-  // Ofrecer imprimir/guardar PDF del expediente recién creado
+  // Ofrecer ver expediente o enviarlo por WhatsApp
+  window._folioPostGuardado=folioGuardado;
   setTimeout(()=>{
-    if(confirm(`¿Deseas abrir el Expediente de ${folioGuardado} para imprimir o guardar como PDF?`)){
-      verExpedienteDeFolio(folioGuardado);
-    }
+    $('post-guardado-folio').textContent=`${folioGuardado} guardada`;
+    $('mo-post-guardado').classList.add('show');
   },350);
 }
 
@@ -1576,8 +1520,8 @@ function verODS(folio){
         <div><div style="color:var(--text3)">Velación</div><div>${o.modalidadVelacion||'—'}</div></div>
       </div>
       ${o.modalidadVelacion==='DOMICILIO'?`<div class="g2">
-        <div><div style="color:var(--text3)">Instalación</div><div>${o.fechaInstalacion||'—'}</div></div>
-        <div><div style="color:var(--text3)">Recolección</div><div style="color:var(--amber)">${o.fechaRecoleccion||'—'}</div></div>
+        <div><div style="color:var(--text3)">Instalación</div><div>${fechaPlano(o.fechaInstalacion)||'—'}</div></div>
+        <div><div style="color:var(--text3)">Recolección</div><div style="color:var(--amber)">${fechaPlano(o.fechaRecoleccion)||'—'}</div></div>
       </div>`:''}
       ${o.kmTraslado>0?`<div><div style="color:var(--text3)">Traslado</div><div>${o.destinoNombre||'—'} · ${o.kmTraslado} km · ${fmt(o.costoTraslado||0)}</div></div>`:''}
       <div class="div"></div>
@@ -1586,14 +1530,14 @@ function verODS(folio){
         <div><div style="color:var(--text3)">Hora de Salida</div><div>${o.foraneoHoraSalida||'—'}</div></div>
       </div>`:o.modalidadServicio==='CREMACION'?`<div class="g2">
         <div><div style="color:var(--text3)">Crematorio</div><div>${o.crematorio||'—'}</div></div>
-        <div><div style="color:var(--text3)">Fecha Cremación</div><div>${o.fechaCremacion||'—'}</div></div>
+        <div><div style="color:var(--text3)">Fecha Cremación</div><div>${fechaPlano(o.fechaCremacion)||'—'}</div></div>
       </div>
       <div class="g2" style="margin-top:6px">
         <div><div style="color:var(--text3)">Horarios</div><div>Salida ${o.salidaCremacion||'—'} · Misa ${o.horaMisaCrem||'—'}</div></div>
         <div><div style="color:var(--text3)">Hora Cremación</div><div style="color:var(--amber)">${o.horaCremacion||'—'}</div></div>
       </div>`:`<div class="g2">
         <div><div style="color:var(--text3)">Panteón</div><div>${o.lugSepelio||'—'}</div></div>
-        <div><div style="color:var(--text3)">Fecha Inhumación</div><div>${o.fechaSepelio||'—'}</div></div>
+        <div><div style="color:var(--text3)">Fecha Inhumación</div><div>${fechaPlano(o.fechaSepelio)||'—'}</div></div>
       </div>
       <div class="g2" style="margin-top:6px">
         <div><div style="color:var(--text3)">Horarios</div><div>Salida ${o.salidaTraslado||'—'} · Misa ${o.horaMisa||'—'}</div></div>
@@ -1607,7 +1551,7 @@ function verODS(folio){
         <div style="background:rgba(201,168,76,.08);border:1px solid var(--golddim);border-radius:var(--r);padding:10px;font-size:12px">
           <div style="color:var(--gold);font-weight:700;margin-bottom:6px">📄 PAGARÉ</div>
           <div>Deudor: <strong>${o.nombreDeudor||'—'}</strong> · ${o.telefonoDeudor||''}</div>
-          <div>Monto: <strong>${fmt(o.montoPagare||0)}</strong> · Vence: ${o.vencimientoPagare||'—'}</div>
+          <div>Monto: <strong>${fmt(o.montoPagare||0)}</strong> · Vence: ${fechaPlano(o.vencimientoPagare)||'—'}</div>
           <div style="color:var(--text3);margin-top:4px;font-size:11px">${o.cantidadLetras||''}</div>
         </div>`:''
       }
@@ -1619,6 +1563,7 @@ function verODS(folio){
         <button class="bo bsm" onclick="equipoRecogido('${o.folio}')">📦 Equipo Recogido</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');abrirEdicionLogistica('${o.folio}')">🕐 Actualizar Logística</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');verExpedienteDeFolio('${o.folio}')">📄 Expediente</button>
+        <button class="bo bsm" onclick="closeMo('mo-ods');enviarODSPorWhatsapp('${o.folio}')">📤 Enviar ODS</button>
         ${esAdmin()?`<button class="br bsm" onclick="elimODS('${o.folio}')">🗑</button>`:''}
       </div>
     </div>`;
@@ -1661,7 +1606,7 @@ function cargarEquipos(){
         <div><div style="font-size:11px;color:var(--gold);font-weight:700">${o.folio}</div><div style="font-size:14px">${o.fallecido||'—'}</div></div>
         <span class="badge" style="background:${col}22;color:${col}">${lbl}</span>
       </div>
-      <div style="font-size:12px;color:var(--text2);margin-top:5px">Recolección: ${o.fechaRecoleccion||'—'} · Equipo: ${o.equipoVelacion||'Sin detalle'}</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:5px">Recolección: ${fechaPlano(o.fechaRecoleccion)||'—'} · Equipo: ${o.equipoVelacion||'Sin detalle'}</div>
     </div>`;
   });
   $('eq-v').textContent=v;$('eq-u').textContent=u;$('eq-p').textContent=p;$('eq-ok').textContent=ok;
@@ -1694,7 +1639,7 @@ function cargarPagos(){
       <div><div style="font-size:11px;color:var(--gold);font-weight:700">${o.folio}</div>
       <div style="font-size:14px">${o.fallecido||'—'}</div>
       <div style="font-size:12px;color:var(--text3)">${o.contratante||'—'} · ${o.telefono||'—'}</div>
-      ${o.tienePagare==='SI'?`<div style="font-size:11px;color:var(--amber)">📄 Con pagaré · Vence ${o.vencimientoPagare||'—'}</div>`:''}
+      ${o.tienePagare==='SI'?`<div style="font-size:11px;color:var(--amber)">📄 Con pagaré · Vence ${fechaPlano(o.vencimientoPagare)||'—'}</div>`:''}
       </div>
       <div style="text-align:right"><div style="color:var(--red);font-weight:700;font-size:16px">${fmt(o.restante)}</div><div style="font-size:11px;color:var(--text3)">pendiente</div></div>
     </div>
@@ -1952,7 +1897,7 @@ function _seccionLogisticaHTML(o){
     return `<div class="doc-sec-title">Logística de Cremación</div>
     <div class="doc-row2">
       <div><b>Crematorio:</b> ${o.crematorio||'—'}</div>
-      <div><b>Fecha de Cremación:</b> ${o.fechaCremacion||'—'}</div>
+      <div><b>Fecha de Cremación:</b> ${fechaPlano(o.fechaCremacion)||'—'}</div>
       <div><b>Hora Salida de Velación:</b> ${o.salidaCremacion||'—'}</div>
       <div><b>Hora de Misa:</b> ${o.horaMisaCrem||'—'}</div>
       <div><b>Hora de Cremación:</b> ${o.horaCremacion||'—'}</div>
@@ -1964,7 +1909,7 @@ function _seccionLogisticaHTML(o){
   return `<div class="doc-sec-title">Logística de Sepelio</div>
   <div class="doc-row2">
     <div><b>Panteón:</b> ${o.lugSepelio||'—'}</div>
-    <div><b>Fecha de Inhumación:</b> ${o.fechaSepelio||'—'}</div>
+    <div><b>Fecha de Inhumación:</b> ${fechaPlano(o.fechaSepelio)||'—'}</div>
     <div><b>Hora Salida del Domicilio:</b> ${o.salidaTraslado||'—'}</div>
     <div><b>Hora de Misa:</b> ${o.horaMisa||'—'}</div>
     <div><b>Hora de Sepelio:</b> ${o.horaSepelio||'—'}</div>
@@ -2092,7 +2037,7 @@ function _docPagare(o){
     </div>
     <div class="doc-row2" style="font-size:11pt;font-weight:700;margin-top:6px">
       <div>IMPORTE ${fmt(o.montoPagare)} M.N.</div>
-      <div>VENCIMIENTO ${o.vencimientoPagare||'—'}</div>
+      <div>VENCIMIENTO ${fechaPlano(o.vencimientoPagare)||'—'}</div>
     </div>
     <p class="doc-clause" style="margin-top:12px">Debo y pagaré incondicionalmente por este Pagaré a la orden de
     <b>SERVICIOS FUNERARIOS HUERTA S.A. DE C.V.</b>, en la ciudad de Xalapa, Veracruz, la cantidad exacta de:</p>
@@ -2100,7 +2045,7 @@ function _docPagare(o){
     <p class="doc-clause">que corresponde al saldo insoluto de los servicios contratados con fecha de expedición
     ${(o.fechaCreacion||'').slice(0,10)||hoy()}.</p>
     <p class="doc-clause">En caso de no liquidarse este título mercantil a su fecha de vencimiento fijada el
-    ${o.vencimientoPagare||'—'}, el deudor se obliga a pagar un interés moratorio a razón del 5% mensual sobre el saldo
+    ${fechaPlano(o.vencimientoPagare)||'—'}, el deudor se obliga a pagar un interés moratorio a razón del 5% mensual sobre el saldo
     insoluto hasta su total liquidación, reservándose el acreedor el ejercicio de cobro judicial de conformidad con el
     Código de Comercio vigente.</p>
 
@@ -2125,6 +2070,7 @@ function verExpedienteDeFolio(folio){
   const db=lDB();
   let o=db.find(x=>x.folio===folio);
   if(!o && folio===_folioActual) o=recopilar(); // orden aún no guardada: usar formulario en vivo
+  $('mo-contrato').dataset.folio=folio;
   if(!o){toast('⚠ No se encontró la orden '+folio);return}
   const html=_construirExpedienteHTML(o);
 
@@ -2159,6 +2105,54 @@ function imprimirExpediente(){
   window.print();
 }
 
+// Genera un PDF real (descargable) del expediente a partir del HTML ya
+// renderizado en #print-area, usando html2canvas + jsPDF (cargados por CDN).
+// Cada .doc-print se captura como imagen y se coloca en una página tamaño carta.
+async function descargarPDFExpediente(folio){
+  const docs=document.querySelectorAll('#print-area .doc-print');
+  if(!docs.length){toast('⚠ No hay expediente generado para descargar');return null}
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({unit:'in',format:'letter'});
+  for(let i=0;i<docs.length;i++){
+    const canvas=await html2canvas(docs[i],{scale:2,backgroundColor:'#ffffff'});
+    const img=canvas.toDataURL('image/jpeg',0.92);
+    if(i>0)pdf.addPage('letter');
+    pdf.addImage(img,'JPEG',0,0,8.5,11);
+  }
+  const nombreArchivo=`Expediente_${folio}.pdf`;
+  pdf.save(nombreArchivo);
+  return nombreArchivo;
+}
+
+// "Enviar ODS": genera y descarga el PDF automáticamente, y abre WhatsApp para
+// elegir el contacto. WhatsApp (app o web) no permite adjuntar archivos de forma
+// automática desde una página por seguridad; el PDF recién descargado se adjunta
+// con 1 toque desde el selector de archivos de WhatsApp.
+async function enviarODSPorWhatsapp(folio){
+  const db=lDB();
+  const o=db.find(x=>x.folio===folio);
+  if(!o){toast('⚠ No se encontró la orden '+folio);return}
+
+  verExpedienteDeFolio(folio); // construye el HTML en #print-area (necesario antes de capturar)
+  await new Promise(r=>setTimeout(r,250)); // dar tiempo a que el DOM pinte antes de capturar
+  toast('📄 Generando PDF…',1600);
+  const archivo=await descargarPDFExpediente(folio);
+  closeMo('mo-contrato');
+  if(!archivo)return;
+
+  const mensaje=`Hola ${o.contratante||''}, le compartimos el expediente del servicio de ${o.fallecido||'—'} (folio ${folio}). Adjunto el PDF con el detalle completo.`;
+  const telDigits=(o.telefono||'').replace(/\D/g,'');
+  // Si hay teléfono capturado, abrir el chat directo con ese número; si no, abrir
+  // el selector general de WhatsApp para elegir el contacto manualmente.
+  const url=telDigits
+    ? `https://wa.me/52${telDigits}?text=${encodeURIComponent(mensaje)}`
+    : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+  setTimeout(()=>{
+    toast('📎 Ahora adjunta el PDF descargado desde WhatsApp');
+    window.open(url,'_blank');
+  },500);
+}
+
 /* ── ABONOS / PAGOS PARCIALES ── */
 function lAbonos(){return JSON.parse(localStorage.getItem(ABK)||'[]')}
 function sAbonos(d){localStorage.setItem(ABK,JSON.stringify(d))}
@@ -2180,13 +2174,13 @@ function abrirEdicionLogistica(folio){
   $('log-blq-foraneo').style.display=esForaneo?'block':'none';
 
   $('log-panteon').value=o.lugSepelio||'';
-  $('log-fecha-sepelio').value=o.fechaSepelio||'';
+  $('log-fecha-sepelio').value=fechaPlano(o.fechaSepelio)||'';
   $('log-salida').value=o.salidaTraslado||'';
   $('log-misa').value=o.horaMisa||'';
   $('log-sepelio').value=o.horaSepelio||'';
 
   $('log-crematorio').value=o.crematorio||'';
-  $('log-fecha-crem').value=o.fechaCremacion||'';
+  $('log-fecha-crem').value=fechaPlano(o.fechaCremacion)||'';
   $('log-salida-crem').value=o.salidaCremacion||'';
   $('log-misa-crem').value=o.horaMisaCrem||'';
   $('log-hora-crem').value=o.horaCremacion||'';
