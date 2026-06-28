@@ -1099,7 +1099,8 @@ function toggleDest(){
   const v=$('o-dest-tipo').value;
   $('blq-foraneo').style.display=v==='FORANEO'?'block':'none';
   toggleLogistica();
-  calcTotal();
+  if(v==='FORANEO') calcKm();
+  else calcTotal();
 }
 /* ══════════════════════════════════════════════════════════
    INVENTARIO COMPARTIDO CON LA TIENDA VIRTUAL
