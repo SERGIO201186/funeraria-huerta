@@ -492,11 +492,15 @@ button:active{transform:scale(.97)}
           </select>
         </div>
         <div id="blq-foraneo" style="display:none">
-          <div class="f"><label class="lbl">Municipio / Estado Destino</label><input id="o-dest-nom" type="text"/></div>
-          <div class="g2">
+          <div class="f">
+            <label class="lbl">Municipio / Estado Destino</label>
+            <input id="o-dest-nom" type="text" placeholder="Ej: Veracruz, Ver." oninput="debounceBuscarKm()" autocomplete="off"/>
+          </div>
+          <div id="o-dest-sugerencias" style="display:none;background:var(--bg2);border:1px solid var(--golddim);border-radius:var(--rsm);margin-top:2px;z-index:99;position:relative"></div>
+          <div class="g2" style="margin-top:6px">
             <div class="f">
               <label class="lbl">Kilómetros desde funeraria</label>
-              <input id="o-km" type="number" min="0" inputmode="numeric" placeholder="km" oninput="calcKm()" onchange="calcKm()" onkeyup="calcKm()"/>
+              <input id="o-km" type="number" min="0" inputmode="numeric" placeholder="(auto)" readonly style="background:var(--bg);color:var(--gold2)"/>
             </div>
             <div class="f">
               <label class="lbl">Costo de Traslado ($)</label>
@@ -857,7 +861,7 @@ button:active{transform:scale(.97)}
 <script>
 const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2';
 const FUNERARIA_ADDR = "Nicolás Bravo 11, Zona Centro, C.P. 91000, Xalapa, Veracruz";
-const KM_RATE1=24, KM_RATE2=29, KM_BREAK=200; // hasta 200km: $24/km; >200km: $29/km
+const KM_RATE1=24, KM_RATE2=28, KM_BREAK=200; // hasta 200km: $24/km; >200km: $28/km
 // Sello oficial de la funeraria en base64 (data:image/png;base64,...). Se deja vacío
 // hasta tener la imagen real; mientras tanto se muestra un placeholder en los documentos.
 const SELLO_HUERTA_B64="data:image/png;base64,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";
@@ -1227,23 +1231,113 @@ function togglePagare(){
   calcTotal();
 }
 
-// Cálculo automático de traslado por km
-function calcKm(){
-  const km=parseFloat($('o-km').value)||0;
-  let costo=0;
-  if(km>0){
-    if(km<=KM_BREAK) costo=km*KM_RATE1;
-    else costo=KM_BREAK*KM_RATE1+(km-KM_BREAK)*KM_RATE2;
+// ── GEOCODIFICACIÓN Y CÁLCULO AUTOMÁTICO DE KM ──────────────────
+// Origen fijo: Funeraria Huerta, Xalapa
+const FUNERARIA_COORDS = { lat: 19.5301, lng: -96.9222 }; // Nicolás Bravo 11, Xalapa
+
+let _debounceKm = null;
+function debounceBuscarKm(){
+  clearTimeout(_debounceKm);
+  const dest = ($('o-dest-nom').value||'').trim();
+  // limpiar si borran el destino
+  if(dest.length < 3){
+    $('o-km').value = '';
+    $('o-costo-traslado').value = '';
+    $('km-info').style.display = 'none';
+    $('o-dest-sugerencias').style.display = 'none';
+    calcTotal();
+    return;
   }
-  $('o-costo-traslado').value=Math.round(costo);
-  const info=$('km-info');
-  if(km>0){
-    const det=km<=KM_BREAK
-      ?`${km} km × $${KM_RATE1}/km`
-      :`${KM_BREAK} km × $${KM_RATE1} + ${km-KM_BREAK} km × $${KM_RATE2}`;
-    info.textContent=`📍 Salida desde ${FUNERARIA_ADDR} | ${det} = ${fmt(costo)}`;
-    info.style.display='block';
-  }else{info.style.display='none'}
+  $('km-info').textContent = '🔍 Buscando destino...';
+  $('km-info').style.display = 'block';
+  _debounceKm = setTimeout(()=>buscarDestino(dest), 700);
+}
+
+async function buscarDestino(texto){
+  try{
+    // Nominatim: buscar coordenadas del destino dentro de México
+    const q = encodeURIComponent(texto + ', México');
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&countrycodes=mx`, {
+      headers:{'Accept-Language':'es','User-Agent':'FunerariaHuerta/1.0'}
+    });
+    const data = await r.json();
+    if(!data||!data.length){
+      $('km-info').textContent = '⚠️ Destino no encontrado. Verifica el nombre.';
+      return;
+    }
+    // Si hay varios resultados, mostrar sugerencias
+    if(data.length > 1){
+      mostrarSugerencias(data);
+    } else {
+      calcularRuta(data[0]);
+    }
+  }catch(e){
+    $('km-info').textContent = '⚠️ Error al buscar destino. Verifica tu conexión.';
+  }
+}
+
+function mostrarSugerencias(resultados){
+  const box = $('o-dest-sugerencias');
+  box.innerHTML = resultados.map((r,i)=>`
+    <div onclick="elegirSugerencia(${i})" data-lat="${r.lat}" data-lng="${r.lon}" data-name="${(r.display_name||'').replace(/"/g,'&quot;')}"
+      style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--golddim);color:var(--text)"
+      onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+      📍 ${r.display_name}
+    </div>`).join('');
+  box.style.display = 'block';
+  $('km-info').style.display = 'none';
+}
+
+function elegirSugerencia(idx){
+  const box = $('o-dest-sugerencias');
+  const item = box.children[idx];
+  const nombre = item.dataset.name.split(',')[0].trim();
+  $('o-dest-nom').value = nombre;
+  box.style.display = 'none';
+  calcularRuta({ lat: item.dataset.lat, lon: item.dataset.lng });
+}
+
+async function calcularRuta(lugar){
+  try{
+    $('km-info').textContent = '📡 Calculando ruta...';
+    $('km-info').style.display = 'block';
+    const oLat = FUNERARIA_COORDS.lat, oLng = FUNERARIA_COORDS.lng;
+    const dLat = parseFloat(lugar.lat), dLng = parseFloat(lugar.lon||lugar.lng);
+    // OSRM: ruta en carretera (driving)
+    const url = `https://router.project-osrm.org/route/v1/driving/${oLng},${oLat};${dLng},${dLat}?overview=false`;
+    const r = await fetch(url);
+    const data = await r.json();
+    if(!data.routes||!data.routes.length){
+      $('km-info').textContent = '⚠️ No se pudo calcular la ruta. Ingresa los km manualmente.';
+      $('o-km').removeAttribute('readonly');
+      return;
+    }
+    const km = Math.round(data.routes[0].distance / 1000);
+    $('o-km').value = km;
+    calcKm();
+  }catch(e){
+    $('km-info').textContent = '⚠️ Error al calcular ruta. Verifica tu conexión.';
+  }
+}
+
+// Calcula costo a partir del valor en o-km y actualiza total
+function calcKm(){
+  const km = parseFloat($('o-km').value)||0;
+  const KM_RATE2_REAL = 28; // >200 km: $28/km (corregido)
+  let costo = 0;
+  if(km > 0){
+    if(km <= KM_BREAK) costo = km * KM_RATE1;
+    else costo = KM_BREAK * KM_RATE1 + (km - KM_BREAK) * KM_RATE2_REAL;
+  }
+  $('o-costo-traslado').value = Math.round(costo);
+  const info = $('km-info');
+  if(km > 0){
+    const det = km <= KM_BREAK
+      ? `${km} km × $${KM_RATE1}/km`
+      : `${KM_BREAK} km × $${KM_RATE1} + ${km - KM_BREAK} km × $${KM_RATE2_REAL}`;
+    info.textContent = `📍 ${FUNERARIA_ADDR} → ${$('o-dest-nom').value||'Destino'} | ${det} = ${fmt(costo)}`;
+    info.style.display = 'block';
+  } else { info.style.display = 'none'; }
   calcTotal();
 }
 
