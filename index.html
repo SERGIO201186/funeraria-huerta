@@ -1599,6 +1599,10 @@ function renderODS(){
   </div>`).join('');
 }
 
+function certificarODS(folio){
+  window.open(`https://sergio201186.github.io/launcher_huerta/formato-certificar.html?folio=${encodeURIComponent(folio)}`, '_blank');
+}
+
 function verODS(folio){
   const o=lDB().find(x=>x.folio===folio);if(!o)return;
   $('mo-ods-title').textContent=`${o.folio} — ${o.fallecido||'—'}`;
@@ -1657,6 +1661,7 @@ function verODS(folio){
         ${esAdmin()?`<button class="bo bsm" onclick="cambiarEst('${o.folio}','CERRADA')">Cerrar ODS</button>`:''}
         <button class="bo bsm" onclick="equipoRecogido('${o.folio}')">📦 Equipo Recogido</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');abrirEdicionLogistica('${o.folio}')">🕐 Actualizar Logística</button>
+        <button class="bo bsm" onclick="certificarODS('${o.folio}')">📝 Certificar</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');verExpedienteDeFolio('${o.folio}')">📄 Expediente</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');enviarODSPorWhatsapp('${o.folio}')">📤 Enviar ODS</button>
         ${esAdmin()?`<button class="br bsm" onclick="elimODS('${o.folio}')">🗑</button>`:''}
