@@ -2432,6 +2432,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   calcTotal();
   // Mostrar nota offline si aplica
   if(!navigator.onLine)$('offline-login-note').textContent='Sin internet — puedes iniciar sesión igual';
+  // Acceso directo: se retiró el requisito de login, se entra como Administrador automáticamente.
+  startSession({idColaborador:'ADMIN',nombreCompleto:'Administrador',puesto:'ADMINISTRADOR GENERAL'});
 });
 </script>
 </body>
