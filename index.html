@@ -972,9 +972,9 @@ function logout(){if(!confirm('¿Cerrar sesión?'))return;ST.user=null;$('login'
 
 /* ── PERMISOS POR ROL ──
    ADMINISTRADOR: acceso total.
-   VENDEDOR / CHOFER (empleados): pueden crear ODS y registrar abonos (quedan
-   pendientes de confirmar), y consultar tablero/equipos/pagos. No pueden cerrar
-   ni eliminar órdenes, ni confirmar abonos, ni entrar a Colaboradores o Nube. */
+   VENDEDOR / CHOFER (empleados): pueden crear ODS y registrar abonos (se
+   aplican de inmediato al saldo), y consultar tablero/equipos/pagos. No
+   pueden cerrar ni eliminar órdenes, ni entrar a Colaboradores o Nube. */
 function esAdmin(){
   return !!(ST.user && String(ST.user.puesto||'').toUpperCase().includes('ADMINISTRADOR'));
 }
@@ -1974,16 +1974,14 @@ function _selloHTML(){
   return `<div style="height:55px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:8pt;border:1px dashed #ccc;border-radius:50%;width:65px;height:65px;margin:0 auto;text-align:center;line-height:1.1">SELLO<br>OFICIAL</div>`;
 }
 
-// Sección de logística del documento impreso: solo aparece si ya se capturó
-// al menos un dato (panteón/crematorio/horarios), ya que normalmente se llenan
-// varias horas después de creada la orden.
+// Sección de logística del documento impreso: siempre aparece (con "—" en
+// los datos que aún no se capturen), ya que normalmente se llenan varias
+// horas después de creada la orden y no deben desaparecer del documento.
 function _seccionLogisticaHTML(o){
   const esForaneo=o.destinoTipo==='FORANEO';
   const esCrem=o.modalidadServicio==='CREMACION';
 
   if(esForaneo){
-    const datos=[o.foraneoLugarSalida,o.foraneoHoraSalida,o.destinoNombre];
-    if(!datos.some(Boolean)) return '';
     return `<div class="doc-sec-title">Logística de Traslado Foráneo</div>
     <div class="doc-row2">
       <div><b>Destino:</b> ${o.destinoNombre||'—'}</div>
@@ -1992,8 +1990,6 @@ function _seccionLogisticaHTML(o){
     </div>`;
   }
   if(esCrem){
-    const datos=[o.crematorio,o.fechaCremacion,o.salidaCremacion,o.horaMisaCrem,o.horaCremacion];
-    if(!datos.some(Boolean)) return '';
     return `<div class="doc-sec-title">Logística de Cremación</div>
     <div class="doc-row2">
       <div><b>Crematorio:</b> ${o.crematorio||'—'}</div>
@@ -2004,8 +2000,6 @@ function _seccionLogisticaHTML(o){
     </div>`;
   }
   // Inhumación local
-  const datos=[o.lugSepelio,o.fechaSepelio,o.salidaTraslado,o.horaMisa,o.horaSepelio];
-  if(!datos.some(Boolean)) return '';
   return `<div class="doc-sec-title">Logística de Sepelio</div>
   <div class="doc-row2">
     <div><b>Panteón:</b> ${o.lugSepelio||'—'}</div>
@@ -2345,31 +2339,25 @@ function confirmarAbono(){
   const o=db[idx];
   const contratante=o.contratante||'';
   const pct=(+o.totalGeneral)>0?Math.round((monto/(+o.totalGeneral))*100):0;
-  // Si lo registra el Administrador, se confirma de inmediato (ya pasó por caja).
-  // Si lo registra un empleado, queda pendiente hasta que el Administrador lo confirme.
-  const confirmadoYa=esAdmin();
+  // Todo abono se aplica de inmediato al saldo, sin importar quién lo registre;
+  // el campo "cajero" deja el registro de quién lo capturó para auditoría.
   const abono={
     id:`AB-${Date.now()}`,folio,contratante,monto,porcentaje:pct,
     fecha:$('ab-fecha').value||hoy(),metodo:$('ab-metodo').value,
     referencia:($('ab-ref').value||'').trim(),nota:($('ab-nota').value||'').trim(),
     cajero:ST.user?ST.user.nombreCompleto:'',
-    estado:confirmadoYa?'confirmado':'pendiente'
+    estado:'confirmado'
   };
   const abonos=lAbonos();abonos.push(abono);sAbonos(abonos);
 
-  if(confirmadoYa){
-    // Actualizar anticipo/restante acumulado de la ODS solo si ya está confirmado
-    o.anticipo=(+o.anticipo||0)+monto;
-    o.restante=Math.max((+o.totalGeneral||0)-(+o.anticipo||0),0);
-    db[idx]=o;sDB(db);
-    encolar({accion:'actualizarODS',folio,datos:o});
-  }
+  o.anticipo=(+o.anticipo||0)+monto;
+  o.restante=Math.max((+o.totalGeneral||0)-(+o.anticipo||0),0);
+  db[idx]=o;sDB(db);
+  encolar({accion:'actualizarODS',folio,datos:o});
   encolar({accion:'guardarAbono',datos:abono});
 
   closeMo('mo-abono');
-  toast(confirmadoYa
-    ? `✅ Abono de ${fmt(monto)} confirmado para ${folio}`
-    : `🕐 Abono de ${fmt(monto)} registrado, pendiente de confirmar en caja`);
+  toast(`✅ Abono de ${fmt(monto)} registrado para ${folio}`);
   cargarPagos();updDash();
 }
 
