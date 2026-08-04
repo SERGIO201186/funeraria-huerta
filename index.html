@@ -596,7 +596,7 @@ button:active{transform:scale(.97)}
       <!-- CONTRATO DE ADHESIÓN Y FIRMA -->
       <div class="card" style="border-color:var(--golddim)">
         <div class="st">Contrato de Adhesión y Firma del Contratante</div>
-        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Guarda la orden primero para generar el folio; luego revisa el contrato y solicita la firma en pantalla.</p>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Solicita la firma en pantalla y toca "Confirmar Firma" <b>antes</b> de guardar la orden — al guardar, el formulario se limpia para la siguiente orden y una firma capturada después ya no queda ligada a este folio.</p>
         <button class="bo" style="width:100%;margin-bottom:10px" onclick="verExpediente()">📄 Ver / Imprimir Expediente (Hoja, Contrato y Pagaré)</button>
         <div class="f">
           <label class="lbl">Firma del Contratante (dibuje con el dedo o stylus)</label>
@@ -1552,6 +1552,11 @@ function recopilar(){
 }
 
 function guardarODS(){
+  // Red de seguridad: si dibujaron la firma pero no tocaron "Confirmar
+  // Firma" antes de guardar, se captura aquí para que no se pierda.
+  if(!_firmaPendiente&&_firmaTieneTrazo&&$('firma-canvas')){
+    _firmaPendiente=$('firma-canvas').toDataURL('image/png');
+  }
   const d=recopilar();
   if(!d.fallecido||!d.contratante){toast('⚠ Completa fallecido y contratante');return}
   if(d.modalidadServicio==='INHUMACION'&&!d.ataudId){toast('⚠ Selecciona un ataúd del inventario disponible');return}
@@ -2261,7 +2266,11 @@ async function descargarPDFExpediente(folio){
     const canvas=await html2canvas(docs[i],{scale:2,backgroundColor:'#ffffff'});
     const img=canvas.toDataURL('image/jpeg',0.92);
     if(i>0)pdf.addPage('letter');
-    pdf.addImage(img,'JPEG',0,0,8.5,11);
+    // .doc-print mide 7.5in×10.1in a propósito: es la hoja carta (8.5×11)
+    // menos el margen de @page (0.5in izq/der, 0.45in arriba/abajo). Hay que
+    // colocarlo en ese mismo offset — si se estira a 8.5×11 desde (0,0) el
+    // margen desaparece y el contenido queda pegado a las orillas.
+    pdf.addImage(img,'JPEG',0.5,0.45,7.5,10.1);
   }
   const nombreArchivo=`Expediente_${folio}.pdf`;
   pdf.save(nombreArchivo);
