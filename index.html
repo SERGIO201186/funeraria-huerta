@@ -1709,19 +1709,27 @@ function cambiarEst(folio,est){
   const db=lDB();const i=db.findIndex(o=>o.folio===folio);if(i<0)return;
   const o=db[i];
   const eraCerrada=o.estatus==='CERRADA';
-  o.estatus=est;sDB(db);
+  o.estatus=est;db[i]=o;sDB(db);
+  encolar({accion:'actualizarODS',folio,datos:o});
   // Al CERRAR la orden, las piezas reservadas se eliminan definitivamente del inventario
   if(est==='CERRADA'&&!eraCerrada) eliminarPiezasDeOrden(o);
   closeMo('mo-ods');cargarODS();updDash();toast(`${folio} → ${est}`)
 }
-function equipoRecogido(folio){const db=lDB();const i=db.findIndex(o=>o.folio===folio);if(i<0)return;db[i].estatusEquipo='RECOGIDO';sDB(db);closeMo('mo-ods');cargarODS();updDash();toast('Equipo marcado RECOGIDO')}
+function equipoRecogido(folio){
+  const db=lDB();const i=db.findIndex(o=>o.folio===folio);if(i<0)return;
+  db[i].estatusEquipo='RECOGIDO';sDB(db);
+  encolar({accion:'actualizarODS',folio,datos:db[i]});
+  closeMo('mo-ods');cargarODS();updDash();toast('Equipo marcado RECOGIDO')
+}
 function elimODS(folio){
   if(!requiereAdmin('⚠ Solo el Administrador puede eliminar órdenes')) return;
   if(!confirm(`¿Eliminar ${folio}?`))return;
   const o=lDB().find(x=>x.folio===folio);
   // Si la orden no estaba cerrada, la pieza solo estaba reservada: se libera de vuelta
   if(o&&o.estatus!=='CERRADA') liberarPiezasDeOrden(o);
-  sDB(lDB().filter(x=>x.folio!==folio));closeMo('mo-ods');cargarODS();updDash();toast('ODS eliminada')
+  sDB(lDB().filter(x=>x.folio!==folio));
+  encolar({accion:'eliminarODS',folio});
+  closeMo('mo-ods');cargarODS();updDash();toast('ODS eliminada')
 }
 
 /* ── EQUIPOS ── */
