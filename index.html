@@ -262,6 +262,8 @@ button:active{transform:scale(.97)}
         <div class="sc"><div class="v" id="st-pend" style="color:var(--red)">$0</div><div class="l">Por Cobrar</div></div>
       </div>
       <div class="card"><div class="st">Alertas — Equipos por Recoger</div><div id="box-alertas"><div style="color:var(--text3);font-size:13px">Sin alertas.</div></div></div>
+      <div class="card"><div class="st">Servicios Activos — Seguimiento a Sepelio/Cremación</div><div id="box-servicios-activos"><div style="color:var(--text3);font-size:13px">Cargando…</div></div></div>
+      <div class="card"><div class="st">Pendientes de Pago (sepelio realizado)</div><div id="box-pendientes-pago"><div style="color:var(--text3);font-size:13px">Cargando…</div></div></div>
       <div class="card">
         <div class="st">Estado del Sistema</div>
         <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
@@ -633,6 +635,7 @@ button:active{transform:scale(.97)}
       <div class="tabs">
         <button class="tab act" onclick="setTabODS('TODAS',this)">Todas</button>
         <button class="tab" onclick="setTabODS('ACTIVA',this)">Activas</button>
+        <button class="tab" onclick="setTabODS('PENDIENTE_PAGO',this)">Pend. Pago</button>
         <button class="tab" onclick="setTabODS('CERRADA',this)">Cerradas</button>
       </div>
       <div id="lista-ods"><div style="color:var(--text3);font-size:13px;text-align:center;padding:30px 0">Toca Actualizar para cargar.</div></div>
@@ -909,6 +912,43 @@ const fechaPlano=v=>{
   return m?m[1]:s;
 };
 function toast(m,d=2800){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),d)}
+// Fecha límite para liquidar el saldo de una orden:
+// - Con pagaré: la fecha de vencimiento del pagaré (60% anticipo + 40% financiado a 15 días).
+// - Sin pagaré (pago de contado): el mismo día del sepelio/cremación, que es el
+//   tope acordado con el contratante para liquidar el restante.
+function fechaLiquidacionDe(o){
+  if(o.tienePagare==='SI') return o.vencimientoPagare||'';
+  if(o.modalidadServicio==='CREMACION') return o.fechaCremacion||'';
+  return o.fechaSepelio||'';
+}
+// Fecha que marca "servicio realizado" para efectos de seguimiento (deja de
+// aparecer en Servicios Activos y pasa a Pendiente de Pago si aún se debe algo).
+function fechaServicioDe(o){
+  if(o.modalidadServicio==='CREMACION') return o.fechaCremacion||'';
+  return o.fechaSepelio||''; // inhumación local; foráneo no tiene fecha propia capturada aún
+}
+// Recorre las órdenes ACTIVAS y, si ya pasó la fecha del sepelio/cremación,
+// las pasa a PENDIENTE_PAGO (si aún deben saldo) o las deja listas para que
+// el Administrador las cierre manualmente (si ya está todo liquidado).
+function revisarTransicionesAutomaticas(){
+  const db=lDB();const hoyD=new Date();hoyD.setHours(0,0,0,0);
+  let huboCambios=false;
+  db.forEach(o=>{
+    if(o.estatus!=='ACTIVA')return;
+    const fServ=fechaServicioDe(o);
+    if(!fServ)return;
+    const f=new Date(fServ);f.setHours(0,0,0,0);
+    if(f>=hoyD)return; // aún no pasa la fecha del servicio
+    if((+o.restante||0)>0){
+      o.estatus='PENDIENTE_PAGO';
+      encolar({accion:'actualizarODS',folio:o.folio,datos:o});
+      huboCambios=true;
+    }
+    // Si ya no debe nada, se deja ACTIVA para que el Administrador la cierre
+    // manualmente con "Cerrar ODS" (eso también libera el inventario reservado).
+  });
+  if(huboCambios)sDB(db);
+}
 function lDB(){return JSON.parse(localStorage.getItem(DB)||'[]')}
 function sDB(d){localStorage.setItem(DB,JSON.stringify(d));ST.ods=d}
 function lEmp(){return JSON.parse(localStorage.getItem(EK)||'[]')}
@@ -1048,8 +1088,10 @@ function closeSB(){$('sb').classList.remove('open');$('sov').classList.remove('s
 
 /* ── DASHBOARD ── */
 function updDash(){
+  revisarTransicionesAutomaticas();
   const ods=lDB();ST.ods=ods;
   const activas=ods.filter(o=>o.estatus==='ACTIVA');
+  const pendPago=ods.filter(o=>o.estatus==='PENDIENTE_PAGO');
   const equipos=ods.filter(o=>o.modalidadVelacion==='DOMICILIO'&&o.estatusEquipo==='ACTIVO');
   const porCobrar=ods.reduce((s,o)=>s+(+o.restante||0),0);
   $('st-tot').textContent=ods.length;
@@ -1075,6 +1117,61 @@ function updDash(){
       <div style="font-size:13px">${o.fallecido||'—'}</div>
       <div style="font-size:11px;color:var(--text3)">${d<0?`Vencido hace ${-d}d`:`Recoger en ${d}d`} · ${fechaPlano(o.fechaRecoleccion)}</div></div></div>`;
   }).join(''):'<div style="color:var(--text3);font-size:13px">Sin alertas de equipos.</div>';
+
+  // Servicios activos con su logística, para dar seguimiento hasta el sepelio/cremación
+  const elServ=$('box-servicios-activos');
+  if(elServ){
+    const activasOrdenadas=activas.slice().sort((a,b)=>{
+      const fa=fechaServicioDe(a)||'9999',fb=fechaServicioDe(b)||'9999';
+      return fa.localeCompare(fb);
+    });
+    elServ.innerHTML=activasOrdenadas.length?activasOrdenadas.map(o=>{
+      const fServ=fechaServicioDe(o);
+      const esCrem=o.modalidadServicio==='CREMACION';
+      const lugar=esCrem?(o.crematorio||'—'):(o.lugSepelio||'—');
+      const etiquetaLugar=esCrem?'Crematorio':'Panteón';
+      let d=null;
+      if(fServ){const f=new Date(fServ);f.setHours(0,0,0,0);d=Math.ceil((f-hoyD)/(864e5))}
+      // d<0 aquí no es un atraso de cobro (eso ya lo cubre Pendientes de Pago):
+      // es un servicio ya realizado y liquidado al que falta darle clic en "Cerrar ODS".
+      const dTxt=d===null?'Sin fecha capturada':d<0?'Realizado — falta cerrar ODS':d===0?'Hoy':`En ${d}d`;
+      const dCol=d===null?'var(--text3)':d<0?'var(--green)':d<=1?'var(--amber)':'var(--text2)';
+      return`<div class="card" style="margin-bottom:8px" onclick="verODS('${o.folio}')">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><div style="font-size:11px;font-weight:700;color:var(--gold)">${o.folio}</div>
+          <div style="font-size:14px;font-weight:700">${o.fallecido||'—'}</div></div>
+          <span style="font-size:11px;font-weight:700;color:${dCol}">${dTxt}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px">${etiquetaLugar}: ${lugar} · ${fServ?fechaPlano(fServ):'—'}</div>
+        <div style="font-size:11px;color:var(--text3)">${o.modalidadServicio||''} · ${o.modalidadVelacion||''}${(+o.restante||0)>0?` · Restante ${fmt(o.restante)}`:''}</div>
+      </div>`;
+    }).join(''):'<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px 0">Sin servicios activos.</div>';
+  }
+
+  // Órdenes con el sepelio/cremación ya realizado pero con saldo pendiente
+  const elPago=$('box-pendientes-pago');
+  if(elPago){
+    const pendOrdenadas=pendPago.slice().sort((a,b)=>{
+      const fa=fechaLiquidacionDe(a)||'9999',fb=fechaLiquidacionDe(b)||'9999';
+      return fa.localeCompare(fb);
+    });
+    elPago.innerHTML=pendOrdenadas.length?pendOrdenadas.map(o=>{
+      const fLiq=fechaLiquidacionDe(o);
+      let d=null;
+      if(fLiq){const f=new Date(fLiq);f.setHours(0,0,0,0);d=Math.ceil((f-hoyD)/(864e5))}
+      const dTxt=d===null?'Sin fecha límite':d<0?`Vencida hace ${-d}d`:d===0?'Vence hoy':`Vence en ${d}d`;
+      const dCol=d===null?'var(--text3)':d<0?'var(--red)':d<=2?'var(--amber)':'var(--text2)';
+      return`<div class="card" style="margin-bottom:8px" onclick="verODS('${o.folio}')">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><div style="font-size:11px;font-weight:700;color:var(--gold)">${o.folio}</div>
+          <div style="font-size:14px;font-weight:700">${o.fallecido||'—'}</div></div>
+          <div style="text-align:right"><div style="color:var(--red);font-weight:700">${fmt(o.restante)}</div>
+          <div style="font-size:11px;font-weight:700;color:${dCol}">${dTxt}</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--text3)">${o.tienePagare==='SI'?'📄 Pagaré':'Pago de contado'} · Liquidar: ${fLiq?fechaPlano(fLiq):'—'}</div>
+      </div>`;
+    }).join(''):'<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px 0">Sin pendientes de pago.</div>';
+  }
 
   const url=localStorage.getItem(UK);const ls=localStorage.getItem(SK);
   $('est-nube').className='badge '+(url?'bg-g':'bg-gr');
@@ -1241,8 +1338,8 @@ function togglePagare(){
   $('blq-pagare').style.display=activo?'block':'none';
   $('blq-anticipo-pct').style.display=activo?'block':'none';
   if(activo){
-    // Auto-llenar vencimiento a 12 días
-    const d=new Date();d.setDate(d.getDate()+12);
+    // Auto-llenar vencimiento a 15 días naturales después de la firma del contrato
+    const d=new Date();d.setDate(d.getDate()+15);
     $('pg-venc').value=d.toISOString().split('T')[0];
     // Auto-llenar datos del deudor con los del contratante (editable si la persona que firma es distinta)
     if(!$('pg-nombre').value) $('pg-nombre').value=($('o-contratante')||{value:''}).value;
@@ -1617,11 +1714,13 @@ function renderODS(){
   b.innerHTML=ods.map(o=>{
     // Solo se muestran estatus reconocidos: si el dato llegó corrupto o
     // mezclado con otro campo (ej. una firma en base64), no se despliega tal cual.
-    const est=['ACTIVA','CERRADA'].includes(o.estatus)?o.estatus:'—';
+    const est=['ACTIVA','CERRADA','PENDIENTE_PAGO'].includes(o.estatus)?o.estatus:'—';
+    const estLbl=est==='PENDIENTE_PAGO'?'PEND. PAGO':est;
+    const estCls=est==='ACTIVA'?'bg-g':est==='CERRADA'?'bg-gr':est==='PENDIENTE_PAGO'?'bg-a':'bg-r';
     return `<div class="oc" onclick="verODS('${o.folio}')">
     <div style="display:flex;align-items:center;justify-content:space-between">
       <div class="fo">${o.folio}</div>
-      <span class="badge ${est==='ACTIVA'?'bg-g':est==='CERRADA'?'bg-gr':'bg-r'}">${est}</span>
+      <span class="badge ${estCls}">${estLbl}</span>
     </div>
     <div class="fn">${o.fallecido||'—'}</div>
     <div class="mt">Contratante: ${o.contratante||'—'} · ${o.telefono||'—'}</div>
@@ -1692,6 +1791,7 @@ function verODS(folio){
       <div class="div"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${esAdmin()?`<button class="bg bsm" onclick="cambiarEst('${o.folio}','ACTIVA')">Activa</button>`:''}
+        ${esAdmin()&&o.estatus!=='PENDIENTE_PAGO'?`<button class="bo bsm" onclick="cambiarEst('${o.folio}','PENDIENTE_PAGO')">🕐 Marcar Pend. Pago</button>`:''}
         ${esAdmin()?`<button class="bo bsm" onclick="cambiarEst('${o.folio}','CERRADA')">Cerrar ODS</button>`:''}
         <button class="bo bsm" onclick="equipoRecogido('${o.folio}')">📦 Equipo Recogido</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');abrirEdicionLogistica('${o.folio}')">🕐 Actualizar Logística</button>
@@ -1879,7 +1979,7 @@ async function sincronizarTodo(silencioso=false){
         r.ods.forEach(ro=>{
           // Si el estatus que manda la nube viene corrupto (ej. mezclado con
           // datos de firma), no se propaga: se usa un valor por defecto seguro.
-          if(!['ACTIVA','CERRADA'].includes(ro.estatus)) ro.estatus='ACTIVA';
+          if(!['ACTIVA','CERRADA','PENDIENTE_PAGO'].includes(ro.estatus)) ro.estatus='ACTIVA';
           porFolio[ro.folio]=ro;
         });
         sDB(Object.values(porFolio));
