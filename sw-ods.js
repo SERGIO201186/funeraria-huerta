@@ -3,7 +3,7 @@
 // sw-ods.js — Archivo separado requerido por GitHub Pages
 // ═══════════════════════════════════════════════════════════════
 
-const CACHE_NAME = 'huerta-ods-v1';
+const CACHE_NAME = 'huerta-ods-v2';
 
 self.addEventListener('install', function(event) {
   event.waitUntil(
@@ -57,18 +57,18 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
-  // App principal — cache primero, actualizar en background
+  // App principal (index.html y navegación) — RED primero: la app cambia
+  // seguido y un "cache primero" dejaba a los usuarios viendo una versión
+  // vieja aunque ya hubiera una actualización publicada, hasta recargar dos
+  // veces. Solo se usa la copia en caché como respaldo si no hay conexión.
   event.respondWith(
-    caches.match(event.request).then(function(cached) {
-      const networkFetch = fetch(event.request).then(function(response) {
-        if (response && response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(function(c) { c.put(event.request, clone); });
-        }
-        return response;
-      }).catch(function() { return null; });
-      return cached || networkFetch;
-    })
+    fetch(event.request).then(function(response) {
+      if (response && response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(function(c) { c.put(event.request, clone); });
+      }
+      return response;
+    }).catch(function() { return caches.match(event.request); })
   );
 });
 
