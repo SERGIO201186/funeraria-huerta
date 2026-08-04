@@ -39,7 +39,7 @@ button:active{transform:scale(.97)}
 .f{margin-bottom:11px}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
-.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bg-g{background:rgba(34,197,94,.15);color:var(--green)}
 .bg-r{background:rgba(239,68,68,.15);color:var(--red)}
 .bg-a{background:rgba(245,158,11,.15);color:var(--amber)}
@@ -1585,10 +1585,14 @@ function renderODS(){
   if(q)ods=ods.filter(o=>(o.folio||'').toLowerCase().includes(q)||(o.fallecido||'').toLowerCase().includes(q)||(o.contratante||'').toLowerCase().includes(q));
   const b=$('lista-ods');
   if(!ods.length){b.innerHTML='<div style="color:var(--text3);font-size:13px;text-align:center;padding:30px 0">Sin órdenes.</div>';return}
-  b.innerHTML=ods.map(o=>`<div class="oc" onclick="verODS('${o.folio}')">
+  b.innerHTML=ods.map(o=>{
+    // Solo se muestran estatus reconocidos: si el dato llegó corrupto o
+    // mezclado con otro campo (ej. una firma en base64), no se despliega tal cual.
+    const est=['ACTIVA','CERRADA'].includes(o.estatus)?o.estatus:'—';
+    return `<div class="oc" onclick="verODS('${o.folio}')">
     <div style="display:flex;align-items:center;justify-content:space-between">
       <div class="fo">${o.folio}</div>
-      <span class="badge ${o.estatus==='ACTIVA'?'bg-g':o.estatus==='CERRADA'?'bg-gr':'bg-r'}">${o.estatus||'—'}</span>
+      <span class="badge ${est==='ACTIVA'?'bg-g':est==='CERRADA'?'bg-gr':'bg-r'}">${est}</span>
     </div>
     <div class="fn">${o.fallecido||'—'}</div>
     <div class="mt">Contratante: ${o.contratante||'—'} · ${o.telefono||'—'}</div>
@@ -1596,7 +1600,8 @@ function renderODS(){
       <div style="font-size:11px;color:var(--text3)">${o.modalidadServicio||''} · ${o.modalidadVelacion||''}${o.tienePagare==='SI'?' · 📄 Pagaré':''}</div>
       <div style="font-size:14px;font-weight:700;color:var(--gold)">${fmt(o.totalGeneral||0)}</div>
     </div>
-  </div>`).join('');
+  </div>`;
+  }).join('');
 }
 
 function certificarODS(folio){
@@ -1826,7 +1831,12 @@ async function sincronizarTodo(silencioso=false){
     if(r.ok){
       if(r.ods&&r.ods.length){
         const local=lDB(),folios=new Set(local.map(x=>x.folio));
-        r.ods.forEach(ro=>{if(!folios.has(ro.folio))local.push(ro)});
+        r.ods.forEach(ro=>{
+          // Si el estatus que manda la nube viene corrupto (ej. mezclado con
+          // datos de firma), no se propaga: se usa un valor por defecto seguro.
+          if(!['ACTIVA','CERRADA'].includes(ro.estatus)) ro.estatus='ACTIVA';
+          if(!folios.has(ro.folio))local.push(ro);
+        });
         sDB(local);
       }
       if(r.colaboradores&&r.colaboradores.length)sEmp(r.colaboradores);
