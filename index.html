@@ -624,7 +624,7 @@ button:active{transform:scale(.97)}
     <div class="page" id="page-tablero">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
         <div class="st" style="margin:0;border:none;padding:0">Tablero Logístico</div>
-        <button class="bg bsm" onclick="cargarODS()">↻ Actualizar</button>
+        <button class="bg bsm" onclick="actualizarConSync(cargarODS)">↻ Actualizar</button>
       </div>
       <input type="search" id="q-ods" placeholder="Buscar folio, fallecido, contratante…" style="margin-bottom:11px" oninput="renderODS()"/>
       <div class="tabs">
@@ -639,7 +639,7 @@ button:active{transform:scale(.97)}
     <div class="page" id="page-equipos">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
         <div class="st" style="margin:0;border:none;padding:0">Control de Equipos</div>
-        <button class="bg bsm" onclick="cargarEquipos()">↻ Actualizar</button>
+        <button class="bg bsm" onclick="actualizarConSync(cargarEquipos)">↻ Actualizar</button>
       </div>
       <div class="sg"><div class="sc"><div class="v" id="eq-v" style="color:var(--red)">0</div><div class="l">Vencidos</div></div><div class="sc"><div class="v" id="eq-u" style="color:var(--amber)">0</div><div class="l">≤2 días</div></div><div class="sc"><div class="v" id="eq-p">0</div><div class="l">≤5 días</div></div><div class="sc"><div class="v" id="eq-ok" style="color:var(--green)">0</div><div class="l">En tiempo</div></div></div>
       <div id="lista-eq"><div style="color:var(--text3);font-size:13px;text-align:center;padding:30px 0">Toca Actualizar para cargar.</div></div>
@@ -649,7 +649,7 @@ button:active{transform:scale(.97)}
     <div class="page" id="page-pagos">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
         <div class="st" style="margin:0;border:none;padding:0">Pagos Pendientes</div>
-        <button class="bg bsm" onclick="cargarPagos()">↻ Actualizar</button>
+        <button class="bg bsm" onclick="actualizarConSync(cargarPagos)">↻ Actualizar</button>
       </div>
       <div class="card" style="border-color:var(--golddim);text-align:center;padding:18px">
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Total por Cobrar</div>
@@ -818,6 +818,27 @@ button:active{transform:scale(.97)}
       <div class="f"><label class="lbl">Hora de Salida hacia Destino</label><input id="log-foraneo-hora-salida" type="time"/></div>
     </div>
     <button class="bg" style="width:100%" onclick="guardarLogistica()">💾 Guardar Logística</button>
+  </div>
+</div>
+
+<!-- MODAL AJUSTAR SALDO (solo Administrador, para reconciliar órdenes con
+     abonos capturados desde varios dispositivos antes de que el saldo se
+     mantuviera sincronizado entre todos) -->
+<div class="mo" id="mo-saldo">
+  <div class="mb">
+    <button class="mc" onclick="closeMo('mo-saldo')">✕</button>
+    <div class="mt2">Ajustar Saldo</div>
+    <p style="font-size:11px;color:var(--text2);margin-top:-6px;margin-bottom:10px">Folio <b id="sd-folio-disp"></b>. Usa esto solo si el restante mostrado no cuadra con lo realmente cobrado (ej. abonos capturados en distintos celulares).</p>
+    <div class="card" style="margin-bottom:11px">
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:var(--text2)">Total del servicio</span><span id="sd-total">$0</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:var(--text2)">Suma de abonos confirmados</span><span id="sd-abonos">$0</span></div>
+      <div id="sd-lista-abonos" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+    </div>
+    <div class="f"><label class="lbl">Anticipo real capturado al contratar *</label><input id="sd-anticipo-inicial" type="number" min="0" oninput="sd_recalcular()"/></div>
+    <p style="font-size:11px;color:var(--text2);margin-top:-6px;margin-bottom:10px">Es el monto que se recibió al firmar el contrato, SIN contar los abonos de la lista de arriba (ese dato solo tú lo sabes con certeza — revisa el recibo si no lo recuerdas).</p>
+    <div class="div"></div>
+    <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;margin-bottom:13px"><span>Restante corregido</span><span id="sd-restante-nuevo" style="color:var(--gold)">$0</span></div>
+    <button class="bg" style="width:100%" onclick="guardarAjusteSaldo()">💾 Guardar Saldo Corregido</button>
   </div>
 </div>
 
@@ -1669,6 +1690,7 @@ function verODS(folio){
         <button class="bo bsm" onclick="certificarODS('${o.folio}')">📝 Certificar</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');verExpedienteDeFolio('${o.folio}')">📄 Expediente</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');enviarODSPorWhatsapp('${o.folio}')">📤 Enviar ODS</button>
+        ${esAdmin()?`<button class="bo bsm" onclick="closeMo('mo-ods');abrirAjusteSaldo('${o.folio}')">🧮 Ajustar Saldo</button>`:''}
         ${esAdmin()?`<button class="br bsm" onclick="elimODS('${o.folio}')">🗑</button>`:''}
       </div>
     </div>`;
@@ -1830,14 +1852,21 @@ async function sincronizarTodo(silencioso=false){
     });
     if(r.ok){
       if(r.ods&&r.ods.length){
-        const local=lDB(),folios=new Set(local.map(x=>x.folio));
+        // La nube es la fuente autorizada tras el merge del servidor (que ya
+        // incluye lo que este mismo dispositivo acaba de enviar arriba). Antes
+        // solo se agregaban folios nuevos y se ignoraban cambios hechos en
+        // OTRO dispositivo a una orden que este ya conocía (ej. un abono o
+        // logística capturados por otro usuario) — por eso no se veían
+        // reflejados. Ahora cada folio recibido reemplaza a la copia local.
+        const local=lDB(),porFolio={};
+        local.forEach(o=>{porFolio[o.folio]=o});
         r.ods.forEach(ro=>{
           // Si el estatus que manda la nube viene corrupto (ej. mezclado con
           // datos de firma), no se propaga: se usa un valor por defecto seguro.
           if(!['ACTIVA','CERRADA'].includes(ro.estatus)) ro.estatus='ACTIVA';
-          if(!folios.has(ro.folio))local.push(ro);
+          porFolio[ro.folio]=ro;
         });
-        sDB(local);
+        sDB(Object.values(porFolio));
       }
       if(r.colaboradores&&r.colaboradores.length)sEmp(r.colaboradores);
       if(r.abonos&&r.abonos.length){
@@ -1854,6 +1883,14 @@ async function sincronizarTodo(silencioso=false){
       updDash();if(!silencioso)toast('✅ Sincronización completa');
     }else{if(!silencioso)toast('❌ '+(r.mensaje||r.error||'Error'))}
   }catch(e){if(!silencioso)toast('❌ Error: '+e.message)}
+}
+// El botón "↻ Actualizar" de cada página debe traer lo último de la nube
+// (no solo releer lo que ya hay guardado en este dispositivo), para que los
+// cambios hechos por otro usuario/celular (abonos, logística, nuevas
+// órdenes) sí se reflejen aquí.
+async function actualizarConSync(fn){
+  if(ST.url&&ST.online) await sincronizarTodo();
+  fn();
 }
 function copiarInstrucciones(){
   navigator.clipboard.writeText('Descarga Code.gs del repositorio funeraria-huerta y pégalo en script.google.com').then(()=>toast('📋 Copiado'));
@@ -2420,6 +2457,64 @@ function verAbonosDe(folio){
     }
     return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-top:1px solid var(--border)">${filaInfo}</div>`;
   }).join('')+'</div>';
+}
+
+/* ── AJUSTAR SALDO (reconciliación manual, solo Administrador) ──
+   El restante puede quedar descuadrado cuando dos dispositivos registran
+   abonos de la misma orden antes de sincronizar entre ellos (ver abonos:
+   cada abono en sí se sincroniza bien porque tiene un id único, pero saber
+   qué tanto de eso ya estaba reflejado en el anticipo de cada celular no se
+   puede reconstruir de forma confiable de manera automática). Por eso el
+   Administrador captura el anticipo real (el que sabe por el recibo/su
+   memoria) y el sistema recalcula el restante a partir de eso más la suma
+   de abonos confirmados. */
+function abrirAjusteSaldo(folio){
+  if(!requiereAdmin('⚠ Solo el Administrador puede ajustar el saldo')) return;
+  const o=lDB().find(x=>x.folio===folio);
+  if(!o){toast('Folio no encontrado');return}
+  $('mo-saldo').dataset.folio=folio;
+  $('sd-folio-disp').textContent=folio;
+  $('sd-total').textContent=fmt(o.totalGeneral||0);
+  const abonos=lAbonos().filter(a=>a.folio===folio&&a.estado==='confirmado');
+  const sumaAbonos=abonos.reduce((s,a)=>s+(+a.monto||0),0);
+  $('sd-abonos').textContent=fmt(sumaAbonos);
+  $('sd-lista-abonos').innerHTML=abonos.length
+    ? abonos.map(a=>`${a.fecha} · ${fmt(a.monto)} · ${a.cajero||'—'}`).join('<br>')
+    : 'Sin abonos confirmados.';
+  // Punto de partida sugerido: el anticipo actualmente guardado menos los
+  // abonos ya conocidos, sin bajar de 0. Es solo una sugerencia — el
+  // Administrador debe confirmarla o corregirla con el dato real.
+  const sugerido=Math.max((+o.anticipo||0)-sumaAbonos,0);
+  $('sd-anticipo-inicial').value=sugerido;
+  sd_recalcular();
+  $('mo-saldo').classList.add('show');
+}
+function sd_recalcular(){
+  const folio=$('mo-saldo').dataset.folio;
+  const o=lDB().find(x=>x.folio===folio);
+  if(!o)return;
+  const abonos=lAbonos().filter(a=>a.folio===folio&&a.estado==='confirmado');
+  const sumaAbonos=abonos.reduce((s,a)=>s+(+a.monto||0),0);
+  const anticipoInicial=Math.max((+$('sd-anticipo-inicial').value)||0,0);
+  const restante=Math.max((+o.totalGeneral||0)-anticipoInicial-sumaAbonos,0);
+  $('sd-restante-nuevo').textContent=fmt(restante);
+}
+function guardarAjusteSaldo(){
+  const folio=$('mo-saldo').dataset.folio;
+  const db=lDB();const idx=db.findIndex(x=>x.folio===folio);
+  if(idx<0){toast('Folio no encontrado');return}
+  const anticipoInicial=$('sd-anticipo-inicial').value;
+  if(anticipoInicial===''||(+anticipoInicial)<0){toast('⚠ Captura el anticipo real');return}
+  const o=db[idx];
+  const abonos=lAbonos().filter(a=>a.folio===folio&&a.estado==='confirmado');
+  const sumaAbonos=abonos.reduce((s,a)=>s+(+a.monto||0),0);
+  o.anticipo=Math.max(+anticipoInicial,0)+sumaAbonos;
+  o.restante=Math.max((+o.totalGeneral||0)-o.anticipo,0);
+  db[idx]=o;sDB(db);
+  encolar({accion:'actualizarODS',folio,datos:o});
+  closeMo('mo-saldo');
+  toast(`✅ Saldo de ${folio} corregido: restante ${fmt(o.restante)}`);
+  cargarPagos();cargarODS();updDash();
 }
 
 /* ── INIT ── */
