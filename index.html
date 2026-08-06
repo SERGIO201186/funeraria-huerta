@@ -1829,6 +1829,11 @@ function elimODS(folio){
   if(o&&o.estatus!=='CERRADA') liberarPiezasDeOrden(o);
   sDB(lDB().filter(x=>x.folio!==folio));
   encolar({accion:'eliminarODS',folio});
+  // A diferencia de crear/actualizar, una orden eliminada ya no aparece en
+  // lDB(), así que sincronizarTodo() nunca se enteraría de que se borró
+  // (solo manda lo que SÍ tiene localmente). Por eso aquí se avisa al
+  // servidor directamente, sin esperar a la siguiente sincronización.
+  if(ST.url&&ST.online) api({accion:'eliminarODS',folio}).catch(()=>{});
   closeMo('mo-ods');cargarODS();updDash();toast('ODS eliminada')
 }
 
