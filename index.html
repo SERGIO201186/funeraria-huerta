@@ -237,12 +237,13 @@ button:active{transform:scale(.97)}
     </div>
     <div class="nav-sec">Operaciones</div>
     <button class="ni act" onclick="navTo('dash')"><span class="ic">📊</span>Resumen de Turno</button>
-    <button class="ni" onclick="navTo('nueva')"><span class="ic">➕</span>Nueva Orden (ODS)</button>
+    <button class="ni" onclick="salirModoEdicion();navTo('nueva')"><span class="ic">➕</span>Nueva Orden (ODS)</button>
     <button class="ni" onclick="navTo('tablero')"><span class="ic">📋</span>Tablero Logístico</button>
     <button class="ni" onclick="navTo('equipos')"><span class="ic">📦</span>Equipos Velación<span class="nbdg" id="bdg-eq">0</span></button>
     <button class="ni" onclick="navTo('pagos')"><span class="ic">💰</span>Pagos Pendientes<span class="nbdg" id="bdg-pg">0</span></button>
     <button class="ni" onclick="window.open('https://sergio201186.github.io/tienda_huerta/','_blank')"><span class="ic">🛍</span>Tienda Virtual</button>
     <div class="nav-sec">Sistema</div>
+    <button class="ni" data-admin-only onclick="navTo('solicitudes')"><span class="ic">✏️</span>Solicitudes de Edición<span class="nbdg" id="bdg-sol">0</span></button>
     <button class="ni" data-admin-only onclick="navTo('colab')"><span class="ic">👥</span>Colaboradores</button>
     <button class="ni" data-admin-only onclick="navTo('nube')"><span class="ic">☁️</span>Sincronización Nube</button>
     <div class="sb-ft">
@@ -279,7 +280,7 @@ button:active{transform:scale(.97)}
     <!-- ── NUEVA ODS ── -->
     <div class="page" id="page-nueva">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
-        <div class="st" style="margin:0;border:none;padding:0">Nueva Orden de Servicio</div>
+        <div class="st" style="margin:0;border:none;padding:0" id="nueva-titulo">Nueva Orden de Servicio</div>
         <div style="font-size:12px;color:var(--gold);font-weight:700" id="folio-disp">ODS-XXXX</div>
       </div>
 
@@ -620,8 +621,8 @@ button:active{transform:scale(.97)}
       </div>
 
       <div style="display:flex;gap:10px;padding-bottom:24px">
-        <button class="bo" style="flex:1" onclick="limpiarODS()">Cancelar</button>
-        <button class="bg" style="flex:2" onclick="guardarODS()">💾 Guardar Orden</button>
+        <button class="bo" style="flex:1" onclick="cancelarFormularioNueva()" id="btn-cancelar-nueva">Cancelar</button>
+        <button class="bg" style="flex:2" onclick="guardarODS()" id="btn-guardar-ods">💾 Guardar Orden</button>
       </div>
     </div><!-- /nueva -->
 
@@ -663,6 +664,19 @@ button:active{transform:scale(.97)}
       </div>
       <div id="resumen-abonos-pend" style="display:none;margin-bottom:13px"></div>
       <div id="lista-pg"><div style="color:var(--text3);font-size:13px;text-align:center;padding:30px 0">Toca Actualizar para cargar.</div></div>
+    </div>
+
+    <!-- ── SOLICITUDES DE EDICIÓN (solo Administrador) ── -->
+    <div class="page" id="page-solicitudes">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
+        <div class="st" style="margin:0;border:none;padding:0">Solicitudes de Edición</div>
+        <button class="bg bsm" onclick="actualizarConSync(cargarSolicitudes)">↻ Actualizar</button>
+      </div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:13px">Los empleados necesitan tu autorización para editar una orden ya guardada. Autoriza para que puedan entrar al formulario completo de esa orden.</p>
+      <div id="lista-solic-pend"><div style="color:var(--text3);font-size:13px;text-align:center;padding:30px 0">Toca Actualizar para cargar.</div></div>
+      <div class="div" style="margin:18px 0"></div>
+      <div class="st" style="font-size:11px">Resueltas recientemente</div>
+      <div id="lista-solic-resueltas"></div>
     </div>
 
     <!-- ── COLABORADORES ── -->
@@ -848,6 +862,18 @@ button:active{transform:scale(.97)}
   </div>
 </div>
 
+<!-- MODAL SOLICITAR AUTORIZACIÓN PARA EDITAR (empleados) -->
+<div class="mo" id="mo-solicitud-edicion">
+  <div class="mb">
+    <button class="mc" onclick="closeMo('mo-solicitud-edicion')">✕</button>
+    <div class="mt2">Solicitar Autorización para Editar</div>
+    <p style="font-size:11px;color:var(--text2);margin-top:-6px;margin-bottom:10px">Folio <b id="se-folio-disp"></b>. El Administrador va a revisar el motivo antes de dejarte editar esta orden.</p>
+    <div class="f"><label class="lbl">Motivo del cambio *</label><textarea id="se-motivo" rows="3" placeholder="Ej. El cliente cambió de opinión, ya no quiere velación en Juquila, ahora es en su domicilio"></textarea></div>
+    <div class="f"><label class="lbl">Nuevo total propuesto (si cambia el costo)</label><input id="se-nuevo-total" type="number" min="0" placeholder="Déjalo vacío si no cambia el costo"/></div>
+    <button class="bg" style="width:100%" onclick="enviarSolicitudEdicion()">📤 Enviar Solicitud</button>
+  </div>
+</div>
+
 <!-- MODAL REGISTRAR ABONO -->
 <div class="mo" id="mo-abono">
   <div class="mb">
@@ -886,7 +912,7 @@ button:active{transform:scale(.97)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
-const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2';
+const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1';
 const FUNERARIA_ADDR = "Nicolás Bravo 11, Zona Centro, C.P. 91000, Xalapa, Veracruz";
 const KM_RATE1=24, KM_RATE2=28, KM_BREAK=200; // hasta 200km: $24/km; >200km: $28/km
 // Sello oficial de la funeraria en base64 (data:image/png;base64,...). Se deja vacío
@@ -1066,7 +1092,7 @@ function mostrarBienvenida(){
 
 /* ── NAV ── */
 function navTo(p){
-  if((p==='colab'||p==='nube') && !requiereAdmin('⚠ Solo el Administrador puede acceder a esta sección')) return;
+  if((p==='colab'||p==='nube'||p==='solicitudes') && !requiereAdmin('⚠ Solo el Administrador puede acceder a esta sección')) return;
   ST.page=p;
   document.querySelectorAll('.page').forEach(el=>el.classList.remove('act'));
   document.querySelectorAll('.ni').forEach(el=>el.classList.remove('act'));
@@ -1081,6 +1107,7 @@ function navTo(p){
   if(p==='pagos')cargarPagos();
   if(p==='colab')renderColab();
   if(p==='nube')initNube();
+  if(p==='solicitudes')cargarSolicitudes();
   if(p==='nueva'){setTimeout(initFirmaCanvas,80);cargarCatalogoTienda();toggleLogistica();}
 }
 function toggleSB(){$('sb').classList.toggle('open');$('sov').classList.toggle('show')}
@@ -1100,6 +1127,7 @@ function updDash(){
   $('st-pend').textContent=fmt(porCobrar);
   $('bdg-eq').textContent=equipos.length;
   $('bdg-pg').textContent=ods.filter(o=>+o.restante>0).length;
+  const bdgSol=$('bdg-sol');if(bdgSol)bdgSol.textContent=lSolic().filter(s=>s.estado==='pendiente').length;
 
   const hoyD=new Date();hoyD.setHours(0,0,0,0);
   const alertas=equipos.filter(o=>{
@@ -1188,6 +1216,11 @@ function updDash(){
 
 /* ── ODS FORM LÓGICA ── */
 let _folioActual='ODS-XXXX';
+// Modo edición: si _folioEnEdicion tiene un folio, el formulario de "Nueva
+// Orden" guarda sobre ESA orden en vez de crear una nueva. _solicitudEnUso
+// guarda el id de la solicitud de edición autorizada que habilitó editar
+// (si la abrió un empleado), para marcarla "usada" al guardar.
+let _folioEnEdicion=null, _solicitudEnUso=null;
 function toggleMod(){
   const v=$('o-modalidad').value;
   $('blq-ataud').style.display=v==='INHUMACION'?'block':'none';
@@ -1649,6 +1682,7 @@ function recopilar(){
 }
 
 function guardarODS(){
+  if(_folioEnEdicion){ guardarEdicionODS(); return; }
   // Red de seguridad: si dibujaron la firma pero no tocaron "Confirmar
   // Firma" antes de guardar, se captura aquí para que no se pierda.
   if(!_firmaPendiente&&_firmaTieneTrazo&&$('firma-canvas')){
@@ -1675,6 +1709,63 @@ function guardarODS(){
   },350);
 }
 
+// Guarda los cambios de una orden YA EXISTENTE (modo edición), en vez de
+// crear una nueva. A diferencia de guardarODS(): conserva el folio, el
+// estatus, el anticipo/restante ya cobrado (los abonos siguen aplicando
+// sobre lo mismo), la firma y quién/cuándo se creó originalmente — el
+// formulario aquí solo cambia los datos descriptivos y de costo.
+function guardarEdicionODS(){
+  const folio=_folioEnEdicion;
+  const db=lDB();const idx=db.findIndex(o=>o.folio===folio);
+  if(idx<0){toast('⚠ No se encontró la orden a editar');_folioEnEdicion=null;return}
+  const anterior=db[idx];
+
+  if(!_firmaPendiente&&_firmaTieneTrazo&&$('firma-canvas')){
+    _firmaPendiente=$('firma-canvas').toDataURL('image/png');
+  }
+  const d=recopilar();
+  if(!d.fallecido||!d.contratante){toast('⚠ Completa fallecido y contratante');return}
+  if(d.modalidadServicio==='INHUMACION'&&!d.ataudId){toast('⚠ Selecciona un ataúd del inventario disponible');return}
+  if(d.modalidadServicio==='CREMACION'&&!d.urnaId){toast('⚠ Selecciona una urna del inventario disponible');return}
+
+  d.folio=folio;
+  d.estatus=anterior.estatus;
+  d.estatusEquipo=anterior.estatusEquipo;
+  d.anticipo=anterior.anticipo;
+  d.restante=Math.max((+d.totalGeneral||0)-(+anterior.anticipo||0),0);
+  d.creadoPor=anterior.creadoPor;
+  d.fechaCreacion=anterior.fechaCreacion;
+  d.firmaContratanteB64=anterior.firmaContratanteB64||_firmaPendiente||'';
+  d.firmaFecha=anterior.firmaFecha||(_firmaPendiente?new Date().toISOString():'');
+
+  db[idx]=d;sDB(db);
+  encolar({accion:'actualizarODS',folio,datos:d});
+  actualizarInventarioPorEdicion(anterior,d);
+
+  if(_solicitudEnUso){
+    const sols=lSolic();const i=sols.findIndex(s=>s.id===_solicitudEnUso);
+    if(i>=0){sols[i].estado='usada';sSolic(sols);encolar({accion:'guardarSolicitud',datos:sols[i]})}
+    _solicitudEnUso=null;
+  }
+
+  toast(`✅ ${folio} actualizada`);
+  if(ST.online&&ST.url)sincronizarTodo(true);
+  _folioEnEdicion=null;_firmaPendiente=null;
+  limpiarODS();updDash();navTo('tablero');
+}
+// Si cambió la pieza de ataúd/urna/urna de cambio al editar, libera la
+// vieja (vuelve a quedar disponible) y reserva la nueva.
+async function actualizarInventarioPorEdicion(anterior,nuevo){
+  const campos=['ataudId','urnaId','urnaCambioId'];
+  for(const campo of campos){
+    const antes=anterior[campo],despues=nuevo[campo];
+    if((antes||'')===(despues||''))continue;
+    if(antes)await tiendaApi({action:'liberar',id:antes});
+    if(despues)await tiendaApi({action:'reservar',id:despues});
+  }
+  cargarCatalogoTienda();
+}
+
 function limpiarODS(){
   ['o-fallecido','o-contratante','o-tel','o-calle','o-colonia','o-localidad','o-municipio',
    'o-ataud-id','o-ataud-nom','o-ataud-costo','o-urna-id','o-urna-nom','o-urna-costo','o-crem-extra',
@@ -1698,6 +1789,23 @@ function limpiarODS(){
   toggleMod();toggleDest();
   limpiarFirma();
   calcTotal();
+  // Si estaba en modo edición, limpiar el formulario también sale de ese modo.
+  _folioEnEdicion=null;_solicitudEnUso=null;
+  $('nueva-titulo').textContent='Nueva Orden de Servicio';
+  $('btn-guardar-ods').textContent='💾 Guardar Orden';
+}
+
+// Sale del modo edición (si estaba activo) sin guardar cambios y deja el
+// formulario listo para una orden nueva de verdad.
+function salirModoEdicion(){
+  limpiarODS();
+  _folioActual=genFolio();
+  const fd=$('folio-disp');if(fd)fd.textContent=_folioActual;
+}
+function cancelarFormularioNueva(){
+  const estabaEditando=!!_folioEnEdicion;
+  salirModoEdicion();
+  if(estabaEditando) navTo('tablero');
 }
 
 /* ── TABLERO ── */
@@ -1793,6 +1901,7 @@ function verODS(folio){
         ${esAdmin()?`<button class="bg bsm" onclick="cambiarEst('${o.folio}','ACTIVA')">Activa</button>`:''}
         ${esAdmin()&&o.estatus!=='PENDIENTE_PAGO'?`<button class="bo bsm" onclick="cambiarEst('${o.folio}','PENDIENTE_PAGO')">🕐 Marcar Pend. Pago</button>`:''}
         ${esAdmin()?`<button class="bo bsm" onclick="cambiarEst('${o.folio}','CERRADA')">Cerrar ODS</button>`:''}
+        ${o.estatus!=='CERRADA'?`<button class="bo bsm" onclick="abrirEdicionODS('${o.folio}')">✏️ Editar ODS</button>`:''}
         <button class="bo bsm" onclick="equipoRecogido('${o.folio}')">📦 Equipo Recogido</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');abrirEdicionLogistica('${o.folio}')">🕐 Actualizar Logística</button>
         <button class="bo bsm" onclick="certificarODS('${o.folio}')">📝 Certificar</button>
@@ -1969,7 +2078,8 @@ async function sincronizarTodo(silencioso=false){
       accion:'sincronizarTodo',
       ods:lDB(),
       colaboradores:lEmp(),
-      abonos:lAbonos()
+      abonos:lAbonos(),
+      solicitudes:lSolic()
     });
     if(r.ok){
       if(r.ods&&r.ods.length){
@@ -1995,6 +2105,12 @@ async function sincronizarTodo(silencioso=false){
         const porId={};localAb.forEach(a=>{porId[a.id]=a});
         r.abonos.forEach(ra=>{porId[ra.id]=ra}); // el servidor manda la versión más reciente (incluye estado)
         sAbonos(Object.values(porId));
+      }
+      if(r.solicitudes&&r.solicitudes.length){
+        const localSol=lSolic();
+        const porId={};localSol.forEach(s=>{porId[s.id]=s});
+        r.solicitudes.forEach(rs=>{porId[rs.id]=rs});
+        sSolic(Object.values(porId));
       }
       ST.q=[];localStorage.setItem(QK,'[]');
       const now=new Date().toISOString();localStorage.setItem(SK,now);
@@ -2422,6 +2538,8 @@ async function enviarODSPorWhatsapp(folio){
 /* ── ABONOS / PAGOS PARCIALES ── */
 function lAbonos(){return JSON.parse(localStorage.getItem(ABK)||'[]')}
 function sAbonos(d){localStorage.setItem(ABK,JSON.stringify(d))}
+function lSolic(){return JSON.parse(localStorage.getItem(SOLK)||'[]')}
+function sSolic(d){localStorage.setItem(SOLK,JSON.stringify(d))}
 /* ── ACTUALIZAR LOGÍSTICA (horarios/lugar capturados horas después) ──
    Disponible para cualquier usuario con acceso a la orden, ya que la
    información debe estar disponible para todo el equipo cuanto antes. */
@@ -2640,6 +2758,210 @@ function guardarAjusteSaldo(){
   closeMo('mo-saldo');
   toast(`✅ Saldo de ${folio} corregido: restante ${fmt(o.restante)}`);
   cargarPagos();cargarODS();updDash();
+}
+
+/* ── EDITAR ODS (Administrador libre; empleados con autorización) ──
+   El Administrador entra directo al formulario completo. Un empleado
+   primero debe solicitar autorización (motivo + nuevo total si cambia el
+   costo); una vez que el Administrador la autoriza, ese empleado puede
+   entrar al mismo formulario para ESE folio y guardar de inmediato — no
+   hay una segunda revisión de los cambios detallados, solo del motivo y
+   el costo declarados al pedir permiso. Esto evita que un empleado pueda
+   cambiar montos por su cuenta sin que el Administrador se entere. */
+function abrirEdicionODS(folio){
+  const o=lDB().find(x=>x.folio===folio);
+  if(!o){toast('Folio no encontrado');return}
+  if(esAdmin()){ iniciarEdicionODS(o); return; }
+
+  const autorizada=solicitudAprobadaPara(folio);
+  if(autorizada){ iniciarEdicionODS(o, autorizada.id); return; }
+
+  const uid=ST.user?(ST.user.idColaborador||ST.user.id||''):'';
+  const pendiente=lSolic().find(s=>s.folio===folio&&s.empleadoId===uid&&s.estado==='pendiente');
+  if(pendiente){ toast('🕐 Tu solicitud para editar esta orden sigue pendiente de autorización'); return; }
+
+  abrirSolicitudEdicion(folio);
+}
+function solicitudAprobadaPara(folio){
+  const uid=ST.user?(ST.user.idColaborador||ST.user.id||''):'';
+  return lSolic().find(s=>s.folio===folio&&s.empleadoId===uid&&s.estado==='aprobada');
+}
+function iniciarEdicionODS(o, solicitudId){
+  _folioEnEdicion=o.folio;
+  _solicitudEnUso=solicitudId||null;
+  closeMo('mo-ods');
+  navTo('nueva');
+  precargarFormularioODS(o);
+}
+
+function abrirSolicitudEdicion(folio){
+  $('mo-solicitud-edicion').dataset.folio=folio;
+  $('se-folio-disp').textContent=folio;
+  $('se-motivo').value='';
+  $('se-nuevo-total').value='';
+  closeMo('mo-ods');
+  $('mo-solicitud-edicion').classList.add('show');
+}
+function enviarSolicitudEdicion(){
+  const folio=$('mo-solicitud-edicion').dataset.folio;
+  const motivo=($('se-motivo').value||'').trim();
+  if(!motivo){toast('⚠ Explica el motivo del cambio');return}
+  const nuevoTotal=$('se-nuevo-total').value;
+  const solicitud={
+    id:`SOL-${Date.now()}`,folio,
+    empleadoId:ST.user?(ST.user.idColaborador||ST.user.id||''):'',
+    empleadoNombre:ST.user?(ST.user.nombreCompleto||''):'',
+    motivo,
+    nuevoTotalPropuesto:nuevoTotal===''?'':+nuevoTotal,
+    estado:'pendiente',
+    fecha:hoy(),
+    fechaHora:new Date().toISOString()
+  };
+  const sols=lSolic();sols.push(solicitud);sSolic(sols);
+  encolar({accion:'guardarSolicitud',datos:solicitud});
+  if(ST.url&&ST.online)sincronizarTodo(true);
+  closeMo('mo-solicitud-edicion');
+  toast('📤 Solicitud enviada, espera autorización del Administrador');
+}
+
+function cargarSolicitudes(){
+  const sols=lSolic();
+  const pendientes=sols.filter(s=>s.estado==='pendiente').sort((a,b)=>(a.fechaHora||'').localeCompare(b.fechaHora||''));
+  const resueltas=sols.filter(s=>s.estado!=='pendiente').sort((a,b)=>(b.fechaHora||'').localeCompare(a.fechaHora||'')).slice(0,15);
+
+  const elPend=$('lista-solic-pend');
+  elPend.innerHTML=pendientes.length?pendientes.map(s=>{
+    const o=lDB().find(x=>x.folio===s.folio);
+    return `<div class="card" style="border-color:var(--amber);margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:11px;font-weight:700;color:var(--gold)">${s.folio}</div>
+        <div style="font-size:11px;color:var(--text3)">${s.fecha}</div>
+      </div>
+      <div style="font-size:14px;font-weight:700">${o?o.fallecido:'—'}</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:2px">Solicita: <b>${s.empleadoNombre||'—'}</b></div>
+      <div style="font-size:12px;margin-top:6px"><span style="color:var(--text3)">Motivo:</span> ${s.motivo}</div>
+      ${s.nuevoTotalPropuesto!==''&&s.nuevoTotalPropuesto!==undefined?`<div style="font-size:12px;margin-top:2px"><span style="color:var(--text3)">Total actual:</span> ${fmt(o?o.totalGeneral:0)} → <b style="color:var(--amber)">Propuesto: ${fmt(s.nuevoTotalPropuesto)}</b></div>`:''}
+      <div style="display:flex;gap:6px;margin-top:9px">
+        <button class="bg bsm" style="flex:1" onclick="autorizarSolicitud('${s.id}')">✅ Autorizar</button>
+        <button class="br bsm" style="flex:1" onclick="rechazarSolicitud('${s.id}')">✕ Rechazar</button>
+      </div>
+    </div>`;
+  }).join(''):'<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0">Sin solicitudes pendientes.</div>';
+
+  const elRes=$('lista-solic-resueltas');
+  elRes.innerHTML=resueltas.map(s=>{
+    const col=s.estado==='aprobada'||s.estado==='usada'?'var(--green)':'var(--red)';
+    return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-top:1px solid var(--border)">
+      <span>${s.folio} · ${s.empleadoNombre||'—'}</span><span style="color:${col}">${s.estado}</span>
+    </div>`;
+  }).join('');
+}
+function autorizarSolicitud(id){
+  if(!requiereAdmin('⚠ Solo el Administrador puede autorizar solicitudes')) return;
+  const sols=lSolic();const i=sols.findIndex(s=>s.id===id);
+  if(i<0)return;
+  sols[i].estado='aprobada';sols[i].fechaResolucion=new Date().toISOString();sols[i].resueltoPor=ST.user.nombreCompleto||'';
+  sSolic(sols);
+  encolar({accion:'guardarSolicitud',datos:sols[i]});
+  if(ST.url&&ST.online)sincronizarTodo(true);
+  toast('✅ Solicitud autorizada');
+  cargarSolicitudes();updDash();
+}
+function rechazarSolicitud(id){
+  if(!requiereAdmin('⚠ Solo el Administrador puede rechazar solicitudes')) return;
+  const sols=lSolic();const i=sols.findIndex(s=>s.id===id);
+  if(i<0)return;
+  sols[i].estado='rechazada';sols[i].fechaResolucion=new Date().toISOString();sols[i].resueltoPor=ST.user.nombreCompleto||'';
+  sSolic(sols);
+  encolar({accion:'guardarSolicitud',datos:sols[i]});
+  if(ST.url&&ST.online)sincronizarTodo(true);
+  toast('Solicitud rechazada');
+  cargarSolicitudes();updDash();
+}
+
+// Llena el formulario de "Nueva Orden" con los datos de una orden YA
+// GUARDADA, para editarla. Es lo inverso de recopilar().
+async function precargarFormularioODS(o){
+  $('nueva-titulo').textContent=`Editando ${o.folio}`;
+  $('btn-guardar-ods').textContent='💾 Guardar Cambios';
+  $('folio-disp').textContent=o.folio;
+
+  const directos={
+    'o-fallecido':'fallecido','o-contratante':'contratante','o-tel':'telefono',
+    'o-calle':'direccionCalle','o-colonia':'direccionColonia','o-localidad':'direccionLocalidad','o-municipio':'direccionMunicipio',
+    'o-tipo-crem':'tipoCremacion','o-crem-extra':'costoAdicionalCremacion',
+    'o-inst':'fechaInstalacion','o-recol':'fechaRecoleccion',
+    'o-dest-nom':'destinoNombre','o-km':'kmTraslado','o-costo-traslado':'costoTraslado',
+    'o-otros':'otrosCargos','o-desc':'descuento','o-anticipo':'anticipo',
+    'o-anot':'anotaciones','o-pct-ant':'porcentajeAnticipo',
+    'o-panteon':'lugSepelio','o-fecha-sepelio':'fechaSepelio','o-salida':'salidaTraslado','o-misa':'horaMisa','o-sepelio':'horaSepelio',
+    'o-crematorio':'crematorio','o-fecha-crem':'fechaCremacion','o-salida-crem':'salidaCremacion','o-misa-crem':'horaMisaCrem','o-hora-crem':'horaCremacion',
+    'o-foraneo-hora-salida':'foraneoHoraSalida',
+    'pg-monto':'montoPagare','pg-nombre':'nombreDeudor','pg-tel':'telefonoDeudor','pg-ine':'ineDeudor','pg-venc':'vencimientoPagare','pg-dom':'domicilioDeudor','pg-letras':'cantidadLetras'
+  };
+  Object.keys(directos).forEach(id=>{const el=$(id);if(el)el.value=o[directos[id]]??''});
+
+  const selects={'o-modalidad':'modalidadServicio','o-vel-tipo':'modalidadVelacion','o-dest-tipo':'destinoTipo','o-foraneo-salida-lugar':'foraneoLugarSalida','o-exceso':'excesoPeso','o-obj-cuerpo':'objetoCuerpo'};
+  Object.keys(selects).forEach(id=>{const el=$(id);if(el&&o[selects[id]])el.value=o[selects[id]]});
+
+  const tramites=String(o.tramites||'').split(',');
+  ['registro','fge','periciales'].forEach(t=>{const el=$('tr-'+t);if(el)el.checked=tramites.includes(t)});
+  if($('tr-cert'))$('tr-cert').value=tramites.includes('cert')?'SI':'NO';
+  if($('tr-p48'))$('tr-p48').value=tramites.includes('p48')?'SI':'NO';
+  if($('tr-traslado'))$('tr-traslado').value=tramites.includes('traslado')?'SI':'NO';
+
+  const equipo=String(o.equipoVelacion||'').split(',');
+  ['biombo','base','cristo'].forEach(e=>{const el=$('eq-'+e);if(el)el.checked=equipo.includes(e)});
+  const cande=equipo.find(e=>e.startsWith('cande'));
+  if($('eq-cande')){$('eq-cande').checked=!!cande;$('blq-cande-piezas').style.display=cande?'block':'none'}
+  if(cande&&$('eq-cande-piezas'))$('eq-cande-piezas').value=cande.replace('cande','')||2;
+
+  const insumos=String(o.insumos||'').split(',');
+  ['cruz','cirios'].forEach(i=>{const el=$('ins-'+i);if(el)el.checked=insumos.includes(i)});
+
+  if($('o-emb')&&o.embalsamado)$('o-emb').value=o.embalsamado;
+  if($('o-sala')&&o.salaVelacion)$('o-sala').value=o.salaVelacion;
+  if($('o-sala-costo'))$('o-sala-costo').value=o.costoSala||0;
+
+  const hayPagare=o.tienePagare==='SI';
+  if($('o-pagare'))$('o-pagare').checked=hayPagare;
+  $('blq-pagare').style.display=hayPagare?'block':'none';
+  $('blq-anticipo-pct').style.display=hayPagare?'block':'none';
+
+  toggleMod();toggleVel();toggleDest();toggleLogistica();
+
+  // El catálogo de piezas disponibles no incluye la que ya está apartada
+  // para ESTA orden (porque no está "disponible", está reservada a ella
+  // misma) — hay que esperar a que cargue y, si falta, agregarla a mano
+  // para que se vea seleccionada y no se pierda al guardar sin querer.
+  await cargarCatalogoTienda();
+  asegurarOpcionSeleccionada('o-ataud-id',o.ataudId,o.ataudNombre,o.costoAtaud);
+  asegurarOpcionSeleccionada('o-urna-id',o.urnaId,o.urnaNombre,o.costoUrna);
+  asegurarOpcionSeleccionada('o-urna-cambio-id',o.urnaCambioId,o.urnaCambioNombre,o.costoUrnaCambio);
+  if($('o-ataud-nom'))$('o-ataud-nom').value=o.ataudNombre||'';
+  if($('o-ataud-costo'))$('o-ataud-costo').value=o.costoAtaud||0;
+  if($('o-urna-nom'))$('o-urna-nom').value=o.urnaNombre||'';
+  if($('o-urna-costo'))$('o-urna-costo').value=o.costoUrna||0;
+  if(o.urnaCambioId){
+    $('blq-urna-cambio-detalle').style.display='flex';
+    if($('o-urna-cambio-nom'))$('o-urna-cambio-nom').value=o.urnaCambioNombre||'';
+    if($('o-urna-cambio-costo'))$('o-urna-cambio-costo').value=o.costoUrnaCambio||0;
+  }
+
+  calcTotal();
+  toast(`✏️ Editando ${o.folio}`);
+}
+function asegurarOpcionSeleccionada(selectId,id,nombre,costo){
+  const sel=$(selectId);
+  if(!sel||!id)return;
+  const yaExiste=Array.from(sel.options).some(op=>op.value===String(id));
+  if(!yaExiste){
+    const opt=document.createElement('option');
+    opt.value=id;opt.textContent=(nombre||id)+' (ya apartada a esta orden)';
+    opt.dataset.nombre=nombre||'';opt.dataset.precio=costo||0;
+    sel.appendChild(opt);
+  }
+  sel.value=id;
 }
 
 /* ── INIT ── */

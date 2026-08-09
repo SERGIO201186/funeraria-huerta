@@ -19,6 +19,7 @@ const SH_PREV  = "Previsiones";
 const SH_ABONO = "Abonos";
 const SH_LOG   = "LogActividad";
 const SH_PROD  = "Productos";      // ← catálogo de ataúdes/urnas
+const SH_SOLIC = "Solicitudes";    // ← solicitudes de edición de ODS (empleados)
 
 // — CABECERAS ODS ----------------------------------------------
 // IMPORTANTE: el ORDEN de este arreglo ya no determina en qué columna
@@ -65,6 +66,12 @@ const PROD_COLS = [
   "costo","precioSugerido","proveedor","existencia",
   "disponibleInmediato","activo",
   "creadoPor","fechaCreacion","fechaActualizacion"
+];
+
+// — CABECERAS SOLICITUDES DE EDICIÓN -------------------------------------
+const SOLIC_COLS = [
+  "id","folio","empleadoId","empleadoNombre","motivo","nuevoTotalPropuesto",
+  "estado","fecha","fechaHora","fechaResolucion","resueltoPor"
 ];
 
 //
@@ -115,6 +122,9 @@ function doPost(e) {
       case "guardarProducto":    result = guardarProducto(payload.datos);   break;
       case "obtenerProductos":   result = obtenerProductos(payload.filtros||{}); break;
       case "eliminarProducto":   result = eliminarProducto(payload.id);    break;
+      // Solicitudes de edición de ODS (empleados piden autorización)
+      case "guardarSolicitud":   result = guardarSolicitud(payload.datos);  break;
+      case "obtenerSolicitudes": result = obtenerSolicitudes(payload.filtros||{}); break;
       default: result = { ok:false, mensaje:"Acción desconocida: " + accion };
     }
 
@@ -175,6 +185,7 @@ function getPrevSh() { return initSheet(SH_PREV,  ["folio","titular","ine","celu
 function getAbonoSh() { return initSheet(SH_ABONO, ["id","folio","contratante","monto","porcentaje","fecha","metodo","referencia","nota",
 "cajero","estado","fechaRegistro"]); }
 function getProdSh() { return initSheet(SH_PROD, PROD_COLS); }
+function getSolicSh() { return initSheet(SH_SOLIC, SOLIC_COLS); }
 
 // Encabezados REALES de la hoja tal como están hoy (para leer/escribir
 // siempre alineado a lo que en verdad hay en la fila 1, nunca a una
@@ -359,6 +370,38 @@ function eliminarProducto(id) {
 }
 
 // ============================================================
+//  SOLICITUDES DE EDICIÓN DE ODS
+//  Un empleado pide autorización para editar una orden ya guardada; el
+//  Administrador aprueba o rechaza. Es upsert por "id" igual que Productos,
+//  así sirve tanto para crear la solicitud como para actualizar su estado
+//  (pendiente -> aprobada/rechazada/usada).
+// ============================================================
+function guardarSolicitud(datos) {
+  const sh = getSolicSh();
+  const headers = headersReales(sh);
+  datos.id = datos.id || ('SOL-' + Date.now());
+  const idx = findRow(sh, "id", datos.id);
+  if (idx > 0) {
+    sh.getRange(idx, 1, 1, headers.length).setValues([toRow(headers, datos)]);
+    return { ok:true, id:datos.id, mensaje:"Solicitud actualizada" };
+  }
+  sh.appendRow(toRow(headers, datos));
+  return { ok:true, id:datos.id, mensaje:"Solicitud registrada" };
+}
+
+function obtenerSolicitudes(filtros) {
+  const sh = getSolicSh();
+  const data = sh.getDataRange().getValues();
+  if (data.length <= 1) return { ok:true, datos:[] };
+  const headers = data[0];
+  let filas = data.slice(1).map(r => toObj(headers, r));
+  filtros = filtros || {};
+  if (filtros.folio)  filas = filas.filter(r => r.folio  === filtros.folio);
+  if (filtros.estado) filas = filas.filter(r => r.estado === filtros.estado);
+  return { ok:true, datos:filas, total:filas.length };
+}
+
+// ============================================================
 //  PREVISIONES (compatibilidad app hermana)
 // ============================================================
 function guardarPrevision(datos) {
@@ -418,15 +461,17 @@ function obtenerAbonos(folio) {
 //  SINCRONIZACIÓN MASIVA
 // ============================================================
 function sincronizarTodo(payload) {
-  const ods    = payload.ods    || [];
-  const emps   = payload.colaboradores || [];
-  const prevs  = payload.previsiones   || [];
-  const abonos = payload.abonos        || [];
+  const ods         = payload.ods    || [];
+  const emps        = payload.colaboradores || [];
+  const prevs       = payload.previsiones   || [];
+  const abonos      = payload.abonos        || [];
+  const solicitudes = payload.solicitudes   || [];
 
-  ods.forEach(o    => guardarODS(o));
-  emps.forEach(e   => guardarColaborador(e));
-  prevs.forEach(p  => guardarPrevision(p));
-  abonos.forEach(a => guardarAbono(a));
+  ods.forEach(o         => guardarODS(o));
+  emps.forEach(e        => guardarColaborador(e));
+  prevs.forEach(p       => guardarPrevision(p));
+  abonos.forEach(a      => guardarAbono(a));
+  solicitudes.forEach(s => guardarSolicitud(s));
 
   return {
     ok:true,
@@ -434,7 +479,8 @@ function sincronizarTodo(payload) {
     ods:            obtenerODS({}).datos,
     colaboradores: obtenerColaboradores().datos,
     previsiones:    obtenerPrevisiones({}).datos,
-    abonos:         obtenerAbonos(null).datos
+    abonos:         obtenerAbonos(null).datos,
+    solicitudes:    obtenerSolicitudes({}).datos
   };
 }
 
@@ -507,6 +553,6 @@ function onOpen() {
     .addToUi();
 }
 function inicializarTodasLasHojas() {
-  getODSSh(); getEmpSh(); getPrevSh(); getAbonoSh(); getProdSh();
+  getODSSh(); getEmpSh(); getPrevSh(); getAbonoSh(); getProdSh(); getSolicSh();
   SpreadsheetApp.getUi().alert("✅ Hojas inicializadas/reparadas correctamente. Cualquier columna nueva que faltaba se agregó al final de cada hoja.");
 }
