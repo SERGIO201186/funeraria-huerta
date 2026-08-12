@@ -45,8 +45,13 @@ const ODS_COLS = [
   "subtotal","descuento","iva","totalGeneral","porcentajeAnticipo","anticipo","restante",
   "tienePagare","montoPagare","nombreDeudor","telefonoDeudor","ineDeudor",
   "vencimientoPagare","domicilioDeudor","cantidadLetras",
-  "lugSepelio","fechaSepelio","salidaTraslado","horaMisa","horaSepelio",
-  "crematorio","fechaCremacion","salidaCremacion","horaMisaCrem","horaCremacion",
+  // fechaCeremonia/horaCeremonia + salidaTraslado/horaMisa: campos únicos de
+  // logística de sepelio/cremación, compartidos entre las 2 modalidades desde
+  // v2.3 (antes había un juego duplicado por modalidad — fechaSepelio/
+  // fechaCremacion, horaSepelio/horaCremacion, etc. — que se deja aquí solo
+  // para no perder los datos ya guardados en órdenes viejas).
+  "lugSepelio","crematorio","fechaCeremonia","salidaTraslado","horaMisa","horaCeremonia",
+  "fechaSepelio","horaSepelio","fechaCremacion","salidaCremacion","horaMisaCrem","horaCremacion",
   "foraneoLugarSalida","foraneoHoraSalida",
   "anotaciones","estatusEquipo","estatus",
   "firmaContratanteB64","firmaFecha",
@@ -202,9 +207,22 @@ function headersReales(sh) {
 //
 //  UTILIDADES
 //
+// Cuando se escribe un valor tipo "HH:mm" (hora suelta, sin fecha) en una
+// celda, Sheets lo detecta como hora y lo guarda con su fecha base interna
+// (30-dic-1899). getValues() entonces devuelve un objeto Date con esa fecha
+// falsa, y al mandarlo por JSON se vuelve "1899-12-30T18:21:00.000Z" en vez
+// de "18:21" — eso es lo que se veía en la app como fecha/hora rota. Aquí se
+// detecta ese patrón y se regresa solo la hora; cualquier otro Date (fechas
+// reales) se deja igual, tal como antes.
 function toObj(headers, row) {
   const o = {};
-  headers.forEach((h,i) => o[h] = row[i]);
+  headers.forEach((h,i) => {
+    let v = row[i];
+    if (v instanceof Date && v.getFullYear() === 1899 && v.getMonth() === 11 && v.getDate() === 30) {
+      v = Utilities.formatDate(v, Session.getScriptTimeZone(), "HH:mm");
+    }
+    o[h] = v;
+  });
   return o;
 }
 function toRow(headers, obj) {
@@ -697,6 +715,9 @@ function onOpen() {
     .addItem("Activar alertas diarias (8:00 am)", "activarAlertasDiariasUI")
     .addItem("Desactivar alertas diarias", "desactivarAlertasDiariasUI")
     .addItem("Enviar alerta de prueba ahora", "enviarAlertaPruebaUI")
+    .addSeparator()
+    .addItem("🔧 Corregir ODS-26-0003 y ODS-26-0005 (una vez)", "corregirOrdenesEquipoAgosto2026")
+    .addItem("🔍 Diagnosticar columnas con encabezado vacío", "diagnosticarColumnasVacias")
     .addToUi();
 }
 function inicializarTodasLasHojas() {
@@ -742,8 +763,12 @@ function embellecerHojas() {
     money: ["costoAtaud","costoAdicionalCremacion","costoUrna","costoUrnaCambio","costoEmbalsamado",
             "costoTramites","costoSala","costoTraslado","costoExcesoPeso","costoObjetoCuerpo","otrosCargos",
             "subtotal","descuento","iva","totalGeneral","anticipo","restante","montoPagare"],
-    date: ["fechaInstalacion","fechaRecoleccion","fechaCreacion","fechaActualizacion","fechaSepelio",
-           "fechaCremacion","vencimientoPagare","firmaFecha"]
+    date: ["fechaInstalacion","fechaRecoleccion","fechaCreacion","fechaActualizacion","fechaCeremonia",
+           "fechaSepelio","fechaCremacion","vencimientoPagare","firmaFecha"],
+    // Estas son horas sueltas (sin fecha real) que Sheets guarda con una
+    // fecha base falsa (30-dic-1899); mostrarlas como "HH:mm" en vez de
+    // fecha completa es solo cosmético, no cambia el valor guardado.
+    time: ["salidaTraslado","horaMisa","horaCeremonia","horaSepelio","salidaCremacion","horaMisaCrem","horaCremacion","foraneoHoraSalida"]
   });
   _embellecerHoja(getEmpSh(),  { freezeCols: 2 });
   _embellecerHoja(getPrevSh(), { freezeCols: 2, money: ["precioTotal","enganche","cuotaMonto","restante"] });
@@ -780,6 +805,10 @@ function _embellecerHoja(sh, opts) {
     (opts.date || []).forEach(col => {
       const ci = headers.indexOf(col);
       if (ci >= 0) sh.getRange(2, ci + 1, numRows - 1, 1).setNumberFormat("dd/mm/yyyy hh:mm");
+    });
+    (opts.time || []).forEach(col => {
+      const ci = headers.indexOf(col);
+      if (ci >= 0) sh.getRange(2, ci + 1, numRows - 1, 1).setNumberFormat("HH:mm");
     });
   }
 }
@@ -818,4 +847,115 @@ function _colorearEstatusODS() {
     !r.getRanges().some(rg => colsNuevas.includes(rg.getColumn()))
   );
   sh.setConditionalFormatRules(conservadas.concat(nuevas));
+}
+
+// ============================================================
+//  CORRECCIÓN PUNTUAL — ODS-26-0003 y ODS-26-0005
+//  Estas 2 órdenes quedaron con datos incorrectos de antes de los fixes de
+//  guardarEdicionODS()/recopilar(): equipo de velación marcado como no
+//  activo, y restos de "Sala" (nombre y costo) en una orden que en
+//  realidad es velación en Domicilio. Se corrige celda por celda (no con
+//  actualizarODS, que reescribiría la fila completa y podría perder datos)
+//  para tocar solo esos campos puntuales.
+//
+//  IMPORTANTE: después de correr esto, hay que borrar el caché local de la
+//  app en CADA celular que se use (página Nube → "🗑 Borrar datos locales
+//  de este dispositivo") y luego sincronizar. Si no, la siguiente vez que
+//  ese celular sincronice con su copia vieja en memoria, va a volver a
+//  sobreescribir esta corrección con los datos viejos.
+// ============================================================
+function corregirOrdenesEquipoAgosto2026() {
+  const sh = getODSSh();
+  const headers = headersReales(sh);
+  const ui = SpreadsheetApp.getUi();
+
+  function setCelda(folio, campo, valor) {
+    const fila = findRow(sh, "folio", folio);
+    if (fila < 0) { ui.alert("No se encontró la orden " + folio); return; }
+    const ci = headers.indexOf(campo);
+    if (ci < 0) { ui.alert("No existe la columna " + campo); return; }
+    sh.getRange(fila, ci + 1).setValue(valor);
+  }
+
+  setCelda("ODS-26-0003", "estatusEquipo", "ACTIVO");
+  setCelda("ODS-26-0003", "salaVelacion", "");
+  setCelda("ODS-26-0003", "costoSala", 0);
+
+  setCelda("ODS-26-0005", "estatusEquipo", "ACTIVO");
+
+  ui.alert(
+    "✅ ODS-26-0003 y ODS-26-0005 corregidas en la hoja.\n\n" +
+    "IMPORTANTE: en la app, entra a Nube y usa \"🗑 Borrar datos locales de " +
+    "este dispositivo\" y luego \"☁️ Sincronizar Todo\" — hazlo en CADA " +
+    "celular que uses la app, si no el próximo que sincronice con su copia " +
+    "vieja puede volver a sobreescribir esta corrección."
+  );
+}
+
+// ============================================================
+//  DIAGNOSTICAR / MIGRAR COLUMNAS CON ENCABEZADO VACÍO
+//  En algún momento el encabezado de una columna de OrdenesTrabajo se quedó
+//  en blanco (en vez de decir "salaVelacion"), así que ensureColumns()
+//  agregó una columna NUEVA con ese nombre al final de la hoja — la vieja,
+//  con encabezado vacío, se quedó ahí sin que ningún código la lea ni
+//  escriba (por eso "no existe" un encabezado con nombre, aunque la
+//  columna en sí sigue presente).
+//  Esta función reporta cuántas filas tienen datos en cada columna vacía y,
+//  si encuentra algo, lo copia a "salaVelacion" (solo en filas donde ese
+//  campo esté vacío, para no pisar nada). Nunca borra la columna sola —
+//  eso se hace a mano en Sheets (clic derecho en la letra → Eliminar
+//  columna) una vez confirmado que ya no tiene nada de valor.
+// ============================================================
+function diagnosticarColumnasVacias() {
+  const sh = getODSSh();
+  const ui = SpreadsheetApp.getUi();
+  const ancho = sh.getLastColumn();
+  const headers = sh.getRange(1, 1, 1, ancho).getValues()[0];
+  const numRows = sh.getLastRow();
+
+  const vacias = [];
+  headers.forEach((h, i) => { if (String(h).trim() === '') vacias.push(i); });
+
+  if (!vacias.length) { ui.alert("No hay columnas con encabezado vacío en OrdenesTrabajo."); return; }
+
+  const ciSala = headers.indexOf("salaVelacion");
+  let migrados = 0;
+  const reportes = [];
+
+  vacias.forEach(ci => {
+    let conDatos = 0;
+    if (numRows > 1) {
+      const valores = sh.getRange(2, ci + 1, numRows - 1, 1).getValues();
+      valores.forEach((fila, idx) => {
+        const v = fila[0];
+        if (v === '' || v === null || v === undefined) return;
+        conDatos++;
+        if (ciSala >= 0) {
+          const filaSheet = idx + 2;
+          const valorSala = sh.getRange(filaSheet, ciSala + 1).getValue();
+          if (valorSala === '' || valorSala === null || valorSala === undefined) {
+            sh.getRange(filaSheet, ciSala + 1).setValue(v);
+            migrados++;
+          }
+        }
+      });
+    }
+    reportes.push(`Columna ${_letraColumna(ci + 1)} (posición ${ci + 1}): ${conDatos} fila(s) con datos.`);
+  });
+
+  ui.alert(
+    "🔍 Columnas con encabezado vacío en OrdenesTrabajo:\n\n" +
+    reportes.join("\n") +
+    (migrados ? `\n\n✅ Se migraron ${migrados} valor(es) a la columna "salaVelacion".` : "") +
+    "\n\nSi ya no quedan datos ahí (o ya se migraron), esa columna está huérfana y la puedes borrar tú mismo en Sheets: clic derecho en la letra de la columna → Eliminar columna."
+  );
+}
+function _letraColumna(col) {
+  let letra = '';
+  while (col > 0) {
+    const resto = (col - 1) % 26;
+    letra = String.fromCharCode(65 + resto) + letra;
+    col = Math.floor((col - 1) / 26);
+  }
+  return letra;
 }
