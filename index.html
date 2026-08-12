@@ -1645,8 +1645,11 @@ function recopilar(){
     equipoVelacion:equipo,
     fechaInstalacion:($('o-inst')||{value:''}).value,
     fechaRecoleccion:($('o-recol')||{value:''}).value,
-    salaVelacion:($('o-sala')||{value:''}).value,
-    costoSala:($('o-sala-costo')||{value:0}).value,
+    // Solo se guardan si la modalidad es SALA: el campo queda oculto (no
+    // vacío) al cambiar a DOMICILIO, así que sin este filtro se seguía
+    // guardando el nombre/costo de una sala vieja aunque ya no aplicara.
+    salaVelacion:vel==='SALA'?($('o-sala')||{value:''}).value:'',
+    costoSala:vel==='SALA'?($('o-sala-costo')||{value:0}).value:0,
     insumos,
     destinoTipo:($('o-dest-tipo')||{value:'LOCAL'}).value,
     destinoNombre:($('o-dest-nom')||{value:''}).value,

@@ -202,9 +202,22 @@ function headersReales(sh) {
 //
 //  UTILIDADES
 //
+// Cuando se escribe un valor tipo "HH:mm" (hora suelta, sin fecha) en una
+// celda, Sheets lo detecta como hora y lo guarda con su fecha base interna
+// (30-dic-1899). getValues() entonces devuelve un objeto Date con esa fecha
+// falsa, y al mandarlo por JSON se vuelve "1899-12-30T18:21:00.000Z" en vez
+// de "18:21" — eso es lo que se veía en la app como fecha/hora rota. Aquí se
+// detecta ese patrón y se regresa solo la hora; cualquier otro Date (fechas
+// reales) se deja igual, tal como antes.
 function toObj(headers, row) {
   const o = {};
-  headers.forEach((h,i) => o[h] = row[i]);
+  headers.forEach((h,i) => {
+    let v = row[i];
+    if (v instanceof Date && v.getFullYear() === 1899 && v.getMonth() === 11 && v.getDate() === 30) {
+      v = Utilities.formatDate(v, Session.getScriptTimeZone(), "HH:mm");
+    }
+    o[h] = v;
+  });
   return o;
 }
 function toRow(headers, obj) {
@@ -697,6 +710,8 @@ function onOpen() {
     .addItem("Activar alertas diarias (8:00 am)", "activarAlertasDiariasUI")
     .addItem("Desactivar alertas diarias", "desactivarAlertasDiariasUI")
     .addItem("Enviar alerta de prueba ahora", "enviarAlertaPruebaUI")
+    .addSeparator()
+    .addItem("🔧 Corregir ODS-26-0003 y ODS-26-0005 (una vez)", "corregirOrdenesEquipoAgosto2026")
     .addToUi();
 }
 function inicializarTodasLasHojas() {
@@ -743,7 +758,11 @@ function embellecerHojas() {
             "costoTramites","costoSala","costoTraslado","costoExcesoPeso","costoObjetoCuerpo","otrosCargos",
             "subtotal","descuento","iva","totalGeneral","anticipo","restante","montoPagare"],
     date: ["fechaInstalacion","fechaRecoleccion","fechaCreacion","fechaActualizacion","fechaSepelio",
-           "fechaCremacion","vencimientoPagare","firmaFecha"]
+           "fechaCremacion","vencimientoPagare","firmaFecha"],
+    // Estas son horas sueltas (sin fecha real) que Sheets guarda con una
+    // fecha base falsa (30-dic-1899); mostrarlas como "HH:mm" en vez de
+    // fecha completa es solo cosmético, no cambia el valor guardado.
+    time: ["salidaTraslado","horaMisa","horaSepelio","salidaCremacion","horaMisaCrem","horaCremacion","foraneoHoraSalida"]
   });
   _embellecerHoja(getEmpSh(),  { freezeCols: 2 });
   _embellecerHoja(getPrevSh(), { freezeCols: 2, money: ["precioTotal","enganche","cuotaMonto","restante"] });
@@ -780,6 +799,10 @@ function _embellecerHoja(sh, opts) {
     (opts.date || []).forEach(col => {
       const ci = headers.indexOf(col);
       if (ci >= 0) sh.getRange(2, ci + 1, numRows - 1, 1).setNumberFormat("dd/mm/yyyy hh:mm");
+    });
+    (opts.time || []).forEach(col => {
+      const ci = headers.indexOf(col);
+      if (ci >= 0) sh.getRange(2, ci + 1, numRows - 1, 1).setNumberFormat("HH:mm");
     });
   }
 }
@@ -818,4 +841,47 @@ function _colorearEstatusODS() {
     !r.getRanges().some(rg => colsNuevas.includes(rg.getColumn()))
   );
   sh.setConditionalFormatRules(conservadas.concat(nuevas));
+}
+
+// ============================================================
+//  CORRECCIÓN PUNTUAL — ODS-26-0003 y ODS-26-0005
+//  Estas 2 órdenes quedaron con datos incorrectos de antes de los fixes de
+//  guardarEdicionODS()/recopilar(): equipo de velación marcado como no
+//  activo, y restos de "Sala" (nombre y costo) en una orden que en
+//  realidad es velación en Domicilio. Se corrige celda por celda (no con
+//  actualizarODS, que reescribiría la fila completa y podría perder datos)
+//  para tocar solo esos campos puntuales.
+//
+//  IMPORTANTE: después de correr esto, hay que borrar el caché local de la
+//  app en CADA celular que se use (página Nube → "🗑 Borrar datos locales
+//  de este dispositivo") y luego sincronizar. Si no, la siguiente vez que
+//  ese celular sincronice con su copia vieja en memoria, va a volver a
+//  sobreescribir esta corrección con los datos viejos.
+// ============================================================
+function corregirOrdenesEquipoAgosto2026() {
+  const sh = getODSSh();
+  const headers = headersReales(sh);
+  const ui = SpreadsheetApp.getUi();
+
+  function setCelda(folio, campo, valor) {
+    const fila = findRow(sh, "folio", folio);
+    if (fila < 0) { ui.alert("No se encontró la orden " + folio); return; }
+    const ci = headers.indexOf(campo);
+    if (ci < 0) { ui.alert("No existe la columna " + campo); return; }
+    sh.getRange(fila, ci + 1).setValue(valor);
+  }
+
+  setCelda("ODS-26-0003", "estatusEquipo", "ACTIVO");
+  setCelda("ODS-26-0003", "salaVelacion", "");
+  setCelda("ODS-26-0003", "costoSala", 0);
+
+  setCelda("ODS-26-0005", "estatusEquipo", "ACTIVO");
+
+  ui.alert(
+    "✅ ODS-26-0003 y ODS-26-0005 corregidas en la hoja.\n\n" +
+    "IMPORTANTE: en la app, entra a Nube y usa \"🗑 Borrar datos locales de " +
+    "este dispositivo\" y luego \"☁️ Sincronizar Todo\" — hazlo en CADA " +
+    "celular que uses la app, si no el próximo que sincronice con su copia " +
+    "vieja puede volver a sobreescribir esta corrección."
+  );
 }
