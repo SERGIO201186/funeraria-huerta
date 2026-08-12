@@ -1746,7 +1746,15 @@ function guardarEdicionODS(){
 
   d.folio=folio;
   d.estatus=anterior.estatus;
-  d.estatusEquipo=anterior.estatusEquipo;
+  // Si la modalidad de velación sigue igual, se conserva el estatusEquipo tal
+  // cual estaba (para no resetear un "RECOGIDO" a medio editar). Pero si
+  // cambió (ej. de "Sala" a "Domicilio" al agregar el equipo, o viceversa),
+  // hay que recalcularlo: si no, quedaba pegado en el valor viejo (p.ej.
+  // "N/A" de cuando era Sala) aunque ahora sí hay equipo prestado, y esa
+  // orden nunca aparecía en Control de Equipos.
+  d.estatusEquipo=(anterior.modalidadVelacion===d.modalidadVelacion)
+    ?anterior.estatusEquipo
+    :(d.modalidadVelacion==='DOMICILIO'?'ACTIVO':'N/A');
   d.anticipo=anterior.anticipo;
   d.restante=Math.max((+d.totalGeneral||0)-(+anterior.anticipo||0),0);
   d.creadoPor=anterior.creadoPor;
