@@ -691,6 +691,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("⚙ Huerta Admin")
     .addItem("Inicializar / reparar columnas de hojas", "inicializarTodasLasHojas")
+    .addItem("🎨 Embellecer todas las hojas", "embellecerHojas")
     .addSeparator()
     .addItem("Configurar correo de alertas...", "configurarCorreoAlertasUI")
     .addItem("Activar alertas diarias (8:00 am)", "activarAlertasDiariasUI")
@@ -727,4 +728,94 @@ function enviarAlertaPruebaUI() {
   if (!getAlertEmail()) { SpreadsheetApp.getUi().alert("Configura primero el correo de alertas."); return; }
   const r = enviarAlertasPendientes(true);
   SpreadsheetApp.getUi().alert(r.ok ? ("✅ " + r.mensaje + " (" + r.total + " pendientes)") : ("❌ " + r.mensaje));
+}
+
+// ============================================================
+//  EMBELLECER HOJAS
+//  Solo formato visual (encabezados fijos, franjas alternas, moneda/fecha,
+//  colores por estatus) — nunca borra ni mueve columnas o datos, así que es
+//  seguro correrlo las veces que se quiera.
+// ============================================================
+function embellecerHojas() {
+  _embellecerHoja(getODSSh(), {
+    freezeCols: 2,
+    money: ["costoAtaud","costoAdicionalCremacion","costoUrna","costoUrnaCambio","costoEmbalsamado",
+            "costoTramites","costoSala","costoTraslado","costoExcesoPeso","costoObjetoCuerpo","otrosCargos",
+            "subtotal","descuento","iva","totalGeneral","anticipo","restante","montoPagare"],
+    date: ["fechaInstalacion","fechaRecoleccion","fechaCreacion","fechaActualizacion","fechaSepelio",
+           "fechaCremacion","vencimientoPagare","firmaFecha"]
+  });
+  _embellecerHoja(getEmpSh(),  { freezeCols: 2 });
+  _embellecerHoja(getPrevSh(), { freezeCols: 2, money: ["precioTotal","enganche","cuotaMonto","restante"] });
+  _embellecerHoja(getAbonoSh(),{ freezeCols: 2, money: ["monto"], date: ["fecha","fechaRegistro"] });
+  _embellecerHoja(getProdSh(), { freezeCols: 2, money: ["costo","precioSugerido"] });
+  _embellecerHoja(getSolicSh(),{ freezeCols: 2 });
+
+  _colorearEstatusODS();
+
+  SpreadsheetApp.getUi().alert("✅ Hojas embellecidas: encabezados fijos, franjas alternas, formato de moneda/fecha y colores de estatus en ODS.");
+}
+
+function _embellecerHoja(sh, opts) {
+  opts = opts || {};
+  const headers = headersReales(sh);
+  const numCols = headers.length;
+  const numRows = sh.getLastRow();
+  if (!numCols || numRows < 1) return;
+
+  sh.getRange(1, 1, 1, numCols).setFontWeight("bold").setBackground("#0f172a").setFontColor("#ffffff");
+  sh.setFrozenRows(1);
+  if (opts.freezeCols) sh.setFrozenColumns(Math.min(opts.freezeCols, numCols));
+  sh.autoResizeColumns(1, numCols);
+
+  if (numRows > 1) {
+    const rango = sh.getRange(1, 1, numRows, numCols);
+    rango.getBandings().forEach(b => b.remove());
+    rango.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false);
+
+    (opts.money || []).forEach(col => {
+      const ci = headers.indexOf(col);
+      if (ci >= 0) sh.getRange(2, ci + 1, numRows - 1, 1).setNumberFormat("$#,##0.00");
+    });
+    (opts.date || []).forEach(col => {
+      const ci = headers.indexOf(col);
+      if (ci >= 0) sh.getRange(2, ci + 1, numRows - 1, 1).setNumberFormat("dd/mm/yyyy hh:mm");
+    });
+  }
+}
+
+// Colorea de un vistazo la columna "estatus" (ACTIVA/PENDIENTE_PAGO/CERRADA)
+// y "estatusEquipo" (ACTIVO/RECOGIDO) de la hoja de ODS.
+function _colorearEstatusODS() {
+  const sh = getODSSh();
+  const headers = headersReales(sh);
+  const numRows = sh.getLastRow();
+  if (numRows < 2) return;
+
+  const ciEstatus = headers.indexOf("estatus");
+  const ciEquipo  = headers.indexOf("estatusEquipo");
+  const nuevas = [];
+
+  if (ciEstatus >= 0) {
+    const rango = sh.getRange(2, ciEstatus + 1, numRows - 1, 1);
+    nuevas.push(
+      SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo("ACTIVA").setBackground("#dcfce7").setFontColor("#166534").setRanges([rango]).build(),
+      SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo("PENDIENTE_PAGO").setBackground("#fef3c7").setFontColor("#92400e").setRanges([rango]).build(),
+      SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo("CERRADA").setBackground("#e5e7eb").setFontColor("#374151").setRanges([rango]).build()
+    );
+  }
+  if (ciEquipo >= 0) {
+    const rango = sh.getRange(2, ciEquipo + 1, numRows - 1, 1);
+    nuevas.push(
+      SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo("ACTIVO").setBackground("#fee2e2").setFontColor("#991b1b").setRanges([rango]).build(),
+      SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo("RECOGIDO").setBackground("#dcfce7").setFontColor("#166534").setRanges([rango]).build()
+    );
+  }
+
+  // Conserva reglas de otras columnas que ya existieran; reemplaza solo las de estatus/estatusEquipo.
+  const colsNuevas = [ciEstatus + 1, ciEquipo + 1];
+  const conservadas = sh.getConditionalFormatRules().filter(r =>
+    !r.getRanges().some(rg => colsNuevas.includes(rg.getColumn()))
+  );
+  sh.setConditionalFormatRules(conservadas.concat(nuevas));
 }
