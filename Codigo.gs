@@ -125,6 +125,10 @@ function doPost(e) {
       // Solicitudes de edición de ODS (empleados piden autorización)
       case "guardarSolicitud":   result = guardarSolicitud(payload.datos);  break;
       case "obtenerSolicitudes": result = obtenerSolicitudes(payload.filtros||{}); break;
+      // Alertas de pendientes por correo (equipos sin recoger, saldos, solicitudes, abonos)
+      case "guardarAlertaConfig":result = guardarAlertaConfig(payload.datos||{}); break;
+      case "obtenerAlertaConfig":result = obtenerAlertaConfig();            break;
+      case "enviarAlertaPrueba": result = enviarAlertasPendientes(true);    break;
       default: result = { ok:false, mensaje:"Acción desconocida: " + accion };
     }
 
@@ -546,13 +550,181 @@ function generarContratoHTML(folio) {
 </div>`;
 }
 
+// ============================================================
+//  ALERTAS DE PENDIENTES POR CORREO
+//  Junta en un solo correo: equipos de velación sin recoger, órdenes con
+//  saldo pendiente, solicitudes de edición sin autorizar y abonos sin
+//  confirmar. Se puede mandar de inmediato (botón "Enviar prueba ahora" en
+//  la app, o el menú de abajo) o dejar un disparador diario instalado.
+// ============================================================
+const PROP_ALERT_EMAIL  = "ALERT_EMAIL";
+const ALERT_TRIGGER_FN  = "enviarAlertasPendientes";
+
+function getAlertEmail() {
+  return PropertiesService.getScriptProperties().getProperty(PROP_ALERT_EMAIL) || "";
+}
+function setAlertEmail(email) {
+  PropertiesService.getScriptProperties().setProperty(PROP_ALERT_EMAIL, email);
+}
+function alertasActivas() {
+  return ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === ALERT_TRIGGER_FN);
+}
+function activarAlertasDiarias(hora) {
+  desactivarAlertasDiarias();
+  ScriptApp.newTrigger(ALERT_TRIGGER_FN).timeBased().everyDays(1).atHour(hora || 8).create();
+}
+function desactivarAlertasDiarias() {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === ALERT_TRIGGER_FN) ScriptApp.deleteTrigger(t);
+  });
+}
+
+// Llamado desde la app (página Nube). datos = { email, activo }
+// activo=true activa el disparador diario, activo=false lo desactiva; si se
+// omite, solo se guarda el correo sin tocar el disparador (para el botón
+// "Enviar prueba ahora", que no debe activar/desactivar nada por su cuenta).
+function guardarAlertaConfig(datos) {
+  const email = String(datos.email || "").trim();
+  if (!email) return { ok:false, mensaje:"Correo vacío" };
+  setAlertEmail(email);
+  if (datos.activo === true) activarAlertasDiarias(datos.hora);
+  else if (datos.activo === false) desactivarAlertasDiarias();
+  return { ok:true, mensaje:"Alertas configuradas", email:email, activo:alertasActivas() };
+}
+function obtenerAlertaConfig() {
+  return { ok:true, email:getAlertEmail(), activo:alertasActivas() };
+}
+
+// Reúne todo lo pendiente en la ODS activas (no CERRADA), Solicitudes y Abonos.
+function calcularPendientes() {
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+
+  const dataOds = getODSSh().getDataRange().getValues();
+  const headersOds = dataOds[0] || [];
+  const ordenes = dataOds.length > 1
+    ? dataOds.slice(1).map(r => toObj(headersOds, r)).filter(o => o.estatus !== "CERRADA")
+    : [];
+
+  const equipos = ordenes
+    .filter(o => o.modalidadVelacion === "DOMICILIO" && o.estatusEquipo === "ACTIVO")
+    .map(o => {
+      let dias = null;
+      if (o.fechaRecoleccion) {
+        const r = new Date(o.fechaRecoleccion); r.setHours(0,0,0,0);
+        dias = Math.ceil((r - hoy) / 86400000);
+      }
+      return { folio:o.folio, fallecido:o.fallecido, dias:dias };
+    })
+    .sort((a,b) => (a.dias===null?999:a.dias) - (b.dias===null?999:b.dias));
+
+  const pagos = ordenes
+    .filter(o => (+o.restante || 0) > 0)
+    .map(o => ({ folio:o.folio, contratante:o.contratante, restante:+o.restante || 0 }))
+    .sort((a,b) => b.restante - a.restante);
+
+  const dataSol = getSolicSh().getDataRange().getValues();
+  const headersSol = dataSol[0] || [];
+  const solicitudes = dataSol.length > 1
+    ? dataSol.slice(1).map(r => toObj(headersSol, r)).filter(s => s.estado === "pendiente")
+    : [];
+
+  const dataAb = getAbonoSh().getDataRange().getValues();
+  const headersAb = dataAb[0] || [];
+  const abonos = dataAb.length > 1
+    ? dataAb.slice(1).map(r => toObj(headersAb, r)).filter(a => a.estado === "pendiente")
+    : [];
+
+  return { equipos:equipos, pagos:pagos, solicitudes:solicitudes, abonos:abonos };
+}
+
+// forzar=true manda el correo aunque no haya nada pendiente (para probar
+// que la configuración de correo sí funciona).
+function enviarAlertasPendientes(forzar) {
+  const email = getAlertEmail();
+  if (!email) return { ok:false, mensaje:"No hay correo configurado para alertas" };
+
+  const p = calcularPendientes();
+  const total = p.equipos.length + p.pagos.length + p.solicitudes.length + p.abonos.length;
+  if (!total && !forzar) return { ok:true, mensaje:"Sin pendientes, no se envió correo", total:0 };
+
+  const fmtMx = n => "$" + (+n || 0).toLocaleString("es-MX");
+  const fila = (a,b,c) => `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee">${a}</td><td style="padding:4px 8px;border-bottom:1px solid #eee">${b}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:right">${c}</td></tr>`;
+  const tabla = (titulo, color, colB, colC, filas) => `
+    <h3 style="color:${color};margin:18px 0 6px">${titulo}</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr style="background:#0f172a;color:#fff"><th style="padding:4px 8px;text-align:left">Folio</th><th style="padding:4px 8px;text-align:left">${colB}</th><th style="padding:4px 8px;text-align:right">${colC}</th></tr>
+      ${filas}
+    </table>`;
+
+  let html = `<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#111">
+    <h2 style="color:#0f172a;margin-bottom:2px">Funeraria Huerta — Pendientes</h2>
+    <p style="color:#666;font-size:12px;margin-top:0">${new Date().toLocaleString("es-MX")}</p>`;
+
+  if (p.equipos.length) {
+    html += tabla(`📦 Equipos de velación sin recoger (${p.equipos.length})`, "#b45309", "—", "Recolección",
+      p.equipos.map(e => fila(e.folio, e.fallecido || "—",
+        e.dias===null ? "sin fecha" : e.dias<0 ? `vencido ${-e.dias}d` : e.dias===0 ? "hoy" : `en ${e.dias}d`)).join(""));
+  }
+  if (p.pagos.length) {
+    const tot = p.pagos.reduce((s,x) => s + x.restante, 0);
+    html += tabla(`💰 Órdenes con saldo pendiente (${p.pagos.length}, total ${fmtMx(tot)})`, "#b91c1c", "Contratante", "Restante",
+      p.pagos.map(x => fila(x.folio, x.contratante || "—", fmtMx(x.restante))).join(""));
+  }
+  if (p.solicitudes.length) {
+    html += tabla(`✏️ Solicitudes de edición sin autorizar (${p.solicitudes.length})`, "#1d4ed8", "Empleado", "Motivo",
+      p.solicitudes.map(s => fila(s.folio, s.empleadoNombre || "—", s.motivo || "—")).join(""));
+  }
+  if (p.abonos.length) {
+    html += tabla(`🧾 Abonos sin confirmar (${p.abonos.length})`, "#a16207", "Cajero", "Monto",
+      p.abonos.map(a => fila(a.folio, a.cajero || "—", fmtMx(a.monto))).join(""));
+  }
+  if (!total) html += `<p style="color:#16a34a">✅ No hay pendientes registrados.</p>`;
+  html += `<p style="font-size:11px;color:#888;margin-top:16px">Correo automático de Funeraria Huerta.</p></div>`;
+
+  const asunto = total ? `Funeraria Huerta: ${total} pendiente(s) por atender` : "Funeraria Huerta: sin pendientes";
+  MailApp.sendEmail({ to: email, subject: asunto, htmlBody: html });
+  logActividad("enviarAlertasPendientes", "sistema", total + " pendientes -> " + email);
+  return { ok:true, mensaje:"Correo de alertas enviado", total:total };
+}
+
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("⚙ Huerta Admin")
     .addItem("Inicializar / reparar columnas de hojas", "inicializarTodasLasHojas")
+    .addSeparator()
+    .addItem("Configurar correo de alertas...", "configurarCorreoAlertasUI")
+    .addItem("Activar alertas diarias (8:00 am)", "activarAlertasDiariasUI")
+    .addItem("Desactivar alertas diarias", "desactivarAlertasDiariasUI")
+    .addItem("Enviar alerta de prueba ahora", "enviarAlertaPruebaUI")
     .addToUi();
 }
 function inicializarTodasLasHojas() {
   getODSSh(); getEmpSh(); getPrevSh(); getAbonoSh(); getProdSh(); getSolicSh();
   SpreadsheetApp.getUi().alert("✅ Hojas inicializadas/reparadas correctamente. Cualquier columna nueva que faltaba se agregó al final de cada hoja.");
+}
+function configurarCorreoAlertasUI() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.prompt(
+    "Correo para alertas de pendientes",
+    "Se usará para el resumen de equipos, saldos, solicitudes y abonos pendientes.\nActual: " + (getAlertEmail() || "(sin configurar)"),
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const email = (r.getResponseText() || "").trim();
+  if (!email) { ui.alert("Correo vacío, no se guardó."); return; }
+  setAlertEmail(email);
+  ui.alert("✅ Correo de alertas configurado: " + email);
+}
+function activarAlertasDiariasUI() {
+  if (!getAlertEmail()) { SpreadsheetApp.getUi().alert("Configura primero el correo de alertas."); return; }
+  activarAlertasDiarias(8);
+  SpreadsheetApp.getUi().alert("✅ Alertas diarias activadas (8:00 am).");
+}
+function desactivarAlertasDiariasUI() {
+  desactivarAlertasDiarias();
+  SpreadsheetApp.getUi().alert("Alertas diarias desactivadas.");
+}
+function enviarAlertaPruebaUI() {
+  if (!getAlertEmail()) { SpreadsheetApp.getUi().alert("Configura primero el correo de alertas."); return; }
+  const r = enviarAlertasPendientes(true);
+  SpreadsheetApp.getUi().alert(r.ok ? ("✅ " + r.mensaje + " (" + r.total + " pendientes)") : ("❌ " + r.mensaje));
 }
