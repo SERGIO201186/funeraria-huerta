@@ -735,6 +735,19 @@ button:active{transform:scale(.97)}
         <div style="margin-top:8px;font-size:12px;color:var(--text3)" id="sync-log"></div>
       </div>
       <div class="card">
+        <div class="st">🔔 Alertas de Pendientes por Correo</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Recibe un correo con los equipos de velación sin recoger, órdenes con saldo pendiente, solicitudes de edición y abonos por confirmar.</p>
+        <div class="f"><label class="lbl">Correo para alertas</label>
+          <input id="al-email" type="email" placeholder="tucorreo@gmail.com"/>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="bg" style="flex:1" onclick="guardarAlertaEmail(true)">🔔 Activar alertas diarias</button>
+          <button class="bo" onclick="guardarAlertaEmail(false)">🔕 Desactivar</button>
+        </div>
+        <button class="bo" style="width:100%" onclick="probarAlertaPendientes()">📧 Enviar prueba ahora</button>
+        <div style="margin-top:8px;font-size:12px;color:var(--text3)" id="al-status">—</div>
+      </div>
+      <div class="card">
         <div class="st">Cómo implementar el Code.gs</div>
         <ol style="color:var(--text2);font-size:13px;line-height:2.1;padding-left:18px">
           <li>Ve a <a href="https://script.google.com" target="_blank">script.google.com</a> → Nuevo proyecto</li>
@@ -973,7 +986,10 @@ function revisarTransicionesAutomaticas(){
     // Si ya no debe nada, se deja ACTIVA para que el Administrador la cierre
     // manualmente con "Cerrar ODS" (eso también libera el inventario reservado).
   });
-  if(huboCambios)sDB(db);
+  if(huboCambios){
+    sDB(db);
+    if(ST.online&&ST.url)sincronizarTodo(true);
+  }
 }
 function lDB(){return JSON.parse(localStorage.getItem(DB)||'[]')}
 function sDB(d){localStorage.setItem(DB,JSON.stringify(d));ST.ods=d}
@@ -1922,12 +1938,21 @@ function cambiarEst(folio,est){
   encolar({accion:'actualizarODS',folio,datos:o});
   // Al CERRAR la orden, las piezas reservadas se eliminan definitivamente del inventario
   if(est==='CERRADA'&&!eraCerrada) eliminarPiezasDeOrden(o);
+  // Sin esto el cambio se quedaba solo en este dispositivo (encolado pero
+  // nunca enviado) hasta la próxima vez que se guardara/editara OTRA ODS;
+  // mientras tanto, cualquier sincronización (de este celular u otro)
+  // traía de vuelta el estatus viejo desde la nube.
+  if(ST.online&&ST.url)sincronizarTodo(true);
   closeMo('mo-ods');cargarODS();updDash();toast(`${folio} → ${est}`)
 }
 function equipoRecogido(folio){
   const db=lDB();const i=db.findIndex(o=>o.folio===folio);if(i<0)return;
   db[i].estatusEquipo='RECOGIDO';sDB(db);
   encolar({accion:'actualizarODS',folio,datos:db[i]});
+  // Igual que en cambiarEst(): hay que sincronizar de inmediato o el
+  // "RECOGIDO" solo queda local y una sincronización posterior lo revierte
+  // a ACTIVO con el dato viejo de la nube.
+  if(ST.online&&ST.url)sincronizarTodo(true);
   closeMo('mo-ods');cargarODS();updDash();toast('Equipo marcado RECOGIDO')
 }
 function elimODS(folio){
@@ -2025,6 +2050,7 @@ function registrarColab(){
   if(idx>=0)emp[idx]={...emp[idx],...datos};else emp.push(datos);
   sEmp(emp);
   encolar({accion:'guardarColaborador',datos});
+  if(ST.online&&ST.url)sincronizarTodo(true);
   toast(`✅ ${nom} registrado · PIN: ${pin}`);
   ['c-id','c-nom','c-pin','c-tel','c-fecha','c-fam','c-fam-tel','c-dom','c-user','c-pass'].forEach(x=>{const el=$(x);if(el)el.value=''});
   renderColab();
@@ -2046,6 +2072,42 @@ function renderColab(){
 function initNube(){
   $('sc-url').value=ST.url;
   $('lbl-sync').textContent=(()=>{const ls=localStorage.getItem(SK);return ls?new Date(ls).toLocaleString('es-MX'):'Nunca.'})();
+  cargarAlertaConfig();
+}
+async function cargarAlertaConfig(){
+  const el=$('al-status');if(!el)return;
+  if(!ST.url){el.textContent='Configura el enlace de Apps Script primero.';return}
+  if(!ST.online){el.textContent='Sin conexión: no se puede consultar el estado de alertas.';return}
+  try{
+    const r=await api({accion:'obtenerAlertaConfig'});
+    if(r.ok){
+      $('al-email').value=r.email||'';
+      el.textContent=r.activo?`🟢 Alertas diarias activas${r.email?' · '+r.email:''}`:'🔘 Alertas diarias desactivadas';
+    }else{el.textContent='No se pudo consultar el estado de alertas.'}
+  }catch(e){el.textContent='No se pudo consultar el estado de alertas.'}
+}
+async function guardarAlertaEmail(activar){
+  if(!ST.url){toast('⚠ Guarda primero el enlace de Apps Script');return}
+  const email=$('al-email').value.trim();
+  if(!email){toast('⚠ Ingresa un correo');return}
+  toast('⏳ Guardando…',1500);
+  try{
+    const r=await api({accion:'guardarAlertaConfig',datos:{email,activo:activar}});
+    toast(r.ok?'✅ '+r.mensaje:'❌ '+(r.mensaje||'Error'));
+    cargarAlertaConfig();
+  }catch(e){toast('❌ Error: '+e.message)}
+}
+async function probarAlertaPendientes(){
+  if(!ST.url){toast('⚠ Guarda primero el enlace de Apps Script');return}
+  const email=$('al-email').value.trim();
+  if(!email){toast('⚠ Ingresa un correo primero');return}
+  toast('⏳ Enviando correo de prueba…',2500);
+  try{
+    // Guarda el correo (sin activar/desactivar el disparador diario) antes de mandar la prueba.
+    await api({accion:'guardarAlertaConfig',datos:{email}});
+    const r=await api({accion:'enviarAlertaPrueba'});
+    toast(r.ok?`✅ ${r.mensaje} (${r.total} pendientes)`:'❌ '+(r.mensaje||'Error'));
+  }catch(e){toast('❌ Error: '+e.message)}
 }
 function guardarUrl(){
   const url=$('sc-url').value.trim();
@@ -2185,6 +2247,7 @@ function guardarFirmaLocal(){
   if(i>=0){
     db[i].firmaContratanteB64=b64;db[i].firmaFecha=new Date().toISOString();sDB(db);
     encolar({accion:'guardarFirma',datos:{folio:_folioActual,firmaB64:b64,creadoPor:ST.user?ST.user.nombreCompleto:''}});
+    if(ST.online&&ST.url)sincronizarTodo(true);
   }
   const est=$('firma-estado');if(est){est.textContent='✅ Firma confirmada y guardada';est.style.color='var(--green)'}
   toast('✅ Firma guardada');
@@ -2597,6 +2660,7 @@ function guardarLogistica(){
 
   db[idx]=o;sDB(db);
   encolar({accion:'actualizarODS',folio,datos:o});
+  if(ST.online&&ST.url)sincronizarTodo(true);
   closeMo('mo-logistica');
   toast(`✅ Logística de ${folio} actualizada`);
   cargarODS();updDash();
@@ -2645,6 +2709,10 @@ function confirmarAbono(){
   db[idx]=o;sDB(db);
   encolar({accion:'actualizarODS',folio,datos:o});
   encolar({accion:'guardarAbono',datos:abono});
+  // Sin sincronizar aquí, el pago quedaba solo en este dispositivo y una
+  // sincronización posterior (en este celular u otro) restauraba el saldo
+  // pendiente viejo desde la nube — por eso reaparecían pagos ya cobrados.
+  if(ST.online&&ST.url)sincronizarTodo(true);
 
   closeMo('mo-abono');
   toast(`✅ Abono de ${fmt(monto)} registrado para ${folio}`);
@@ -2671,6 +2739,7 @@ function confirmarAbonoPendiente(abonoId){
     encolar({accion:'actualizarODS',folio:o.folio,datos:o});
   }
   encolar({accion:'guardarAbono',datos:abono});
+  if(ST.online&&ST.url)sincronizarTodo(true);
   toast(`✅ Abono de ${fmt(abono.monto)} confirmado para ${abono.folio}`);
   cargarPagos();updDash();
 }
@@ -2678,7 +2747,15 @@ function confirmarAbonoPendiente(abonoId){
 function rechazarAbonoPendiente(abonoId){
   if(!requiereAdmin('⚠ Solo el Administrador puede rechazar abonos')) return;
   if(!confirm('¿Rechazar este abono? No se aplicará al saldo de la orden.'))return;
-  sAbonos(lAbonos().filter(a=>a.id!==abonoId));
+  // Se marca como rechazado (en vez de borrarlo solo localmente) y se
+  // sincroniza: si solo se quitaba del arreglo local, el servidor nunca se
+  // enteraba y el abono "pendiente" podía reaparecer en otro dispositivo.
+  const abonos=lAbonos();
+  const i=abonos.findIndex(a=>a.id===abonoId);
+  if(i<0)return;
+  abonos[i].estado='rechazado';sAbonos(abonos);
+  encolar({accion:'guardarAbono',datos:abonos[i]});
+  if(ST.online&&ST.url)sincronizarTodo(true);
   toast('Abono rechazado');
   cargarPagos();updDash();
 }
@@ -2755,6 +2832,7 @@ function guardarAjusteSaldo(){
   o.restante=Math.max((+o.totalGeneral||0)-o.anticipo,0);
   db[idx]=o;sDB(db);
   encolar({accion:'actualizarODS',folio,datos:o});
+  if(ST.online&&ST.url)sincronizarTodo(true);
   closeMo('mo-saldo');
   toast(`✅ Saldo de ${folio} corregido: restante ${fmt(o.restante)}`);
   cargarPagos();cargarODS();updDash();
