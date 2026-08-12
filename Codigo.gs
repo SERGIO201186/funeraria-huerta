@@ -45,8 +45,13 @@ const ODS_COLS = [
   "subtotal","descuento","iva","totalGeneral","porcentajeAnticipo","anticipo","restante",
   "tienePagare","montoPagare","nombreDeudor","telefonoDeudor","ineDeudor",
   "vencimientoPagare","domicilioDeudor","cantidadLetras",
-  "lugSepelio","fechaSepelio","salidaTraslado","horaMisa","horaSepelio",
-  "crematorio","fechaCremacion","salidaCremacion","horaMisaCrem","horaCremacion",
+  // fechaCeremonia/horaCeremonia + salidaTraslado/horaMisa: campos únicos de
+  // logística de sepelio/cremación, compartidos entre las 2 modalidades desde
+  // v2.3 (antes había un juego duplicado por modalidad — fechaSepelio/
+  // fechaCremacion, horaSepelio/horaCremacion, etc. — que se deja aquí solo
+  // para no perder los datos ya guardados en órdenes viejas).
+  "lugSepelio","crematorio","fechaCeremonia","salidaTraslado","horaMisa","horaCeremonia",
+  "fechaSepelio","horaSepelio","fechaCremacion","salidaCremacion","horaMisaCrem","horaCremacion",
   "foraneoLugarSalida","foraneoHoraSalida",
   "anotaciones","estatusEquipo","estatus",
   "firmaContratanteB64","firmaFecha",
@@ -712,6 +717,7 @@ function onOpen() {
     .addItem("Enviar alerta de prueba ahora", "enviarAlertaPruebaUI")
     .addSeparator()
     .addItem("🔧 Corregir ODS-26-0003 y ODS-26-0005 (una vez)", "corregirOrdenesEquipoAgosto2026")
+    .addItem("🔍 Diagnosticar columnas con encabezado vacío", "diagnosticarColumnasVacias")
     .addToUi();
 }
 function inicializarTodasLasHojas() {
@@ -757,12 +763,12 @@ function embellecerHojas() {
     money: ["costoAtaud","costoAdicionalCremacion","costoUrna","costoUrnaCambio","costoEmbalsamado",
             "costoTramites","costoSala","costoTraslado","costoExcesoPeso","costoObjetoCuerpo","otrosCargos",
             "subtotal","descuento","iva","totalGeneral","anticipo","restante","montoPagare"],
-    date: ["fechaInstalacion","fechaRecoleccion","fechaCreacion","fechaActualizacion","fechaSepelio",
-           "fechaCremacion","vencimientoPagare","firmaFecha"],
+    date: ["fechaInstalacion","fechaRecoleccion","fechaCreacion","fechaActualizacion","fechaCeremonia",
+           "fechaSepelio","fechaCremacion","vencimientoPagare","firmaFecha"],
     // Estas son horas sueltas (sin fecha real) que Sheets guarda con una
     // fecha base falsa (30-dic-1899); mostrarlas como "HH:mm" en vez de
     // fecha completa es solo cosmético, no cambia el valor guardado.
-    time: ["salidaTraslado","horaMisa","horaSepelio","salidaCremacion","horaMisaCrem","horaCremacion","foraneoHoraSalida"]
+    time: ["salidaTraslado","horaMisa","horaCeremonia","horaSepelio","salidaCremacion","horaMisaCrem","horaCremacion","foraneoHoraSalida"]
   });
   _embellecerHoja(getEmpSh(),  { freezeCols: 2 });
   _embellecerHoja(getPrevSh(), { freezeCols: 2, money: ["precioTotal","enganche","cuotaMonto","restante"] });
@@ -884,4 +890,72 @@ function corregirOrdenesEquipoAgosto2026() {
     "celular que uses la app, si no el próximo que sincronice con su copia " +
     "vieja puede volver a sobreescribir esta corrección."
   );
+}
+
+// ============================================================
+//  DIAGNOSTICAR / MIGRAR COLUMNAS CON ENCABEZADO VACÍO
+//  En algún momento el encabezado de una columna de OrdenesTrabajo se quedó
+//  en blanco (en vez de decir "salaVelacion"), así que ensureColumns()
+//  agregó una columna NUEVA con ese nombre al final de la hoja — la vieja,
+//  con encabezado vacío, se quedó ahí sin que ningún código la lea ni
+//  escriba (por eso "no existe" un encabezado con nombre, aunque la
+//  columna en sí sigue presente).
+//  Esta función reporta cuántas filas tienen datos en cada columna vacía y,
+//  si encuentra algo, lo copia a "salaVelacion" (solo en filas donde ese
+//  campo esté vacío, para no pisar nada). Nunca borra la columna sola —
+//  eso se hace a mano en Sheets (clic derecho en la letra → Eliminar
+//  columna) una vez confirmado que ya no tiene nada de valor.
+// ============================================================
+function diagnosticarColumnasVacias() {
+  const sh = getODSSh();
+  const ui = SpreadsheetApp.getUi();
+  const ancho = sh.getLastColumn();
+  const headers = sh.getRange(1, 1, 1, ancho).getValues()[0];
+  const numRows = sh.getLastRow();
+
+  const vacias = [];
+  headers.forEach((h, i) => { if (String(h).trim() === '') vacias.push(i); });
+
+  if (!vacias.length) { ui.alert("No hay columnas con encabezado vacío en OrdenesTrabajo."); return; }
+
+  const ciSala = headers.indexOf("salaVelacion");
+  let migrados = 0;
+  const reportes = [];
+
+  vacias.forEach(ci => {
+    let conDatos = 0;
+    if (numRows > 1) {
+      const valores = sh.getRange(2, ci + 1, numRows - 1, 1).getValues();
+      valores.forEach((fila, idx) => {
+        const v = fila[0];
+        if (v === '' || v === null || v === undefined) return;
+        conDatos++;
+        if (ciSala >= 0) {
+          const filaSheet = idx + 2;
+          const valorSala = sh.getRange(filaSheet, ciSala + 1).getValue();
+          if (valorSala === '' || valorSala === null || valorSala === undefined) {
+            sh.getRange(filaSheet, ciSala + 1).setValue(v);
+            migrados++;
+          }
+        }
+      });
+    }
+    reportes.push(`Columna ${_letraColumna(ci + 1)} (posición ${ci + 1}): ${conDatos} fila(s) con datos.`);
+  });
+
+  ui.alert(
+    "🔍 Columnas con encabezado vacío en OrdenesTrabajo:\n\n" +
+    reportes.join("\n") +
+    (migrados ? `\n\n✅ Se migraron ${migrados} valor(es) a la columna "salaVelacion".` : "") +
+    "\n\nSi ya no quedan datos ahí (o ya se migraron), esa columna está huérfana y la puedes borrar tú mismo en Sheets: clic derecho en la letra de la columna → Eliminar columna."
+  );
+}
+function _letraColumna(col) {
+  let letra = '';
+  while (col > 0) {
+    const resto = (col - 1) % 26;
+    letra = String.fromCharCode(65 + resto) + letra;
+    col = Math.floor((col - 1) / 26);
+  }
+  return letra;
 }
