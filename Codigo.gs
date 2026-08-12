@@ -310,6 +310,26 @@ function actualizarODS(folio, datos) {
   const idx = findRow(sh, "folio", folio);
   if (idx < 0) return guardarODS(datos);    // si no existe, crear
   const headers = headersReales(sh);
+
+  // Protección contra sincronizaciones "de vuelta": la app manda su copia
+  // local COMPLETA cada vez que sincroniza, incluyendo órdenes que ese
+  // dispositivo en realidad no tocó. Si el celular A edita una orden y el
+  // celular B sincroniza después con su copia vieja de esa misma orden (sin
+  // enterarse todavía del cambio de A), B terminaba sobreescribiendo el
+  // cambio de A con datos viejos. Aquí se compara la fecha de actualización
+  // que manda el cliente contra la que ya está guardada: si la que llega es
+  // MÁS VIEJA que la que ya hay, se ignora el guardado (gana el cambio más
+  // reciente, sin importar qué dispositivo sincronizó al final).
+  const ciFecha = headers.indexOf("fechaActualizacion");
+  if (ciFecha >= 0 && datos.fechaActualizacion) {
+    const actual = sh.getRange(idx, ciFecha + 1).getValue();
+    const actualTs = actual ? new Date(actual).getTime() : 0;
+    const entranteTs = new Date(datos.fechaActualizacion).getTime();
+    if (actualTs && entranteTs && entranteTs < actualTs) {
+      return { ok:true, folio, omitido:true };
+    }
+  }
+
   datos.fechaActualizacion = new Date().toISOString();
   sh.getRange(idx, 1, 1, headers.length).setValues([toRow(headers, datos)]);
   logActividad("actualizarODS", datos.creadoPor||"", folio);
@@ -718,6 +738,9 @@ function onOpen() {
     .addSeparator()
     .addItem("🔧 Corregir ODS-26-0003 y ODS-26-0005 (una vez)", "corregirOrdenesEquipoAgosto2026")
     .addItem("🔍 Diagnosticar columnas con encabezado vacío", "diagnosticarColumnasVacias")
+    .addSeparator()
+    .addItem("🗂 Previsualizar reorganización de OrdenesTrabajo", "previsualizarReorganizacionODS")
+    .addItem("✅ Aplicar reorganización de OrdenesTrabajo", "aplicarReorganizacionODS")
     .addToUi();
 }
 function inicializarTodasLasHojas() {
@@ -958,4 +981,139 @@ function _letraColumna(col) {
     col = Math.floor((col - 1) / 26);
   }
   return letra;
+}
+
+// ============================================================
+//  REORGANIZAR OrdenesTrabajo POR GRUPOS DE FUNCIÓN
+//  Agrupa los encabezados existentes por función (contratante/finado,
+//  servicio, costos, velación/equipo, logística, traslado, financiero,
+//  pagaré, firma/notas) y junta en un solo campo los que hoy están
+//  duplicados (fechaSepelio/fechaCremacion → fechaCeremonia,
+//  horaSepelio/horaCremacion → horaCeremonia, salidaCremacion →
+//  salidaTraslado, horaMisaCrem → horaMisa) migrando primero el dato que
+//  falte. NO inventa columnas nuevas ni cambia cómo la app captura datos
+//  (sigue leyendo/escribiendo por nombre de encabezado, sin importar el
+//  orden) — solo reordena y junta lo que ya existe.
+//
+//  Por seguridad, esto es un proceso de 2 pasos:
+//  1) "Previsualizar" arma una hoja NUEVA ("OrdenesTrabajo (vista previa)")
+//     con el resultado, sin tocar en absoluto la hoja OrdenesTrabajo real.
+//  2) "Aplicar" (solo cuando ya revisaste la vista previa) renombra la hoja
+//     actual como respaldo y pone la vista previa en su lugar — nada se
+//     borra, el respaldo se queda ahí por si hay que revertir.
+// ============================================================
+const GRUPOS_ODS = {
+  "Identificación": ["folio","estatus","creadoPor","fechaCreacion","fechaActualizacion"],
+  "Contratante y Finado": ["fallecido","contratante","telefono","direccionCalle","direccionColonia","direccionLocalidad","direccionMunicipio"],
+  "Servicio Contratado": ["modalidadServicio","ataudId","ataudNombre","tipoCremacion","urnaId","urnaNombre","urnaCambioId","urnaCambioNombre","embalsamado","tramites"],
+  "Costos del Servicio": ["costoAtaud","costoAdicionalCremacion","costoUrna","costoUrnaCambio","costoEmbalsamado","costoTramites"],
+  "Velación y Equipo": ["modalidadVelacion","equipoVelacion","estatusEquipo","fechaInstalacion","fechaRecoleccion","salaVelacion","costoSala","insumos"],
+  "Logística de Sepelio/Cremación": ["lugSepelio","crematorio","fechaCeremonia","salidaTraslado","horaMisa","horaCeremonia"],
+  "Traslado": ["destinoTipo","destinoNombre","kmTraslado","costoTraslado","excesoPeso","costoExcesoPeso","objetoCuerpo","costoObjetoCuerpo","foraneoLugarSalida","foraneoHoraSalida"],
+  "Financiero": ["subtotal","descuento","iva","otrosCargos","totalGeneral","porcentajeAnticipo","anticipo","restante"],
+  "Pagaré": ["tienePagare","montoPagare","nombreDeudor","telefonoDeudor","ineDeudor","vencimientoPagare","domicilioDeudor","cantidadLetras"],
+  "Firma y Notas": ["anotaciones","firmaContratanteB64","firmaFecha"]
+};
+// Campos viejos que ya quedaron reemplazados por uno unificado (ver arriba)
+// — se migran a su reemplazo y luego se descartan de la vista reorganizada.
+const CAMPOS_VIEJOS_ODS = {
+  fechaSepelio: "fechaCeremonia", fechaCremacion: "fechaCeremonia",
+  horaSepelio: "horaCeremonia", horaCremacion: "horaCeremonia",
+  salidaCremacion: "salidaTraslado", horaMisaCrem: "horaMisa"
+};
+
+function previsualizarReorganizacionODS() {
+  const ui = SpreadsheetApp.getUi();
+  const shOrig = getODSSh();
+  const dataOrig = shOrig.getDataRange().getValues();
+  if (dataOrig.length < 1) { ui.alert("La hoja OrdenesTrabajo está vacía."); return; }
+  const headersOrig = dataOrig[0];
+  const filas = dataOrig.slice(1).map(r => toObj(headersOrig, r));
+
+  // 1) Migra a los campos unificados (solo en memoria) el dato viejo que
+  //    falte, y cualquier columna con encabezado vacío hacia salaVelacion.
+  filas.forEach(o => {
+    Object.keys(CAMPOS_VIEJOS_ODS).forEach(viejo => {
+      const nuevo = CAMPOS_VIEJOS_ODS[viejo];
+      if (!o[nuevo] && o[viejo]) o[nuevo] = o[viejo];
+    });
+    if (!o.salaVelacion && o['']) o.salaVelacion = o[''];
+  });
+
+  // 2) Arma el nuevo orden agrupado. Cualquier columna real que exista hoy
+  //    pero no esté en ningún grupo (por si se agregó una nueva sin
+  //    actualizar esta lista) se agrega al final, para no perderla.
+  const nuevoOrden = [].concat(...Object.values(GRUPOS_ODS));
+  const descartar = new Set(Object.keys(CAMPOS_VIEJOS_ODS).concat(['']));
+  headersOrig.forEach(h => {
+    const nombre = String(h).trim();
+    if (!nombre || descartar.has(nombre) || nuevoOrden.includes(nombre)) return;
+    nuevoOrden.push(nombre);
+  });
+
+  // 3) Escribe la vista previa en una hoja NUEVA — la original no se toca.
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const nombrePreview = "OrdenesTrabajo (vista previa)";
+  const previaVieja = ss.getSheetByName(nombrePreview);
+  if (previaVieja) ss.deleteSheet(previaVieja);
+  const shPreview = ss.insertSheet(nombrePreview);
+
+  const filasNuevas = filas.map(o => nuevoOrden.map(h => o[h] !== undefined ? o[h] : ''));
+  shPreview.getRange(1, 1, 1, nuevoOrden.length).setValues([nuevoOrden]);
+  if (filasNuevas.length) shPreview.getRange(2, 1, filasNuevas.length, nuevoOrden.length).setValues(filasNuevas);
+
+  _embellecerHoja(shPreview, {
+    freezeCols: 2,
+    money: ["costoAtaud","costoAdicionalCremacion","costoUrna","costoUrnaCambio","costoEmbalsamado",
+            "costoTramites","costoSala","costoTraslado","costoExcesoPeso","costoObjetoCuerpo","otrosCargos",
+            "subtotal","descuento","iva","totalGeneral","anticipo","restante","montoPagare"],
+    date: ["fechaInstalacion","fechaRecoleccion","fechaCreacion","fechaActualizacion","fechaCeremonia",
+           "vencimientoPagare","firmaFecha"],
+    time: ["salidaTraslado","horaMisa","horaCeremonia","foraneoHoraSalida"]
+  });
+
+  // Un color de encabezado distinto por grupo, para que se note la
+  // agrupación de un vistazo (las columnas "extra" al final quedan con el
+  // color parejo que ya dejó _embellecerHoja). Va DESPUÉS de _embellecerHoja
+  // a propósito: ese helper repinta todo el encabezado de un solo color, así
+  // que si esto corriera antes, los colores por grupo quedarían tapados.
+  const coloresGrupo = ["#0f172a","#1e3a5f","#134e2e","#5b3a29","#4a1d5c","#5c1d1d","#1d4e5c","#5c4a1d","#2d1d5c","#1d5c4a"];
+  let col = 1;
+  Object.values(GRUPOS_ODS).forEach((cols, i) => {
+    shPreview.getRange(1, col, 1, cols.length).setBackground(coloresGrupo[i % coloresGrupo.length]).setFontColor("#ffffff").setFontWeight("bold");
+    col += cols.length;
+  });
+
+  ui.alert(
+    "✅ Vista previa creada en la pestaña \"" + nombrePreview + "\".\n\n" +
+    "La hoja OrdenesTrabajo real NO se tocó — revisa la vista previa con calma. " +
+    "Si se ve bien, corre \"✅ Aplicar reorganización de OrdenesTrabajo\" para reemplazarla " +
+    "(la hoja actual se guarda como respaldo, no se borra nada)."
+  );
+}
+
+function aplicarReorganizacionODS() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const preview = ss.getSheetByName("OrdenesTrabajo (vista previa)");
+  if (!preview) { ui.alert("Primero corre \"🗂 Previsualizar reorganización de OrdenesTrabajo\"."); return; }
+
+  const r = ui.alert(
+    "¿Aplicar la reorganización?",
+    "Esto renombra la hoja actual \"OrdenesTrabajo\" como respaldo y pone la vista previa en su lugar. No se borra nada. ¿Continuar?",
+    ui.ButtonSet.YES_NO
+  );
+  if (r !== ui.Button.YES) return;
+
+  const actual = ss.getSheetByName(SH_ODS);
+  const fecha = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd_HHmm");
+  const nombreRespaldo = "OrdenesTrabajo (respaldo " + fecha + ")";
+  actual.setName(nombreRespaldo);
+  preview.setName(SH_ODS);
+
+  ui.alert(
+    "✅ Listo. La hoja reorganizada ya es \"" + SH_ODS + "\".\n\n" +
+    "La versión anterior quedó guardada como \"" + nombreRespaldo + "\" — bórrala tú mismo cuando " +
+    "confirmes que todo está bien (Sheets no lo hace solo)."
+  );
 }

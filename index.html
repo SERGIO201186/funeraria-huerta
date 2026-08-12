@@ -975,6 +975,7 @@ function revisarTransicionesAutomaticas(){
     if(f>=hoyD)return; // aún no pasa la fecha del servicio
     if((+o.restante||0)>0){
       o.estatus='PENDIENTE_PAGO';
+      o.fechaActualizacion=new Date().toISOString();
       encolar({accion:'actualizarODS',folio:o.folio,datos:o});
       huboCambios=true;
     }
@@ -1708,6 +1709,7 @@ function guardarODS(){
   if(!d.fallecido||!d.contratante){toast('⚠ Completa fallecido y contratante');return}
   if(d.modalidadServicio==='INHUMACION'&&!d.ataudId){toast('⚠ Selecciona un ataúd del inventario disponible');return}
   if(d.modalidadServicio==='CREMACION'&&!d.urnaId){toast('⚠ Selecciona una urna del inventario disponible');return}
+  d.fechaActualizacion=new Date().toISOString();
   const db=lDB();db.unshift(d);sDB(db);
   encolar({accion:'guardarODS',datos:d});
   reservarPiezasDeOrden(d).then(()=>cargarCatalogoTienda()); // aparta la pieza y refresca el inventario visible
@@ -1761,6 +1763,7 @@ function guardarEdicionODS(){
   d.fechaCreacion=anterior.fechaCreacion;
   d.firmaContratanteB64=anterior.firmaContratanteB64||_firmaPendiente||'';
   d.firmaFecha=anterior.firmaFecha||(_firmaPendiente?new Date().toISOString():'');
+  d.fechaActualizacion=new Date().toISOString();
 
   db[idx]=d;sDB(db);
   encolar({accion:'actualizarODS',folio,datos:d});
@@ -1941,7 +1944,7 @@ function cambiarEst(folio,est){
   const db=lDB();const i=db.findIndex(o=>o.folio===folio);if(i<0)return;
   const o=db[i];
   const eraCerrada=o.estatus==='CERRADA';
-  o.estatus=est;db[i]=o;sDB(db);
+  o.estatus=est;o.fechaActualizacion=new Date().toISOString();db[i]=o;sDB(db);
   encolar({accion:'actualizarODS',folio,datos:o});
   // Al CERRAR la orden, las piezas reservadas se eliminan definitivamente del inventario
   if(est==='CERRADA'&&!eraCerrada) eliminarPiezasDeOrden(o);
@@ -1954,7 +1957,7 @@ function cambiarEst(folio,est){
 }
 function equipoRecogido(folio){
   const db=lDB();const i=db.findIndex(o=>o.folio===folio);if(i<0)return;
-  db[i].estatusEquipo='RECOGIDO';sDB(db);
+  db[i].estatusEquipo='RECOGIDO';db[i].fechaActualizacion=new Date().toISOString();sDB(db);
   encolar({accion:'actualizarODS',folio,datos:db[i]});
   // Igual que en cambiarEst(): hay que sincronizar de inmediato o el
   // "RECOGIDO" solo queda local y una sincronización posterior lo revierte
@@ -2263,7 +2266,7 @@ function guardarFirmaLocal(){
   _firmaPendiente=b64;
   const db=lDB();const i=db.findIndex(o=>o.folio===_folioActual);
   if(i>=0){
-    db[i].firmaContratanteB64=b64;db[i].firmaFecha=new Date().toISOString();sDB(db);
+    db[i].firmaContratanteB64=b64;db[i].firmaFecha=new Date().toISOString();db[i].fechaActualizacion=new Date().toISOString();sDB(db);
     encolar({accion:'guardarFirma',datos:{folio:_folioActual,firmaB64:b64,creadoPor:ST.user?ST.user.nombreCompleto:''}});
     if(ST.online&&ST.url)sincronizarTodo(true);
   }
@@ -2671,6 +2674,7 @@ function guardarLogistica(){
 
   o.foraneoLugarSalida=$('log-foraneo-salida-lugar').value;
   o.foraneoHoraSalida=$('log-foraneo-hora-salida').value;
+  o.fechaActualizacion=new Date().toISOString();
 
   db[idx]=o;sDB(db);
   encolar({accion:'actualizarODS',folio,datos:o});
@@ -2720,6 +2724,7 @@ function confirmarAbono(){
 
   o.anticipo=(+o.anticipo||0)+monto;
   o.restante=Math.max((+o.totalGeneral||0)-(+o.anticipo||0),0);
+  o.fechaActualizacion=new Date().toISOString();
   db[idx]=o;sDB(db);
   encolar({accion:'actualizarODS',folio,datos:o});
   encolar({accion:'guardarAbono',datos:abono});
@@ -2749,6 +2754,7 @@ function confirmarAbonoPendiente(abonoId){
     const o=db[idx];
     o.anticipo=(+o.anticipo||0)+(+abono.monto||0);
     o.restante=Math.max((+o.totalGeneral||0)-(+o.anticipo||0),0);
+    o.fechaActualizacion=new Date().toISOString();
     db[idx]=o;sDB(db);
     encolar({accion:'actualizarODS',folio:o.folio,datos:o});
   }
@@ -2844,6 +2850,7 @@ function guardarAjusteSaldo(){
   const sumaAbonos=abonos.reduce((s,a)=>s+(+a.monto||0),0);
   o.anticipo=Math.max(+anticipoInicial,0)+sumaAbonos;
   o.restante=Math.max((+o.totalGeneral||0)-o.anticipo,0);
+  o.fechaActualizacion=new Date().toISOString();
   db[idx]=o;sDB(db);
   encolar({accion:'actualizarODS',folio,datos:o});
   if(ST.online&&ST.url)sincronizarTodo(true);
