@@ -2086,6 +2086,15 @@ async function cargarAlertaConfig(){
     }else{el.textContent='No se pudo consultar el estado de alertas.'}
   }catch(e){el.textContent='No se pudo consultar el estado de alertas.'}
 }
+// Muestra el motivo real del error debajo del botón (los toasts desaparecen
+// muy rápido para copiar un mensaje largo, y "r.mensaje" no existe cuando
+// el servidor truena con una excepción — ahí solo viene "r.error").
+function mostrarErrorAlerta(r,e){
+  const el=$('al-status');
+  const detalle=(r&&(r.mensaje||r.error))||(e&&e.message)||'Error desconocido';
+  if(el)el.textContent='❌ '+detalle;
+  toast('❌ '+detalle);
+}
 async function guardarAlertaEmail(activar){
   if(!ST.url){toast('⚠ Guarda primero el enlace de Apps Script');return}
   const email=$('al-email').value.trim();
@@ -2093,9 +2102,9 @@ async function guardarAlertaEmail(activar){
   toast('⏳ Guardando…',1500);
   try{
     const r=await api({accion:'guardarAlertaConfig',datos:{email,activo:activar}});
-    toast(r.ok?'✅ '+r.mensaje:'❌ '+(r.mensaje||'Error'));
-    cargarAlertaConfig();
-  }catch(e){toast('❌ Error: '+e.message)}
+    if(r.ok){toast('✅ '+r.mensaje);cargarAlertaConfig();}
+    else mostrarErrorAlerta(r);
+  }catch(e){mostrarErrorAlerta(null,e)}
 }
 async function probarAlertaPendientes(){
   if(!ST.url){toast('⚠ Guarda primero el enlace de Apps Script');return}
@@ -2104,10 +2113,12 @@ async function probarAlertaPendientes(){
   toast('⏳ Enviando correo de prueba…',2500);
   try{
     // Guarda el correo (sin activar/desactivar el disparador diario) antes de mandar la prueba.
-    await api({accion:'guardarAlertaConfig',datos:{email}});
+    const rc=await api({accion:'guardarAlertaConfig',datos:{email}});
+    if(!rc.ok){mostrarErrorAlerta(rc);return}
     const r=await api({accion:'enviarAlertaPrueba'});
-    toast(r.ok?`✅ ${r.mensaje} (${r.total} pendientes)`:'❌ '+(r.mensaje||'Error'));
-  }catch(e){toast('❌ Error: '+e.message)}
+    if(r.ok)toast(`✅ ${r.mensaje} (${r.total} pendientes)`);
+    else mostrarErrorAlerta(r);
+  }catch(e){mostrarErrorAlerta(null,e)}
 }
 function guardarUrl(){
   const url=$('sc-url').value.trim();
