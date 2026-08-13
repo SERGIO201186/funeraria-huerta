@@ -2459,6 +2459,14 @@ async function sincronizarTodo(silencioso=false){
         });
         sDB(Object.values(porFolio));
       }
+      if(r.eliminados&&r.eliminados.length){
+        // Limpia cualquier folio ya borrado que haya quedado en la copia
+        // local de este dispositivo (ej. no sincronizaba desde antes del
+        // borrado) — si no, cada sync lo volvería a mandar y a intentar
+        // resucitarlo.
+        const elimSet=new Set(r.eliminados);
+        sDB(lDB().filter(o=>!elimSet.has(o.folio)));
+      }
       if(r.colaboradores&&r.colaboradores.length)sEmp(r.colaboradores);
       if(r.abonos&&r.abonos.length){
         const localAb=lAbonos();
