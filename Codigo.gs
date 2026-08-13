@@ -20,6 +20,7 @@ const SH_ABONO = "Abonos";
 const SH_LOG   = "LogActividad";
 const SH_PROD  = "Productos";      // ← catálogo de ataúdes/urnas
 const SH_SOLIC = "Solicitudes";    // ← solicitudes de edición de ODS (empleados)
+const SH_CERT  = "Certificaciones"; // ← datos para certificado médico / Registro Civil
 
 // — CABECERAS ODS ----------------------------------------------
 // IMPORTANTE: el ORDEN de este arreglo ya no determina en qué columna
@@ -79,6 +80,33 @@ const SOLIC_COLS = [
   "estado","fecha","fechaHora","fechaResolucion","resueltoPor"
 ];
 
+// — CABECERAS CERTIFICACIÓN (datos para el médico + Registro Civil) -----
+// Una fila por folio (upsert, igual que Previsiones). "EstadoX" en cónyuge/
+// padre/madre guarda "VIVO" o "FINADO"; los datos de nacimiento solo
+// aplican si está "VIVO". El parentesco de declarante/testigos solo admite
+// vínculo consanguíneo — cualquier otro (amistad, padrino, compadre,
+// novio, etc.) se captura como "NINGUNO".
+const CERT_COLS = [
+  "folio",
+  "finadoNombre","finadoEstadoCivil","finadoFechaNacimiento","finadoEntidadNacimiento",
+  "finadoGradoEstudios","finadoDomicilio","finadoAfiliacionSalud","finadoOcupacion",
+  "finadoLugarDefuncion","finadoFechaDefuncion","finadoHoraDefuncion",
+  "finadoEraCasado",
+  "conyugeNombre","conyugeEstado","conyugeFechaNacimiento",
+  "conyugeLocalidadNac","conyugeMunicipioNac","conyugeEstadoNac","conyugePaisNac",
+  "padreNombre","padreEstado","padreFechaNacimiento",
+  "padreLocalidadNac","padreMunicipioNac","padreEstadoNac","padrePaisNac",
+  "madreNombre","madreEstado","madreFechaNacimiento",
+  "madreLocalidadNac","madreMunicipioNac","madreEstadoNac","madrePaisNac",
+  "declaranteNombre","declaranteParentesco","declaranteEstadoCivil",
+  "declaranteLocalidadNac","declaranteMunicipioNac","declaranteEstadoNac","declarantePaisNac","declaranteTelefono",
+  "testigo1Nombre","testigo1Parentesco","testigo1EstadoCivil",
+  "testigo1LocalidadNac","testigo1MunicipioNac","testigo1EstadoNac","testigo1PaisNac","testigo1Telefono",
+  "testigo2Nombre","testigo2Parentesco","testigo2EstadoCivil",
+  "testigo2LocalidadNac","testigo2MunicipioNac","testigo2EstadoNac","testigo2PaisNac","testigo2Telefono",
+  "creadoPor","fechaCreacion","fechaActualizacion"
+];
+
 //
 //  SALIDA JSON
 //  NOTA: ContentService.TextOutput NO tiene método setHeader().
@@ -130,6 +158,9 @@ function doPost(e) {
       // Solicitudes de edición de ODS (empleados piden autorización)
       case "guardarSolicitud":   result = guardarSolicitud(payload.datos);  break;
       case "obtenerSolicitudes": result = obtenerSolicitudes(payload.filtros||{}); break;
+      // Certificación (datos para el médico + Registro Civil)
+      case "guardarCertificacion":   result = guardarCertificacion(payload.datos);   break;
+      case "obtenerCertificaciones": result = obtenerCertificaciones(payload.filtros||{}); break;
       // Alertas de pendientes por correo (equipos sin recoger, saldos, solicitudes, abonos)
       case "guardarAlertaConfig":result = guardarAlertaConfig(payload.datos||{}); break;
       case "obtenerAlertaConfig":result = obtenerAlertaConfig();            break;
@@ -195,6 +226,7 @@ function getAbonoSh() { return initSheet(SH_ABONO, ["id","folio","contratante","
 "cajero","estado","fechaRegistro"]); }
 function getProdSh() { return initSheet(SH_PROD, PROD_COLS); }
 function getSolicSh() { return initSheet(SH_SOLIC, SOLIC_COLS); }
+function getCertSh()  { return initSheet(SH_CERT,  CERT_COLS);  }
 
 // Encabezados REALES de la hoja tal como están hoy (para leer/escribir
 // siempre alineado a lo que en verdad hay en la fila 1, nunca a una
@@ -444,6 +476,35 @@ function obtenerSolicitudes(filtros) {
 }
 
 // ============================================================
+//  CERTIFICACIÓN (datos para el médico + Registro Civil)
+//  Una fila por folio, upsert igual que Previsiones.
+// ============================================================
+function guardarCertificacion(datos) {
+  const sh = getCertSh();
+  const headers = headersReales(sh);
+  const idx = findRow(sh, "folio", datos.folio);
+  datos.fechaActualizacion = new Date().toISOString();
+  if (idx > 0) {
+    sh.getRange(idx, 1, 1, headers.length).setValues([toRow(headers, datos)]);
+    return { ok:true, folio:datos.folio, mensaje:"Certificación actualizada" };
+  }
+  datos.fechaCreacion = datos.fechaCreacion || new Date().toISOString();
+  sh.appendRow(toRow(headers, datos));
+  return { ok:true, folio:datos.folio, mensaje:"Certificación guardada" };
+}
+
+function obtenerCertificaciones(filtros) {
+  const sh = getCertSh();
+  const data = sh.getDataRange().getValues();
+  if (data.length <= 1) return { ok:true, datos:[] };
+  const headers = data[0];
+  let filas = data.slice(1).map(r => toObj(headers, r));
+  filtros = filtros || {};
+  if (filtros.folio) filas = filas.filter(r => r.folio === filtros.folio);
+  return { ok:true, datos:filas, total:filas.length };
+}
+
+// ============================================================
 //  PREVISIONES (compatibilidad app hermana)
 // ============================================================
 function guardarPrevision(datos) {
@@ -503,17 +564,19 @@ function obtenerAbonos(folio) {
 //  SINCRONIZACIÓN MASIVA
 // ============================================================
 function sincronizarTodo(payload) {
-  const ods         = payload.ods    || [];
-  const emps        = payload.colaboradores || [];
-  const prevs       = payload.previsiones   || [];
-  const abonos      = payload.abonos        || [];
-  const solicitudes = payload.solicitudes   || [];
+  const ods            = payload.ods    || [];
+  const emps           = payload.colaboradores || [];
+  const prevs          = payload.previsiones   || [];
+  const abonos         = payload.abonos        || [];
+  const solicitudes    = payload.solicitudes   || [];
+  const certificaciones= payload.certificaciones || [];
 
-  ods.forEach(o         => guardarODS(o));
-  emps.forEach(e        => guardarColaborador(e));
-  prevs.forEach(p       => guardarPrevision(p));
-  abonos.forEach(a      => guardarAbono(a));
-  solicitudes.forEach(s => guardarSolicitud(s));
+  ods.forEach(o             => guardarODS(o));
+  emps.forEach(e            => guardarColaborador(e));
+  prevs.forEach(p           => guardarPrevision(p));
+  abonos.forEach(a          => guardarAbono(a));
+  solicitudes.forEach(s     => guardarSolicitud(s));
+  certificaciones.forEach(c => guardarCertificacion(c));
 
   return {
     ok:true,
@@ -522,7 +585,8 @@ function sincronizarTodo(payload) {
     colaboradores: obtenerColaboradores().datos,
     previsiones:    obtenerPrevisiones({}).datos,
     abonos:         obtenerAbonos(null).datos,
-    solicitudes:    obtenerSolicitudes({}).datos
+    solicitudes:    obtenerSolicitudes({}).datos,
+    certificaciones: obtenerCertificaciones({}).datos
   };
 }
 
@@ -744,7 +808,7 @@ function onOpen() {
     .addToUi();
 }
 function inicializarTodasLasHojas() {
-  getODSSh(); getEmpSh(); getPrevSh(); getAbonoSh(); getProdSh(); getSolicSh();
+  getODSSh(); getEmpSh(); getPrevSh(); getAbonoSh(); getProdSh(); getSolicSh(); getCertSh();
   SpreadsheetApp.getUi().alert("✅ Hojas inicializadas/reparadas correctamente. Cualquier columna nueva que faltaba se agregó al final de cada hoja.");
 }
 function configurarCorreoAlertasUI() {
@@ -798,6 +862,8 @@ function embellecerHojas() {
   _embellecerHoja(getAbonoSh(),{ freezeCols: 2, money: ["monto"], date: ["fecha","fechaRegistro"] });
   _embellecerHoja(getProdSh(), { freezeCols: 2, money: ["costo","precioSugerido"] });
   _embellecerHoja(getSolicSh(),{ freezeCols: 2 });
+  _embellecerHoja(getCertSh(), { freezeCols: 2, date: ["finadoFechaNacimiento","finadoFechaDefuncion",
+    "conyugeFechaNacimiento","padreFechaNacimiento","madreFechaNacimiento","fechaCreacion","fechaActualizacion"] });
 
   _colorearEstatusODS();
 
