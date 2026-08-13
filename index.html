@@ -863,6 +863,282 @@ button:active{transform:scale(.97)}
   </div>
 </div>
 
+<!-- MODAL CERTIFICAR: 3 pestañas — (1) Info para el Médico [datos del finado +
+     familiares, para pedir el certificado de defunción], (2) Solicitud de
+     Registro Civil [pendiente de campos], (3) Mapeo sobre el formato oficial
+     [pendiente de la imagen del formato]. -->
+<div class="mo" id="mo-certificar">
+  <div class="mb" style="max-width:760px">
+    <button class="mc" onclick="closeMo('mo-certificar')">✕</button>
+    <div class="mt2">Certificar — <span id="cert-folio-disp"></span></div>
+    <div style="display:flex;gap:6px;margin:10px 0 14px;flex-wrap:wrap">
+      <button class="bg bsm cert-tab-btn" data-tab="1" onclick="certTab(1)">1. Info para Médico</button>
+      <button class="bo bsm cert-tab-btn" data-tab="2" onclick="certTab(2)">2. Solicitud Registro Civil</button>
+      <button class="bo bsm cert-tab-btn" data-tab="3" onclick="certTab(3)">3. Mapeo de Formato</button>
+    </div>
+
+    <!-- PESTAÑA 1: INFO PARA EL MÉDICO -->
+    <div id="cert-tab-1" class="cert-tab">
+      <div class="card">
+        <div class="st">Datos del Finado</div>
+        <div class="f"><label class="lbl">Nombre completo</label><input id="c-fi-nombre" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Estado Civil</label>
+            <select id="c-fi-edocivil">
+              <option value="SOLTERO">Soltero(a)</option>
+              <option value="CASADO">Casado(a)</option>
+              <option value="VIUDO">Viudo(a)</option>
+              <option value="DIVORCIADO">Divorciado(a)</option>
+              <option value="UNION_LIBRE">Unión libre</option>
+            </select>
+          </div>
+          <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="c-fi-fecnac" type="date"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Entidad de Nacimiento</label><input id="c-fi-entnac" type="text"/></div>
+          <div class="f"><label class="lbl">Grado de Estudios</label><input id="c-fi-estudios" type="text"/></div>
+        </div>
+        <div class="f"><label class="lbl">Domicilio Habitual</label><input id="c-fi-domicilio" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Afiliación a Servicios de Salud</label><input id="c-fi-afiliacion" type="text" placeholder="IMSS, ISSSTE, Ninguna…"/></div>
+          <div class="f"><label class="lbl">Ocupación Habitual</label><input id="c-fi-ocupacion" type="text"/></div>
+        </div>
+        <div class="f"><label class="lbl">Lugar donde Ocurrió la Defunción</label><input id="c-fi-lugardef" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Fecha de Defunción</label><input id="c-fi-fecdef" type="date"/></div>
+          <div class="f"><label class="lbl">Hora de Defunción</label><input id="c-fi-hordef" type="time"/></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="st">¿El finado era casado?</div>
+        <div class="f"><select id="c-fi-eracasado" onchange="toggleCertConyuge()">
+          <option value="NO">No</option>
+          <option value="SI">Sí</option>
+        </select></div>
+        <div id="c-blq-conyuge" style="display:none">
+          <div class="f"><label class="lbl">Nombre del Cónyuge</label><input id="c-cony-nombre" type="text"/></div>
+          <div class="f"><label class="lbl">¿El cónyuge vive?</label>
+            <select id="c-cony-estado" onchange="toggleCertVivo('cony')">
+              <option value="VIVO">Vivo</option>
+              <option value="FINADO">Finado</option>
+            </select>
+          </div>
+          <div id="c-blq-cony-vivo" style="display:none">
+            <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="c-cony-fecnac" type="date"/></div>
+            <div class="g2">
+              <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-cony-localidad" type="text"/></div>
+              <div class="f"><label class="lbl">Municipio</label><input id="c-cony-municipio" type="text"/></div>
+            </div>
+            <div class="g2">
+              <div class="f"><label class="lbl">Estado</label><input id="c-cony-estadonac" type="text"/></div>
+              <div class="f"><label class="lbl">País</label><input id="c-cony-pais" type="text" value="México"/></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="st">Padre del Finado</div>
+        <div class="f"><label class="lbl">Nombre del Padre</label><input id="c-pa-nombre" type="text"/></div>
+        <div class="f"><label class="lbl">¿El padre vive?</label>
+          <select id="c-pa-estado" onchange="toggleCertVivo('pa')">
+            <option value="VIVO">Vivo</option>
+            <option value="FINADO">Finado</option>
+          </select>
+        </div>
+        <div id="c-blq-pa-vivo" style="display:none">
+          <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="c-pa-fecnac" type="date"/></div>
+          <div class="g2">
+            <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-pa-localidad" type="text"/></div>
+            <div class="f"><label class="lbl">Municipio</label><input id="c-pa-municipio" type="text"/></div>
+          </div>
+          <div class="g2">
+            <div class="f"><label class="lbl">Estado</label><input id="c-pa-estadonac" type="text"/></div>
+            <div class="f"><label class="lbl">País</label><input id="c-pa-pais" type="text" value="México"/></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="st">Madre del Finado</div>
+        <div class="f"><label class="lbl">Nombre de la Madre</label><input id="c-ma-nombre" type="text"/></div>
+        <div class="f"><label class="lbl">¿La madre vive?</label>
+          <select id="c-ma-estado" onchange="toggleCertVivo('ma')">
+            <option value="VIVO">Vivo</option>
+            <option value="FINADO">Finado</option>
+          </select>
+        </div>
+        <div id="c-blq-ma-vivo" style="display:none">
+          <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="c-ma-fecnac" type="date"/></div>
+          <div class="g2">
+            <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-ma-localidad" type="text"/></div>
+            <div class="f"><label class="lbl">Municipio</label><input id="c-ma-municipio" type="text"/></div>
+          </div>
+          <div class="g2">
+            <div class="f"><label class="lbl">Estado</label><input id="c-ma-estadonac" type="text"/></div>
+            <div class="f"><label class="lbl">País</label><input id="c-ma-pais" type="text" value="México"/></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="st">Declarante</div>
+        <div class="f"><label class="lbl">Nombre</label><input id="c-decl-nombre" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Parentesco con el Finado</label>
+            <select id="c-decl-parentesco">
+              <option value="NINGUNO">Ninguno (no consanguíneo)</option>
+              <option value="CONYUGE">Cónyuge</option>
+              <option value="HIJO">Hijo(a)</option>
+              <option value="PADRE">Padre</option>
+              <option value="MADRE">Madre</option>
+              <option value="HERMANO">Hermano(a)</option>
+              <option value="ABUELO">Abuelo(a)</option>
+              <option value="NIETO">Nieto(a)</option>
+              <option value="TIO">Tío(a)</option>
+              <option value="SOBRINO">Sobrino(a)</option>
+              <option value="PRIMO">Primo(a)</option>
+              <option value="CUNADO">Cuñado(a)</option>
+              <option value="SUEGRO">Suegro(a)</option>
+              <option value="YERNO_NUERA">Yerno/Nuera</option>
+            </select>
+          </div>
+          <div class="f"><label class="lbl">Estado Civil</label>
+            <select id="c-decl-edocivil">
+              <option value="SOLTERO">Soltero(a)</option>
+              <option value="CASADO">Casado(a)</option>
+              <option value="VIUDO">Viudo(a)</option>
+              <option value="DIVORCIADO">Divorciado(a)</option>
+              <option value="UNION_LIBRE">Unión libre</option>
+            </select>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-decl-localidad" type="text"/></div>
+          <div class="f"><label class="lbl">Municipio</label><input id="c-decl-municipio" type="text"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Estado</label><input id="c-decl-estadonac" type="text"/></div>
+          <div class="f"><label class="lbl">País</label><input id="c-decl-pais" type="text" value="México"/></div>
+        </div>
+        <div class="f"><label class="lbl">Teléfono</label><input id="c-decl-telefono" type="tel"/></div>
+      </div>
+
+      <div class="card">
+        <div class="st">Testigo 1</div>
+        <div class="f"><label class="lbl">Nombre</label><input id="c-test1-nombre" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Parentesco con el Finado</label>
+            <select id="c-test1-parentesco">
+              <option value="NINGUNO">Ninguno (no consanguíneo)</option>
+              <option value="CONYUGE">Cónyuge</option>
+              <option value="HIJO">Hijo(a)</option>
+              <option value="PADRE">Padre</option>
+              <option value="MADRE">Madre</option>
+              <option value="HERMANO">Hermano(a)</option>
+              <option value="ABUELO">Abuelo(a)</option>
+              <option value="NIETO">Nieto(a)</option>
+              <option value="TIO">Tío(a)</option>
+              <option value="SOBRINO">Sobrino(a)</option>
+              <option value="PRIMO">Primo(a)</option>
+              <option value="CUNADO">Cuñado(a)</option>
+              <option value="SUEGRO">Suegro(a)</option>
+              <option value="YERNO_NUERA">Yerno/Nuera</option>
+            </select>
+          </div>
+          <div class="f"><label class="lbl">Estado Civil</label>
+            <select id="c-test1-edocivil">
+              <option value="SOLTERO">Soltero(a)</option>
+              <option value="CASADO">Casado(a)</option>
+              <option value="VIUDO">Viudo(a)</option>
+              <option value="DIVORCIADO">Divorciado(a)</option>
+              <option value="UNION_LIBRE">Unión libre</option>
+            </select>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-test1-localidad" type="text"/></div>
+          <div class="f"><label class="lbl">Municipio</label><input id="c-test1-municipio" type="text"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Estado</label><input id="c-test1-estadonac" type="text"/></div>
+          <div class="f"><label class="lbl">País</label><input id="c-test1-pais" type="text" value="México"/></div>
+        </div>
+        <div class="f"><label class="lbl">Teléfono</label><input id="c-test1-telefono" type="tel"/></div>
+      </div>
+
+      <div class="card">
+        <div class="st">Testigo 2</div>
+        <div class="f"><label class="lbl">Nombre</label><input id="c-test2-nombre" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Parentesco con el Finado</label>
+            <select id="c-test2-parentesco">
+              <option value="NINGUNO">Ninguno (no consanguíneo)</option>
+              <option value="CONYUGE">Cónyuge</option>
+              <option value="HIJO">Hijo(a)</option>
+              <option value="PADRE">Padre</option>
+              <option value="MADRE">Madre</option>
+              <option value="HERMANO">Hermano(a)</option>
+              <option value="ABUELO">Abuelo(a)</option>
+              <option value="NIETO">Nieto(a)</option>
+              <option value="TIO">Tío(a)</option>
+              <option value="SOBRINO">Sobrino(a)</option>
+              <option value="PRIMO">Primo(a)</option>
+              <option value="CUNADO">Cuñado(a)</option>
+              <option value="SUEGRO">Suegro(a)</option>
+              <option value="YERNO_NUERA">Yerno/Nuera</option>
+            </select>
+          </div>
+          <div class="f"><label class="lbl">Estado Civil</label>
+            <select id="c-test2-edocivil">
+              <option value="SOLTERO">Soltero(a)</option>
+              <option value="CASADO">Casado(a)</option>
+              <option value="VIUDO">Viudo(a)</option>
+              <option value="DIVORCIADO">Divorciado(a)</option>
+              <option value="UNION_LIBRE">Unión libre</option>
+            </select>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-test2-localidad" type="text"/></div>
+          <div class="f"><label class="lbl">Municipio</label><input id="c-test2-municipio" type="text"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Estado</label><input id="c-test2-estadonac" type="text"/></div>
+          <div class="f"><label class="lbl">País</label><input id="c-test2-pais" type="text" value="México"/></div>
+        </div>
+        <div class="f"><label class="lbl">Teléfono</label><input id="c-test2-telefono" type="tel"/></div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+        <button class="bg" style="flex:1" onclick="guardarCertificacion()">💾 Guardar</button>
+        <button class="bo" onclick="descargarInfoMedicoPDF()">📄 PDF</button>
+        <button class="bo" onclick="descargarInfoMedicoJPG()">🖼 JPG</button>
+      </div>
+      <p style="font-size:11px;color:var(--text3);margin-top:6px">El PDF/JPG solo incluye los datos del finado y el nombre del declarante (lo que se envía al médico) — guarda primero para que estén actualizados.</p>
+    </div>
+
+    <!-- PESTAÑA 2: SOLICITUD REGISTRO CIVIL (pendiente de campos) -->
+    <div id="cert-tab-2" class="cert-tab" style="display:none">
+      <div class="card" style="text-align:center;padding:34px 16px">
+        <div style="font-size:34px;margin-bottom:8px">🚧</div>
+        <div style="font-weight:700;margin-bottom:6px">En construcción</div>
+        <p style="font-size:13px;color:var(--text2)">Falta la lista puntual de campos adicionales para la solicitud de Registro Civil.</p>
+      </div>
+    </div>
+
+    <!-- PESTAÑA 3: MAPEO SOBRE FORMATO OFICIAL (pendiente de la imagen) -->
+    <div id="cert-tab-3" class="cert-tab" style="display:none">
+      <div class="card" style="text-align:center;padding:34px 16px">
+        <div style="font-size:34px;margin-bottom:8px">🚧</div>
+        <div style="font-weight:700;margin-bottom:6px">En construcción</div>
+        <p style="font-size:13px;color:var(--text2)">Falta la imagen del formato oficial (tamaño oficio, 2 caras) para mapear dónde va cada dato.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL SOLICITAR AUTORIZACIÓN PARA EDITAR (empleados) -->
 <div class="mo" id="mo-solicitud-edicion">
   <div class="mb">
@@ -913,7 +1189,7 @@ button:active{transform:scale(.97)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
-const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1';
+const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1', CERK='huerta_certificaciones_v1';
 const FUNERARIA_ADDR = "Nicolás Bravo 11, Zona Centro, C.P. 91000, Xalapa, Veracruz";
 const KM_RATE1=24, KM_RATE2=28, KM_BREAK=200; // hasta 200km: $24/km; >200km: $28/km
 // Sello oficial de la funeraria en base64 (data:image/png;base64,...). Se deja vacío
@@ -1867,7 +2143,7 @@ function renderODS(){
 }
 
 function certificarODS(folio){
-  window.open(`https://sergio201186.github.io/launcher_huerta/formato-certificar.html?folio=${encodeURIComponent(folio)}`, '_blank');
+  abrirCertificar(folio);
 }
 
 function verODS(folio){
@@ -1930,7 +2206,7 @@ function verODS(folio){
         ${o.estatus!=='CERRADA'?`<button class="bo bsm" onclick="abrirEdicionODS('${o.folio}')">✏️ Editar ODS</button>`:''}
         <button class="bo bsm" onclick="equipoRecogido('${o.folio}')">📦 Equipo Recogido</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');abrirEdicionLogistica('${o.folio}')">🕐 Actualizar Logística</button>
-        <button class="bo bsm" onclick="certificarODS('${o.folio}')">📝 Certificar</button>
+        <button class="bo bsm" onclick="closeMo('mo-ods');certificarODS('${o.folio}')">📝 Certificar</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');verExpedienteDeFolio('${o.folio}')">📄 Expediente</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');enviarODSPorWhatsapp('${o.folio}')">📤 Enviar ODS</button>
         ${esAdmin()?`<button class="bo bsm" onclick="closeMo('mo-ods');abrirAjusteSaldo('${o.folio}')">🧮 Ajustar Saldo</button>`:''}
@@ -2162,7 +2438,8 @@ async function sincronizarTodo(silencioso=false){
       ods:lDB(),
       colaboradores:lEmp(),
       abonos:lAbonos(),
-      solicitudes:lSolic()
+      solicitudes:lSolic(),
+      certificaciones:lCert()
     });
     if(r.ok){
       if(r.ods&&r.ods.length){
@@ -2195,6 +2472,12 @@ async function sincronizarTodo(silencioso=false){
         r.solicitudes.forEach(rs=>{porId[rs.id]=rs});
         sSolic(Object.values(porId));
       }
+      if(r.certificaciones&&r.certificaciones.length){
+        const localCert=lCert();
+        const porFolioCert={};localCert.forEach(c=>{porFolioCert[c.folio]=c});
+        r.certificaciones.forEach(rc=>{porFolioCert[rc.folio]=rc});
+        sCert(Object.values(porFolioCert));
+      }
       ST.q=[];localStorage.setItem(QK,'[]');
       const now=new Date().toISOString();localStorage.setItem(SK,now);
       const lbl=new Date(now).toLocaleString('es-MX');
@@ -2217,7 +2500,7 @@ function copiarInstrucciones(){
 }
 function resetLocal(){
   if(!confirm('¿Borrar TODOS los datos locales?'))return;
-  [DB,EK,QK,SK,ABK].forEach(k=>localStorage.removeItem(k));
+  [DB,EK,QK,SK,ABK,SOLK,CERK].forEach(k=>localStorage.removeItem(k));
   ST.q=[];ST.ods=[];ST.emps=[];
   toast('🗑 Datos locales eliminados');updDash();
 }
@@ -2624,6 +2907,211 @@ function lAbonos(){return JSON.parse(localStorage.getItem(ABK)||'[]')}
 function sAbonos(d){localStorage.setItem(ABK,JSON.stringify(d))}
 function lSolic(){return JSON.parse(localStorage.getItem(SOLK)||'[]')}
 function sSolic(d){localStorage.setItem(SOLK,JSON.stringify(d))}
+function lCert(){return JSON.parse(localStorage.getItem(CERK)||'[]')}
+function sCert(d){localStorage.setItem(CERK,JSON.stringify(d))}
+
+/* ── CERTIFICAR: 3 pestañas (Info Médico / Solicitud Registro Civil / Mapeo) ── */
+const CERT_PERSONAS=[['decl','declarante'],['test1','testigo1'],['test2','testigo2']];
+function certTab(n){
+  document.querySelectorAll('.cert-tab').forEach(el=>el.style.display='none');
+  $('cert-tab-'+n).style.display='block';
+  document.querySelectorAll('.cert-tab-btn').forEach(b=>{
+    const activo=b.dataset.tab===String(n);
+    b.classList.toggle('bg',activo);b.classList.toggle('bo',!activo);
+  });
+}
+function toggleCertConyuge(){
+  $('c-blq-conyuge').style.display=$('c-fi-eracasado').value==='SI'?'block':'none';
+}
+function toggleCertVivo(prefijo){
+  $('c-blq-'+prefijo+'-vivo').style.display=$('c-'+prefijo+'-estado').value==='VIVO'?'block':'none';
+}
+function abrirCertificar(folio){
+  const o=lDB().find(x=>x.folio===folio);
+  if(!o){toast('⚠ Folio no encontrado');return}
+  $('mo-certificar').dataset.folio=folio;
+  $('cert-folio-disp').textContent=`${folio} — ${o.fallecido||'—'}`;
+
+  const c=lCert().find(x=>x.folio===folio)||{};
+  $('c-fi-nombre').value=c.finadoNombre||o.fallecido||'';
+  $('c-fi-edocivil').value=c.finadoEstadoCivil||'SOLTERO';
+  $('c-fi-fecnac').value=fechaPlano(c.finadoFechaNacimiento)||'';
+  $('c-fi-entnac').value=c.finadoEntidadNacimiento||'';
+  $('c-fi-estudios').value=c.finadoGradoEstudios||'';
+  $('c-fi-domicilio').value=c.finadoDomicilio||[o.direccionCalle,o.direccionColonia,o.direccionLocalidad,o.direccionMunicipio].filter(Boolean).join(', ');
+  $('c-fi-afiliacion').value=c.finadoAfiliacionSalud||'';
+  $('c-fi-ocupacion').value=c.finadoOcupacion||'';
+  $('c-fi-lugardef').value=c.finadoLugarDefuncion||'';
+  $('c-fi-fecdef').value=fechaPlano(c.finadoFechaDefuncion)||'';
+  $('c-fi-hordef').value=c.finadoHoraDefuncion||'';
+
+  $('c-fi-eracasado').value=c.finadoEraCasado||'NO';
+  $('c-cony-nombre').value=c.conyugeNombre||'';
+  $('c-cony-estado').value=c.conyugeEstado||'VIVO';
+  $('c-cony-fecnac').value=fechaPlano(c.conyugeFechaNacimiento)||'';
+  $('c-cony-localidad').value=c.conyugeLocalidadNac||'';
+  $('c-cony-municipio').value=c.conyugeMunicipioNac||'';
+  $('c-cony-estadonac').value=c.conyugeEstadoNac||'';
+  $('c-cony-pais').value=c.conyugePaisNac||'México';
+
+  $('c-pa-nombre').value=c.padreNombre||'';
+  $('c-pa-estado').value=c.padreEstado||'VIVO';
+  $('c-pa-fecnac').value=fechaPlano(c.padreFechaNacimiento)||'';
+  $('c-pa-localidad').value=c.padreLocalidadNac||'';
+  $('c-pa-municipio').value=c.padreMunicipioNac||'';
+  $('c-pa-estadonac').value=c.padreEstadoNac||'';
+  $('c-pa-pais').value=c.padrePaisNac||'México';
+
+  $('c-ma-nombre').value=c.madreNombre||'';
+  $('c-ma-estado').value=c.madreEstado||'VIVO';
+  $('c-ma-fecnac').value=fechaPlano(c.madreFechaNacimiento)||'';
+  $('c-ma-localidad').value=c.madreLocalidadNac||'';
+  $('c-ma-municipio').value=c.madreMunicipioNac||'';
+  $('c-ma-estadonac').value=c.madreEstadoNac||'';
+  $('c-ma-pais').value=c.madrePaisNac||'México';
+
+  CERT_PERSONAS.forEach(([p,campo])=>{
+    $(`c-${p}-nombre`).value=c[`${campo}Nombre`]||'';
+    $(`c-${p}-parentesco`).value=c[`${campo}Parentesco`]||'NINGUNO';
+    $(`c-${p}-edocivil`).value=c[`${campo}EstadoCivil`]||'SOLTERO';
+    $(`c-${p}-localidad`).value=c[`${campo}LocalidadNac`]||'';
+    $(`c-${p}-municipio`).value=c[`${campo}MunicipioNac`]||'';
+    $(`c-${p}-estadonac`).value=c[`${campo}EstadoNac`]||'';
+    $(`c-${p}-pais`).value=c[`${campo}PaisNac`]||'México';
+    $(`c-${p}-telefono`).value=c[`${campo}Telefono`]||'';
+  });
+
+  toggleCertConyuge();toggleCertVivo('cony');toggleCertVivo('pa');toggleCertVivo('ma');
+  certTab(1);
+  $('mo-certificar').classList.add('show');
+}
+function guardarCertificacion(){
+  const folio=$('mo-certificar').dataset.folio;
+  if(!folio){toast('⚠ Folio no encontrado');return}
+  const g=id=>($(id)||{value:''}).value;
+  const casado=g('c-fi-eracasado')==='SI';
+  const conyugeVivo=casado&&g('c-cony-estado')==='VIVO';
+  const padreVivo=g('c-pa-estado')==='VIVO';
+  const madreVivo=g('c-ma-estado')==='VIVO';
+
+  const datos={
+    folio,
+    finadoNombre:g('c-fi-nombre'),finadoEstadoCivil:g('c-fi-edocivil'),
+    finadoFechaNacimiento:g('c-fi-fecnac'),finadoEntidadNacimiento:g('c-fi-entnac'),
+    finadoGradoEstudios:g('c-fi-estudios'),finadoDomicilio:g('c-fi-domicilio'),
+    finadoAfiliacionSalud:g('c-fi-afiliacion'),finadoOcupacion:g('c-fi-ocupacion'),
+    finadoLugarDefuncion:g('c-fi-lugardef'),finadoFechaDefuncion:g('c-fi-fecdef'),finadoHoraDefuncion:g('c-fi-hordef'),
+    finadoEraCasado:g('c-fi-eracasado'),
+    conyugeNombre:casado?g('c-cony-nombre'):'',
+    conyugeEstado:casado?g('c-cony-estado'):'',
+    conyugeFechaNacimiento:conyugeVivo?g('c-cony-fecnac'):'',
+    conyugeLocalidadNac:conyugeVivo?g('c-cony-localidad'):'',
+    conyugeMunicipioNac:conyugeVivo?g('c-cony-municipio'):'',
+    conyugeEstadoNac:conyugeVivo?g('c-cony-estadonac'):'',
+    conyugePaisNac:conyugeVivo?g('c-cony-pais'):'',
+    padreNombre:g('c-pa-nombre'),padreEstado:g('c-pa-estado'),
+    padreFechaNacimiento:padreVivo?g('c-pa-fecnac'):'',
+    padreLocalidadNac:padreVivo?g('c-pa-localidad'):'',
+    padreMunicipioNac:padreVivo?g('c-pa-municipio'):'',
+    padreEstadoNac:padreVivo?g('c-pa-estadonac'):'',
+    padrePaisNac:padreVivo?g('c-pa-pais'):'',
+    madreNombre:g('c-ma-nombre'),madreEstado:g('c-ma-estado'),
+    madreFechaNacimiento:madreVivo?g('c-ma-fecnac'):'',
+    madreLocalidadNac:madreVivo?g('c-ma-localidad'):'',
+    madreMunicipioNac:madreVivo?g('c-ma-municipio'):'',
+    madreEstadoNac:madreVivo?g('c-ma-estadonac'):'',
+    madrePaisNac:madreVivo?g('c-ma-pais'):''
+  };
+  CERT_PERSONAS.forEach(([p,campo])=>{
+    datos[`${campo}Nombre`]=g(`c-${p}-nombre`);
+    datos[`${campo}Parentesco`]=g(`c-${p}-parentesco`);
+    datos[`${campo}EstadoCivil`]=g(`c-${p}-edocivil`);
+    datos[`${campo}LocalidadNac`]=g(`c-${p}-localidad`);
+    datos[`${campo}MunicipioNac`]=g(`c-${p}-municipio`);
+    datos[`${campo}EstadoNac`]=g(`c-${p}-estadonac`);
+    datos[`${campo}PaisNac`]=g(`c-${p}-pais`);
+    datos[`${campo}Telefono`]=g(`c-${p}-telefono`);
+  });
+  if(!datos.finadoNombre){toast('⚠ Ingresa el nombre del finado');return}
+
+  const arr=lCert();const idx=arr.findIndex(x=>x.folio===folio);
+  datos.creadoPor=ST.user?(ST.user.nombreCompleto||''):'';
+  datos.fechaActualizacion=new Date().toISOString();
+  if(idx>=0){datos.fechaCreacion=arr[idx].fechaCreacion;arr[idx]=datos}
+  else{datos.fechaCreacion=new Date().toISOString();arr.push(datos)}
+  sCert(arr);
+  encolar({accion:'guardarCertificacion',datos});
+  if(ST.online&&ST.url)sincronizarTodo(true);
+  toast('✅ Información de certificación guardada');
+}
+function etiquetaEdoCivil(v){
+  return {SOLTERO:'Soltero(a)',CASADO:'Casado(a)',VIUDO:'Viudo(a)',DIVORCIADO:'Divorciado(a)',UNION_LIBRE:'Unión libre'}[v]||v||'—';
+}
+// El PDF/JPG que se manda al médico solo lleva los datos del finado + el
+// nombre del declarante (nada de cónyuge/padres/testigos) — así lo pidió
+// expresamente el negocio: esa es toda la información que el médico necesita.
+function _buildInfoMedicoHTML(datos,folio){
+  const fp=v=>v?fechaPlano(v):'—';
+  const fila=(a,b)=>`<tr><td style="border:1px solid #999;padding:6px;width:45%"><b>${a}</b></td><td style="border:1px solid #999;padding:6px">${b||'—'}</td></tr>`;
+  return `
+  <div id="cert-print-doc" style="width:7.5in;min-height:10.1in;background:#fff;color:#111;font-family:Georgia,serif;padding:30px;box-sizing:border-box">
+    <h2 style="text-align:center;margin-bottom:2px">FUNERARIA HUERTA</h2>
+    <p style="text-align:center;font-size:12px;color:#555;margin-top:0">${FUNERARIA_ADDR}</p>
+    <h3 style="text-align:center;text-decoration:underline;margin-top:18px">DATOS PARA CERTIFICADO DE DEFUNCIÓN</h3>
+    <p style="font-size:12px;color:#555">Folio: ${folio} · Fecha: ${new Date().toLocaleDateString('es-MX')}</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
+      ${fila('Nombre completo',datos.finadoNombre)}
+      ${fila('Estado Civil',etiquetaEdoCivil(datos.finadoEstadoCivil))}
+      ${fila('Fecha de Nacimiento',fp(datos.finadoFechaNacimiento))}
+      ${fila('Entidad de Nacimiento',datos.finadoEntidadNacimiento)}
+      ${fila('Grado de Estudios',datos.finadoGradoEstudios)}
+      ${fila('Domicilio Habitual',datos.finadoDomicilio)}
+      ${fila('Afiliación a Servicios de Salud',datos.finadoAfiliacionSalud)}
+      ${fila('Ocupación Habitual',datos.finadoOcupacion)}
+      ${fila('Lugar donde Ocurrió la Defunción',datos.finadoLugarDefuncion)}
+      ${fila('Fecha de Defunción',fp(datos.finadoFechaDefuncion))}
+      ${fila('Hora de Defunción',datos.finadoHoraDefuncion)}
+      ${fila('Declarante',datos.declaranteNombre)}
+    </table>
+  </div>`;
+}
+async function _prepararPrintInfoMedico(){
+  const folio=$('mo-certificar').dataset.folio;
+  const datos=lCert().find(x=>x.folio===folio);
+  if(!datos||!datos.finadoNombre){toast('⚠ Guarda la información antes de descargar');return null}
+  let host=$('cert-print-host');
+  if(!host){
+    host=document.createElement('div');
+    host.id='cert-print-host';
+    host.style.position='fixed';host.style.left='-9999px';host.style.top='0';
+    document.body.appendChild(host);
+  }
+  host.innerHTML=_buildInfoMedicoHTML(datos,folio);
+  await new Promise(r=>setTimeout(r,60));
+  return {folio,el:$('cert-print-doc')};
+}
+async function descargarInfoMedicoPDF(){
+  const prep=await _prepararPrintInfoMedico();
+  if(!prep)return;
+  toast('📄 Generando PDF…',1500);
+  const canvas=await html2canvas(prep.el,{scale:2,backgroundColor:'#ffffff'});
+  const img=canvas.toDataURL('image/jpeg',0.92);
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({unit:'in',format:'letter'});
+  pdf.addImage(img,'JPEG',0.5,0.45,7.5,10.1);
+  pdf.save(`InfoMedico_${prep.folio}.pdf`);
+}
+async function descargarInfoMedicoJPG(){
+  const prep=await _prepararPrintInfoMedico();
+  if(!prep)return;
+  toast('🖼 Generando imagen…',1500);
+  const canvas=await html2canvas(prep.el,{scale:2,backgroundColor:'#ffffff'});
+  const a=document.createElement('a');
+  a.href=canvas.toDataURL('image/jpeg',0.92);
+  a.download=`InfoMedico_${prep.folio}.jpg`;
+  a.click();
+}
+
 /* ── ACTUALIZAR LOGÍSTICA (horarios/lugar capturados horas después) ──
    Disponible para cualquier usuario con acceso a la orden, ya que la
    información debe estar disponible para todo el equipo cuanto antes. */
