@@ -1119,13 +1119,164 @@ button:active{transform:scale(.97)}
       <p style="font-size:11px;color:var(--text3);margin-top:6px">El PDF/JPG solo incluye los datos del finado y el nombre del declarante (lo que se envía al médico) — guarda primero para que estén actualizados.</p>
     </div>
 
-    <!-- PESTAÑA 2: SOLICITUD REGISTRO CIVIL (pendiente de campos) -->
+    <!-- PESTAÑA 2: SOLICITUD REGISTRO CIVIL (formato oficial Xalapa, tamaño oficio) -->
     <div id="cert-tab-2" class="cert-tab" style="display:none">
-      <div class="card" style="text-align:center;padding:34px 16px">
-        <div style="font-size:34px;margin-bottom:8px">🚧</div>
-        <div style="font-weight:700;margin-bottom:6px">En construcción</div>
-        <p style="font-size:13px;color:var(--text2)">Falta la lista puntual de campos adicionales para la solicitud de Registro Civil.</p>
+      <p style="font-size:11px;color:var(--text3);margin-top:-4px">Sigue el formato de Registro Civil de Xalapa (frente + reverso). Lo que ya se capturó en la Pestaña 1 se precarga aquí — revísalo, porque este formato pide algunos datos con más detalle.</p>
+
+      <div class="f"><label class="lbl">Fecha del Formato</label><input id="rc-fecha-formato" type="date"/></div>
+
+      <!-- GRUPO 1: Datos del Finado -->
+      <div class="card">
+        <div class="st">Grupo 1 · Datos del Finado</div>
+        <div class="g2">
+          <div class="f"><label class="lbl">CURP</label><input id="rc-fi-curp" type="text" maxlength="18" style="text-transform:uppercase"/></div>
+          <div class="f"><label class="lbl">Nacionalidad</label><input id="rc-fi-nacionalidad" type="text" value="Mexicana"/></div>
+        </div>
+        <div class="f"><label class="lbl">Nombre(s)</label><input id="rc-fi-nombres" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Apellido Paterno</label><input id="rc-fi-ap1" type="text"/></div>
+          <div class="f"><label class="lbl">Apellido Materno</label><input id="rc-fi-ap2" type="text"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="rc-fi-fecnac" type="date" oninput="rcCalcEdad('fi')"/></div>
+          <div class="f"><label class="lbl">Edad (al fallecer)</label><input id="rc-fi-edad" type="number" readonly/></div>
+        </div>
+        <div class="f"><label class="lbl">Sexo</label><select id="rc-fi-sexo"></select></div>
+        <div class="st" style="margin-top:8px;font-size:12px">Lugar de Nacimiento</div>
+        <div id="rc-fi-lugarnac"></div>
+        <div class="st" style="margin-top:8px;font-size:12px">Domicilio Habitual</div>
+        <div id="rc-fi-domicilio"></div>
+        <div class="f"><label class="lbl">Estado Civil</label>
+          <select id="rc-fi-edocivil" onchange="rcToggleConyuge()"></select>
+        </div>
       </div>
+
+      <!-- GRUPO 2: Cónyuge / Padre / Madre -->
+      <div id="rc-grupo2-body"></div>
+
+      <!-- GRUPO 3: Datos del Fallecimiento -->
+      <div class="card">
+        <div class="st">Grupo 3 · Datos del Fallecimiento</div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Fecha de Defunción</label><input id="rc-fallec-fecha" type="date" oninput="rcCalcEdad('fi')"/></div>
+          <div class="f"><label class="lbl">Hora de Defunción</label><input id="rc-fallec-hora" type="time"/></div>
+        </div>
+        <div class="f"><label class="lbl">Lugar del Fallecimiento (categoría interna)</label>
+          <select id="rc-fallec-lugar">
+            <option value="">—</option>
+            <option value="HOGAR">Hogar</option>
+            <option value="HOSPITAL">Hospital</option>
+            <option value="OTRO">Otro lugar</option>
+          </select>
+        </div>
+        <div class="f"><label class="lbl">Lugar del Fallecimiento (texto para el formato)</label><input id="rc-fallec-lugar-detalle" type="text" placeholder="Ej. Hospital Civil de Xalapa, domicilio particular…"/></div>
+        <div class="f"><label class="lbl">Número de Certificado</label><input id="rc-fallec-certificado" type="text"/></div>
+        <div class="f"><label class="lbl">Destino del Cadáver</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="rc-destino-inhumacion" onchange="rcToggleDestino('inhumacion')"/> Inhumación</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="rc-destino-cremacion" onchange="rcToggleDestino('cremacion')"/> Cremación</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="rc-destino-traslado" onchange="rcToggleDestino('traslado')"/> Traslado</label>
+          </div>
+        </div>
+        <div class="f" id="rc-blq-traslado-destino" style="display:none"><label class="lbl">Traslado a:</label><input id="rc-traslado-destino" type="text" placeholder="Ciudad/lugar de destino"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Nombre del Panteón</label><input id="rc-fallec-panteon" type="text"/></div>
+          <div class="f"><label class="lbl">Ubicación del Panteón</label><input id="rc-fallec-panteon-ubicacion" type="text"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Fecha de Inhumación</label><input id="rc-fallec-fecinhum" type="date"/></div>
+          <div class="f"><label class="lbl">Hora de Inhumación</label><input id="rc-fallec-horinhum" type="time"/></div>
+        </div>
+      </div>
+
+      <!-- GRUPO 4: Datos del Declarante -->
+      <div class="card">
+        <div class="st">Grupo 4 · Datos del Declarante</div>
+        <div class="f"><label class="lbl">Nombre completo</label><input id="rc-decl-nombre" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Parentesco con el Finado</label><select id="rc-decl-parentesco"></select></div>
+          <div class="f"><label class="lbl">Nacionalidad</label><input id="rc-decl-nacionalidad" type="text" value="Mexicana"/></div>
+        </div>
+        <div class="f"><label class="lbl">Estado Civil</label><select id="rc-decl-edocivil"></select></div>
+        <div class="st" style="margin-top:8px;font-size:12px">Lugar de Nacimiento</div>
+        <div id="rc-decl-lugarnac"></div>
+        <div class="st" style="margin-top:8px;font-size:12px">Domicilio Habitual</div>
+        <div id="rc-decl-domicilio"></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="rc-decl-fecnac" type="date" oninput="rcCalcEdad('decl')"/></div>
+          <div class="f"><label class="lbl">Edad</label><input id="rc-decl-edad" type="number" readonly/></div>
+        </div>
+        <div class="f"><label class="lbl">Teléfono</label><input id="rc-decl-telefono" type="tel"/></div>
+      </div>
+
+      <!-- GRUPO 5: Testigo 1 y Testigo 2 -->
+      <div id="rc-grupo5-body"></div>
+
+      <!-- GRUPO 6: Datos de la Funeraria -->
+      <div class="card">
+        <div class="st">Grupo 6 · Datos de la Funeraria</div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Nombre</label><input id="rc-fun-nombre" type="text" value="Servicios Funerarios Huerta" readonly/></div>
+          <div class="f"><label class="lbl">Ciudad</label><input id="rc-fun-ciudad" type="text" value="Xalapa" readonly/></div>
+        </div>
+        <div class="f"><label class="lbl">Teléfono</label><input id="rc-fun-telefono" type="text" value="2281845114" readonly/></div>
+        <div class="f"><label class="lbl">Funerario que Asiste</label><select id="rc-fun-asiste" onchange="rcToggleFunerarioOtro()"></select></div>
+        <div class="f" id="rc-blq-fun-otro" style="display:none"><label class="lbl">Especificar</label><input id="rc-fun-asiste-otro" type="text"/></div>
+      </div>
+
+      <!-- REVERSO: Datos Complementarios -->
+      <div class="card">
+        <div class="st">Reverso · Datos Complementarios</div>
+        <div class="f"><label class="lbl">¿Tuvo atención médica en su última enfermedad?</label>
+          <select id="rc-atencion-medica">
+            <option value="">—</option>
+            <option value="SI">Sí</option>
+            <option value="NO">No</option>
+            <option value="NO_SE_SABE">No se sabe</option>
+          </select>
+        </div>
+        <div id="rc-blq-mayor12">
+          <p style="font-size:11px;color:var(--text3);margin:2px 0 8px">Situación laboral/escolar y posición en el trabajo — solo aplica si el finado tenía más de 12 años (<span id="rc-edad-ref">—</span>).</p>
+          <div class="f"><label class="lbl">Situación al Momento de Fallecer</label>
+            <select id="rc-situacion-laboral" onchange="rcToggleSituacionOtro()">
+              <option value="">—</option>
+              <option value="TENIA_TRABAJO">Tenía trabajo</option>
+              <option value="ESTUDIABA">Estudiaba</option>
+              <option value="LABORES_DOMESTICAS">Labores domésticas</option>
+              <option value="INCAPACITADO">Incapacitado</option>
+              <option value="JUBILADO_PENSIONADO">Jubilado o pensionado</option>
+              <option value="OTRO">Otro</option>
+            </select>
+          </div>
+          <div class="f" id="rc-blq-situacion-otro" style="display:none"><label class="lbl">Especificar</label><input id="rc-situacion-laboral-otro" type="text"/></div>
+          <div class="f"><label class="lbl">Escolaridad</label>
+            <select id="rc-escolaridad" onchange="rcToggleEscolaridad()">
+              <option value="">—</option>
+              <option value="SIN_ESCOLARIDAD">Sin escolaridad</option>
+              <option value="PRIMARIA_COMPLETA">Primaria completa</option>
+              <option value="PRIMARIA_INCOMPLETA">Primaria incompleta</option>
+              <option value="SECUNDARIA">Secundaria o equivalente</option>
+              <option value="PREPARATORIA">Preparatoria o equivalente</option>
+              <option value="PROFESIONAL">Profesional</option>
+            </select>
+          </div>
+          <div class="f" id="rc-blq-ultimogrado" style="display:none"><label class="lbl">Último grado cursado</label><input id="rc-escolaridad-ultimogrado" type="text"/></div>
+          <div class="f"><label class="lbl">Posición en su Trabajo</label>
+            <select id="rc-posicion-trabajo">
+              <option value="">—</option>
+              <option value="OBRERO">Obrero</option>
+              <option value="EMPLEADO">Empleado</option>
+              <option value="JORNALERO_PEON">Jornalero o peón</option>
+              <option value="TRABAJADOR_CUENTA_PROPIA">Trabajador por su cuenta</option>
+              <option value="PATRON_EMPRESARIO">Patrón o empresario</option>
+              <option value="TRABAJADOR_NO_REMUNERADO">Trabajador no remunerado</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button class="bg" style="width:100%" onclick="guardarSolicitudRC()">💾 Guardar Solicitud Registro Civil</button>
+      <p style="font-size:11px;color:var(--text3);margin-top:6px">Formatos de Tlalnehuayocan, Banderilla y Emiliano Zapata: pendientes (se agregan por separado cuando lleguen).</p>
     </div>
 
     <!-- PESTAÑA 3: MAPEO SOBRE FORMATO OFICIAL (pendiente de la imagen) -->
@@ -1189,7 +1340,7 @@ button:active{transform:scale(.97)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
-const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1', CERK='huerta_certificaciones_v1';
+const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1', CERK='huerta_certificaciones_v1', RCK='huerta_solicitudes_rc_v1';
 const FUNERARIA_ADDR = "Nicolás Bravo 11, Zona Centro, C.P. 91000, Xalapa, Veracruz";
 const KM_RATE1=24, KM_RATE2=28, KM_BREAK=200; // hasta 200km: $24/km; >200km: $28/km
 // Sello oficial de la funeraria en base64 (data:image/png;base64,...). Se deja vacío
@@ -2439,7 +2590,8 @@ async function sincronizarTodo(silencioso=false){
       colaboradores:lEmp(),
       abonos:lAbonos(),
       solicitudes:lSolic(),
-      certificaciones:lCert()
+      certificaciones:lCert(),
+      solicitudesRC:lRC()
     });
     if(r.ok){
       if(r.ods&&r.ods.length){
@@ -2486,6 +2638,12 @@ async function sincronizarTodo(silencioso=false){
         r.certificaciones.forEach(rc=>{porFolioCert[rc.folio]=rc});
         sCert(Object.values(porFolioCert));
       }
+      if(r.solicitudesRC&&r.solicitudesRC.length){
+        const localRC=lRC();
+        const porFolioRC={};localRC.forEach(c=>{porFolioRC[c.folio]=c});
+        r.solicitudesRC.forEach(rr=>{porFolioRC[rr.folio]=rr});
+        sRC(Object.values(porFolioRC));
+      }
       ST.q=[];localStorage.setItem(QK,'[]');
       const now=new Date().toISOString();localStorage.setItem(SK,now);
       const lbl=new Date(now).toLocaleString('es-MX');
@@ -2508,7 +2666,7 @@ function copiarInstrucciones(){
 }
 function resetLocal(){
   if(!confirm('¿Borrar TODOS los datos locales?'))return;
-  [DB,EK,QK,SK,ABK,SOLK,CERK].forEach(k=>localStorage.removeItem(k));
+  [DB,EK,QK,SK,ABK,SOLK,CERK,RCK].forEach(k=>localStorage.removeItem(k));
   ST.q=[];ST.ods=[];ST.emps=[];
   toast('🗑 Datos locales eliminados');updDash();
 }
@@ -2917,6 +3075,8 @@ function lSolic(){return JSON.parse(localStorage.getItem(SOLK)||'[]')}
 function sSolic(d){localStorage.setItem(SOLK,JSON.stringify(d))}
 function lCert(){return JSON.parse(localStorage.getItem(CERK)||'[]')}
 function sCert(d){localStorage.setItem(CERK,JSON.stringify(d))}
+function lRC(){return JSON.parse(localStorage.getItem(RCK)||'[]')}
+function sRC(d){localStorage.setItem(RCK,JSON.stringify(d))}
 
 /* ── CERTIFICAR: 3 pestañas (Info Médico / Solicitud Registro Civil / Mapeo) ── */
 const CERT_PERSONAS=[['decl','declarante'],['test1','testigo1'],['test2','testigo2']];
@@ -2990,6 +3150,7 @@ function abrirCertificar(folio){
   });
 
   toggleCertConyuge();toggleCertVivo('cony');toggleCertVivo('pa');toggleCertVivo('ma');
+  rcCargar(folio);
   certTab(1);
   $('mo-certificar').classList.add('show');
 }
@@ -3118,6 +3279,487 @@ async function descargarInfoMedicoJPG(){
   a.href=canvas.toDataURL('image/jpeg',0.92);
   a.download=`InfoMedico_${prep.folio}.jpg`;
   a.click();
+}
+
+/* ── PESTAÑA 2: SOLICITUD REGISTRO CIVIL (formato oficial Xalapa) ── */
+const RC_SEXO_HTML='<option value="">—</option><option value="HOMBRE">Hombre</option><option value="MUJER">Mujer</option>';
+const RC_EDOCIVIL_HTML='<option value="">—</option><option value="SOLTERO">Soltero(a)</option><option value="CASADO">Casado(a)</option>';
+const RC_PARENTESCO_HTML=`<option value="NINGUNO">Ninguno (no consanguíneo)</option>
+  <option value="CONYUGE">Cónyuge</option><option value="HIJO">Hijo(a)</option>
+  <option value="PADRE">Padre</option><option value="MADRE">Madre</option>
+  <option value="HERMANO">Hermano(a)</option><option value="ABUELO">Abuelo(a)</option>
+  <option value="NIETO">Nieto(a)</option><option value="TIO">Tío(a)</option>
+  <option value="SOBRINO">Sobrino(a)</option><option value="PRIMO">Primo(a)</option>
+  <option value="CUNADO">Cuñado(a)</option><option value="SUEGRO">Suegro(a)</option>
+  <option value="YERNO_NUERA">Yerno/Nuera</option>`;
+function rcLugarNacHTML(p){
+  return `<div class="g2">
+      <div class="f"><label class="lbl">Localidad</label><input id="rc-${p}-localidad" type="text"/></div>
+      <div class="f"><label class="lbl">Municipio</label><input id="rc-${p}-municipio" type="text"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Entidad Federativa</label><input id="rc-${p}-entidad" type="text"/></div>
+      <div class="f"><label class="lbl">País</label><input id="rc-${p}-pais" type="text" value="México"/></div>
+    </div>`;
+}
+function rcDomicilioHTML(p){
+  return `<div class="g2">
+      <div class="f"><label class="lbl">Calle</label><input id="rc-${p}-domcalle" type="text"/></div>
+      <div class="f"><label class="lbl">Número (ext. e int.)</label><input id="rc-${p}-domnumero" type="text"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Colonia</label><input id="rc-${p}-domcolonia" type="text"/></div>
+      <div class="f"><label class="lbl">Localidad</label><input id="rc-${p}-domlocalidad" type="text"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Municipio</label><input id="rc-${p}-dommunicipio" type="text"/></div>
+      <div class="f"><label class="lbl">Entidad Federativa</label><input id="rc-${p}-domentidad" type="text"/></div>
+    </div>
+    <div class="f"><label class="lbl">País</label><input id="rc-${p}-dompais" type="text" value="México"/></div>`;
+}
+function rcFamiliarCardHTML(p,titulo,idExtra){
+  return `<div class="card"${idExtra?` id="${idExtra}"`:''}>
+    <div class="st">${titulo}</div>
+    <div class="f"><label class="lbl">Nombre</label><input id="rc-${p}-nombre" type="text"/></div>
+    <div class="f"><label class="lbl">¿Vive?</label>
+      <select id="rc-${p}-estado" onchange="rcToggleVivoRC('${p}')">
+        <option value="VIVE">Vive</option><option value="FINADO">Finado</option>
+      </select>
+    </div>
+    <div id="rc-blq-${p}-vivo">
+      <div class="g2">
+        <div class="f"><label class="lbl">Nacionalidad</label><input id="rc-${p}-nacionalidad" type="text" value="Mexicana"/></div>
+        <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="rc-${p}-fecnac" type="date"/></div>
+      </div>
+      <div class="f"><label class="lbl">Sexo</label><select id="rc-${p}-sexo">${RC_SEXO_HTML}</select></div>
+      <div class="st" style="margin-top:8px;font-size:12px">Lugar de Nacimiento</div>
+      ${rcLugarNacHTML(p)}
+    </div>
+  </div>`;
+}
+function rcTestigoCardHTML(p,titulo){
+  return `<div class="card">
+    <div class="st">${titulo}</div>
+    <div class="g2">
+      <div class="f"><label class="lbl">CURP</label><input id="rc-${p}-curp" type="text" maxlength="18" style="text-transform:uppercase"/></div>
+      <div class="f"><label class="lbl">Nombre completo</label><input id="rc-${p}-nombre" type="text"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Teléfono</label><input id="rc-${p}-telefono" type="tel"/></div>
+      <div class="f"><label class="lbl">Nacionalidad</label><input id="rc-${p}-nacionalidad" type="text" value="Mexicana"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="rc-${p}-fecnac" type="date" oninput="rcCalcEdad('${p}')"/></div>
+      <div class="f"><label class="lbl">Edad</label><input id="rc-${p}-edad" type="number" readonly/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Sexo</label><select id="rc-${p}-sexo">${RC_SEXO_HTML}</select></div>
+      <div class="f"><label class="lbl">Estado Civil</label><select id="rc-${p}-edocivil">${RC_EDOCIVIL_HTML}</select></div>
+    </div>
+    <div class="f"><label class="lbl">Parentesco con el Finado</label><select id="rc-${p}-parentesco">${RC_PARENTESCO_HTML}</select></div>
+    <div class="st" style="margin-top:8px;font-size:12px">Lugar de Nacimiento</div>
+    ${rcLugarNacHTML(p)}
+    <div class="st" style="margin-top:8px;font-size:12px">Domicilio Habitual</div>
+    ${rcDomicilioHTML(p)}
+  </div>`;
+}
+function rcInit(){
+  $('rc-fi-sexo').innerHTML=RC_SEXO_HTML;
+  $('rc-fi-edocivil').innerHTML=RC_EDOCIVIL_HTML;
+  $('rc-fi-lugarnac').innerHTML=rcLugarNacHTML('fi');
+  $('rc-fi-domicilio').innerHTML=rcDomicilioHTML('fi');
+  $('rc-decl-parentesco').innerHTML=RC_PARENTESCO_HTML;
+  $('rc-decl-edocivil').innerHTML=RC_EDOCIVIL_HTML;
+  $('rc-decl-lugarnac').innerHTML=rcLugarNacHTML('decl');
+  $('rc-decl-domicilio').innerHTML=rcDomicilioHTML('decl');
+  $('rc-grupo2-body').innerHTML=rcFamiliarCardHTML('cony','Cónyuge','rc-card-conyuge')
+    +rcFamiliarCardHTML('pa','Padre del Finado')
+    +rcFamiliarCardHTML('ma','Madre del Finado');
+  $('rc-grupo5-body').innerHTML=rcTestigoCardHTML('test1','Testigo 1')+rcTestigoCardHTML('test2','Testigo 2');
+}
+function rcToggleConyuge(){
+  $('rc-card-conyuge').style.display=$('rc-fi-edocivil').value==='CASADO'?'block':'none';
+}
+function rcToggleVivoRC(p){
+  $('rc-blq-'+p+'-vivo').style.display=$('rc-'+p+'-estado').value==='VIVE'?'block':'none';
+}
+function rcToggleDestino(cual){
+  if(cual==='inhumacion'&&$('rc-destino-inhumacion').checked){
+    $('rc-destino-cremacion').checked=false;
+    $('rc-destino-traslado').checked=false;
+  }else if((cual==='cremacion'||cual==='traslado')&&$('rc-destino-'+cual).checked){
+    $('rc-destino-inhumacion').checked=false;
+  }
+  $('rc-blq-traslado-destino').style.display=$('rc-destino-traslado').checked?'block':'none';
+}
+function rcToggleEscolaridad(){
+  $('rc-blq-ultimogrado').style.display=$('rc-escolaridad').value==='PRIMARIA_INCOMPLETA'?'block':'none';
+}
+function rcToggleSituacionOtro(){
+  $('rc-blq-situacion-otro').style.display=$('rc-situacion-laboral').value==='OTRO'?'block':'none';
+}
+function rcToggleFunerarioOtro(){
+  $('rc-blq-fun-otro').style.display=$('rc-fun-asiste').value==='__OTRO__'?'block':'none';
+}
+function rcPoblarFunerarios(seleccionActual){
+  const sel=$('rc-fun-asiste');
+  const activos=lEmp().filter(e=>e.estatus!=='INACTIVO'&&e.nombreCompleto);
+  const nombres=Array.from(new Set(activos.map(e=>e.nombreCompleto)));
+  ['Sergio Cadena','Ruth Pozos'].forEach(n=>{if(!nombres.includes(n))nombres.unshift(n)});
+  sel.innerHTML=nombres.map(n=>`<option value="${n}">${n}</option>`).join('')+'<option value="__OTRO__">Otro…</option>';
+  if(seleccionActual&&nombres.includes(seleccionActual)){
+    sel.value=seleccionActual;
+  }else if(seleccionActual){
+    sel.value='__OTRO__';
+    $('rc-fun-asiste-otro').value=seleccionActual;
+  }else{
+    sel.value=nombres[0]||'__OTRO__';
+  }
+  rcToggleFunerarioOtro();
+}
+// Heurística: últimas 2 palabras = apellidos, resto = nombre(s) — es un
+// punto de partida editable, no autoridad; el nombre en Pestaña 1 viene
+// como texto libre y no distingue nombre compuesto de apellido compuesto.
+function splitNombreCompleto(nombreCompleto){
+  const partes=(nombreCompleto||'').trim().split(/\s+/).filter(Boolean);
+  if(partes.length===0)return{nombres:'',ap1:'',ap2:''};
+  if(partes.length===1)return{nombres:partes[0],ap1:'',ap2:''};
+  if(partes.length===2)return{nombres:partes[0],ap1:partes[1],ap2:''};
+  const ap2=partes.pop(),ap1=partes.pop();
+  return{nombres:partes.join(' '),ap1,ap2};
+}
+function calcularEdad(fechaNacStr,fechaRefStr){
+  if(!fechaNacStr)return '';
+  const nac=new Date(fechaNacStr+'T00:00:00');
+  const ref=fechaRefStr?new Date(fechaRefStr+'T00:00:00'):new Date();
+  if(isNaN(nac)||isNaN(ref))return '';
+  let edad=ref.getFullYear()-nac.getFullYear();
+  const m=ref.getMonth()-nac.getMonth();
+  if(m<0||(m===0&&ref.getDate()<nac.getDate()))edad--;
+  return edad>=0?edad:'';
+}
+function rcCalcEdad(p){
+  const fecnac=$('rc-'+p+'-fecnac').value;
+  const fref=p==='fi'?$('rc-fallec-fecha').value:'';
+  const edad=calcularEdad(fecnac,fref);
+  $('rc-'+p+'-edad').value=edad;
+  if(p==='fi')rcActualizaSeccionMayor12(edad);
+}
+function rcActualizaSeccionMayor12(edad){
+  $('rc-edad-ref').textContent=edad===''?'edad no calculada':`${edad} años`;
+  $('rc-blq-mayor12').style.display=(edad===''||edad>=12)?'block':'none';
+}
+function rcCargar(folio){
+  rcInit();
+  const rc=lRC().find(x=>x.folio===folio);
+  const cert=lCert().find(x=>x.folio===folio)||{};
+  const g=(id,v)=>{if($(id))$(id).value=v||''};
+
+  if(rc){
+    g('rc-fecha-formato',fechaPlano(rc.rcFechaFormato));
+    g('rc-fi-curp',rc.rcFinadoCurp);
+    g('rc-fi-nombres',rc.rcFinadoNombres);
+    g('rc-fi-ap1',rc.rcFinadoApellidoPaterno);
+    g('rc-fi-ap2',rc.rcFinadoApellidoMaterno);
+    g('rc-fi-fecnac',fechaPlano(rc.rcFinadoFechaNacimiento));
+    g('rc-fi-nacionalidad',rc.rcFinadoNacionalidad||'Mexicana');
+    g('rc-fi-sexo',rc.rcFinadoSexo);
+    g('rc-fi-localidad',rc.rcFinadoLocalidadNac);
+    g('rc-fi-municipio',rc.rcFinadoMunicipioNac);
+    g('rc-fi-entidad',rc.rcFinadoEntidadNac);
+    g('rc-fi-pais',rc.rcFinadoPaisNac||'México');
+    g('rc-fi-domcalle',rc.rcFinadoDomCalle);
+    g('rc-fi-domnumero',rc.rcFinadoDomNumero);
+    g('rc-fi-domcolonia',rc.rcFinadoDomColonia);
+    g('rc-fi-domlocalidad',rc.rcFinadoDomLocalidad);
+    g('rc-fi-dommunicipio',rc.rcFinadoDomMunicipio);
+    g('rc-fi-domentidad',rc.rcFinadoDomEntidad);
+    g('rc-fi-dompais',rc.rcFinadoDomPais||'México');
+    g('rc-fi-edocivil',rc.rcFinadoEstadoCivil);
+
+    g('rc-cony-nombre',rc.rcConyugeNombre);
+    g('rc-cony-estado',rc.rcConyugeEstado||'VIVE');
+    g('rc-cony-nacionalidad',rc.rcConyugeNacionalidad||'Mexicana');
+    g('rc-cony-fecnac',fechaPlano(rc.rcConyugeFechaNacimiento));
+    g('rc-cony-sexo',rc.rcConyugeSexo);
+    g('rc-cony-localidad',rc.rcConyugeLocalidadNac);
+    g('rc-cony-municipio',rc.rcConyugeMunicipioNac);
+    g('rc-cony-entidad',rc.rcConyugeEntidadNac);
+    g('rc-cony-pais',rc.rcConyugePaisNac||'México');
+
+    g('rc-pa-nombre',rc.rcPadreNombre);
+    g('rc-pa-estado',rc.rcPadreEstado||'VIVE');
+    g('rc-pa-nacionalidad',rc.rcPadreNacionalidad||'Mexicana');
+    g('rc-pa-fecnac',fechaPlano(rc.rcPadreFechaNacimiento));
+    g('rc-pa-sexo',rc.rcPadreSexo||'HOMBRE');
+    g('rc-pa-localidad',rc.rcPadreLocalidadNac);
+    g('rc-pa-municipio',rc.rcPadreMunicipioNac);
+    g('rc-pa-entidad',rc.rcPadreEntidadNac);
+    g('rc-pa-pais',rc.rcPadrePaisNac||'México');
+
+    g('rc-ma-nombre',rc.rcMadreNombre);
+    g('rc-ma-estado',rc.rcMadreEstado||'VIVE');
+    g('rc-ma-nacionalidad',rc.rcMadreNacionalidad||'Mexicana');
+    g('rc-ma-fecnac',fechaPlano(rc.rcMadreFechaNacimiento));
+    g('rc-ma-sexo',rc.rcMadreSexo||'MUJER');
+    g('rc-ma-localidad',rc.rcMadreLocalidadNac);
+    g('rc-ma-municipio',rc.rcMadreMunicipioNac);
+    g('rc-ma-entidad',rc.rcMadreEntidadNac);
+    g('rc-ma-pais',rc.rcMadrePaisNac||'México');
+
+    g('rc-fallec-fecha',fechaPlano(rc.rcFechaDefuncion));
+    g('rc-fallec-hora',rc.rcHoraDefuncion);
+    g('rc-fallec-lugar',rc.rcLugarFallecimiento);
+    g('rc-fallec-lugar-detalle',rc.rcFallecLugarDetalle);
+    g('rc-fallec-certificado',rc.rcNumeroCertificado);
+    $('rc-destino-inhumacion').checked=rc.rcDestinoInhumacion==='SI';
+    $('rc-destino-cremacion').checked=rc.rcDestinoCremacion==='SI';
+    $('rc-destino-traslado').checked=rc.rcDestinoTraslado==='SI';
+    g('rc-traslado-destino',rc.rcTrasladoDestino);
+    g('rc-fallec-panteon',rc.rcNombrePanteon);
+    g('rc-fallec-panteon-ubicacion',rc.rcPanteonUbicacion);
+    g('rc-fallec-fecinhum',fechaPlano(rc.rcFechaInhumacion));
+    g('rc-fallec-horinhum',rc.rcHoraInhumacion);
+
+    g('rc-decl-nombre',rc.rcDeclaranteNombre);
+    g('rc-decl-parentesco',rc.rcDeclaranteParentesco||'NINGUNO');
+    g('rc-decl-nacionalidad',rc.rcDeclaranteNacionalidad||'Mexicana');
+    g('rc-decl-edocivil',rc.rcDeclaranteEstadoCivil);
+    g('rc-decl-localidad',rc.rcDeclaranteLocalidadNac);
+    g('rc-decl-municipio',rc.rcDeclaranteMunicipioNac);
+    g('rc-decl-entidad',rc.rcDeclaranteEntidadNac);
+    g('rc-decl-pais',rc.rcDeclarantePaisNac||'México');
+    g('rc-decl-domcalle',rc.rcDeclaranteDomCalle);
+    g('rc-decl-domnumero',rc.rcDeclaranteDomNumero);
+    g('rc-decl-domcolonia',rc.rcDeclaranteDomColonia);
+    g('rc-decl-domlocalidad',rc.rcDeclaranteDomLocalidad);
+    g('rc-decl-dommunicipio',rc.rcDeclaranteDomMunicipio);
+    g('rc-decl-domentidad',rc.rcDeclaranteDomEntidad);
+    g('rc-decl-dompais',rc.rcDeclaranteDomPais||'México');
+    g('rc-decl-fecnac',fechaPlano(rc.rcDeclaranteFechaNacimiento));
+    g('rc-decl-telefono',rc.rcDeclaranteTelefono);
+
+    ['test1','test2'].forEach(p=>{
+      const campo=p==='test1'?'Testigo1':'Testigo2';
+      g(`rc-${p}-curp`,rc[`rc${campo}Curp`]);
+      g(`rc-${p}-nombre`,rc[`rc${campo}Nombre`]);
+      g(`rc-${p}-telefono`,rc[`rc${campo}Telefono`]);
+      g(`rc-${p}-fecnac`,fechaPlano(rc[`rc${campo}FechaNacimiento`]));
+      g(`rc-${p}-sexo`,rc[`rc${campo}Sexo`]);
+      g(`rc-${p}-localidad`,rc[`rc${campo}LocalidadNac`]);
+      g(`rc-${p}-municipio`,rc[`rc${campo}MunicipioNac`]);
+      g(`rc-${p}-entidad`,rc[`rc${campo}EntidadNac`]);
+      g(`rc-${p}-pais`,rc[`rc${campo}PaisNac`]||'México');
+      g(`rc-${p}-edocivil`,rc[`rc${campo}EstadoCivil`]);
+      g(`rc-${p}-parentesco`,rc[`rc${campo}Parentesco`]||'NINGUNO');
+      g(`rc-${p}-nacionalidad`,rc[`rc${campo}Nacionalidad`]||'Mexicana');
+      g(`rc-${p}-domcalle`,rc[`rc${campo}DomCalle`]);
+      g(`rc-${p}-domnumero`,rc[`rc${campo}DomNumero`]);
+      g(`rc-${p}-domcolonia`,rc[`rc${campo}DomColonia`]);
+      g(`rc-${p}-domlocalidad`,rc[`rc${campo}DomLocalidad`]);
+      g(`rc-${p}-dommunicipio`,rc[`rc${campo}DomMunicipio`]);
+      g(`rc-${p}-domentidad`,rc[`rc${campo}DomEntidad`]);
+      g(`rc-${p}-dompais`,rc[`rc${campo}DomPais`]||'México');
+    });
+
+    rcPoblarFunerarios(rc.rcFunerarioAsiste);
+    g('rc-atencion-medica',rc.rcAtencionMedica);
+    g('rc-situacion-laboral',rc.rcSituacionLaboral);
+    g('rc-situacion-laboral-otro',rc.rcSituacionLaboralOtro);
+    g('rc-escolaridad',rc.rcEscolaridad);
+    g('rc-escolaridad-ultimogrado',rc.rcEscolaridadUltimoGrado);
+    g('rc-posicion-trabajo',rc.rcPosicionTrabajo);
+  }else{
+    // Sin registro RC todavía: autollenar lo que coincide con la Pestaña 1.
+    g('rc-fecha-formato',new Date().toISOString().slice(0,10));
+    const nom=splitNombreCompleto(cert.finadoNombre);
+    g('rc-fi-nombres',nom.nombres);
+    g('rc-fi-ap1',nom.ap1);
+    g('rc-fi-ap2',nom.ap2);
+    g('rc-fi-fecnac',fechaPlano(cert.finadoFechaNacimiento));
+    g('rc-fi-entidad',cert.finadoEntidadNacimiento);
+    if(['SOLTERO','CASADO'].includes(cert.finadoEstadoCivil))g('rc-fi-edocivil',cert.finadoEstadoCivil);
+
+    if(cert.finadoEraCasado==='SI'){
+      g('rc-cony-nombre',cert.conyugeNombre);
+      g('rc-cony-estado',cert.conyugeEstado||'VIVE');
+      g('rc-cony-fecnac',fechaPlano(cert.conyugeFechaNacimiento));
+      g('rc-cony-localidad',cert.conyugeLocalidadNac);
+      g('rc-cony-municipio',cert.conyugeMunicipioNac);
+      g('rc-cony-entidad',cert.conyugeEstadoNac);
+      g('rc-cony-pais',cert.conyugePaisNac||'México');
+    }
+    g('rc-pa-nombre',cert.padreNombre);
+    g('rc-pa-estado',cert.padreEstado==='FINADO'?'FINADO':'VIVE');
+    g('rc-pa-fecnac',fechaPlano(cert.padreFechaNacimiento));
+    g('rc-pa-sexo','HOMBRE');
+    g('rc-pa-localidad',cert.padreLocalidadNac);
+    g('rc-pa-municipio',cert.padreMunicipioNac);
+    g('rc-pa-entidad',cert.padreEstadoNac);
+    g('rc-pa-pais',cert.padrePaisNac||'México');
+
+    g('rc-ma-nombre',cert.madreNombre);
+    g('rc-ma-estado',cert.madreEstado==='FINADO'?'FINADO':'VIVE');
+    g('rc-ma-fecnac',fechaPlano(cert.madreFechaNacimiento));
+    g('rc-ma-sexo','MUJER');
+    g('rc-ma-localidad',cert.madreLocalidadNac);
+    g('rc-ma-municipio',cert.madreMunicipioNac);
+    g('rc-ma-entidad',cert.madreEstadoNac);
+    g('rc-ma-pais',cert.madrePaisNac||'México');
+
+    g('rc-fallec-fecha',fechaPlano(cert.finadoFechaDefuncion));
+    g('rc-fallec-hora',cert.finadoHoraDefuncion);
+    g('rc-fallec-lugar-detalle',cert.finadoLugarDefuncion);
+
+    g('rc-decl-nombre',cert.declaranteNombre);
+    g('rc-decl-parentesco',cert.declaranteParentesco||'NINGUNO');
+    if(['SOLTERO','CASADO'].includes(cert.declaranteEstadoCivil))g('rc-decl-edocivil',cert.declaranteEstadoCivil);
+    g('rc-decl-localidad',cert.declaranteLocalidadNac);
+    g('rc-decl-municipio',cert.declaranteMunicipioNac);
+    g('rc-decl-entidad',cert.declaranteEstadoNac);
+    g('rc-decl-pais',cert.declarantePaisNac||'México');
+    g('rc-decl-telefono',cert.declaranteTelefono);
+
+    ['test1','test2'].forEach(p=>{
+      const campo=p==='test1'?'testigo1':'testigo2';
+      g(`rc-${p}-nombre`,cert[`${campo}Nombre`]);
+      g(`rc-${p}-telefono`,cert[`${campo}Telefono`]);
+      g(`rc-${p}-localidad`,cert[`${campo}LocalidadNac`]);
+      g(`rc-${p}-municipio`,cert[`${campo}MunicipioNac`]);
+      g(`rc-${p}-entidad`,cert[`${campo}EstadoNac`]);
+      g(`rc-${p}-pais`,cert[`${campo}PaisNac`]||'México');
+      if(['SOLTERO','CASADO'].includes(cert[`${campo}EstadoCivil`]))g(`rc-${p}-edocivil`,cert[`${campo}EstadoCivil`]);
+      g(`rc-${p}-parentesco`,cert[`${campo}Parentesco`]||'NINGUNO');
+    });
+
+    rcPoblarFunerarios('');
+  }
+
+  rcToggleConyuge();
+  rcToggleVivoRC('cony');rcToggleVivoRC('pa');rcToggleVivoRC('ma');
+  rcToggleEscolaridad();rcToggleSituacionOtro();
+  $('rc-blq-traslado-destino').style.display=$('rc-destino-traslado').checked?'block':'none';
+  rcCalcEdad('fi');rcCalcEdad('decl');rcCalcEdad('test1');rcCalcEdad('test2');
+}
+function guardarSolicitudRC(){
+  const folio=$('mo-certificar').dataset.folio;
+  if(!folio){toast('⚠ Folio no encontrado');return}
+  const g=id=>($(id)||{value:''}).value;
+  const chk=id=>($(id)||{checked:false}).checked;
+  const casado=g('rc-fi-edocivil')==='CASADO';
+  const conyugeVive=casado&&g('rc-cony-estado')==='VIVE';
+  const padreVive=g('rc-pa-estado')==='VIVE';
+  const madreVive=g('rc-ma-estado')==='VIVE';
+
+  const datos={
+    folio,
+    rcFechaFormato:g('rc-fecha-formato'),
+    rcFinadoCurp:g('rc-fi-curp').toUpperCase(),
+    rcFinadoNombres:g('rc-fi-nombres'),rcFinadoApellidoPaterno:g('rc-fi-ap1'),rcFinadoApellidoMaterno:g('rc-fi-ap2'),
+    rcFinadoFechaNacimiento:g('rc-fi-fecnac'),rcFinadoEdad:g('rc-fi-edad'),
+    rcFinadoNacionalidad:g('rc-fi-nacionalidad'),rcFinadoSexo:g('rc-fi-sexo'),
+    rcFinadoLocalidadNac:g('rc-fi-localidad'),rcFinadoMunicipioNac:g('rc-fi-municipio'),
+    rcFinadoEntidadNac:g('rc-fi-entidad'),rcFinadoPaisNac:g('rc-fi-pais'),
+    rcFinadoDomCalle:g('rc-fi-domcalle'),rcFinadoDomNumero:g('rc-fi-domnumero'),rcFinadoDomColonia:g('rc-fi-domcolonia'),
+    rcFinadoDomLocalidad:g('rc-fi-domlocalidad'),rcFinadoDomMunicipio:g('rc-fi-dommunicipio'),
+    rcFinadoDomEntidad:g('rc-fi-domentidad'),rcFinadoDomPais:g('rc-fi-dompais'),
+    rcFinadoEstadoCivil:g('rc-fi-edocivil'),
+
+    rcConyugeNombre:casado?g('rc-cony-nombre'):'',
+    rcConyugeEstado:casado?g('rc-cony-estado'):'',
+    rcConyugeNacionalidad:conyugeVive?g('rc-cony-nacionalidad'):'',
+    rcConyugeFechaNacimiento:conyugeVive?g('rc-cony-fecnac'):'',
+    rcConyugeSexo:conyugeVive?g('rc-cony-sexo'):'',
+    rcConyugeLocalidadNac:conyugeVive?g('rc-cony-localidad'):'',
+    rcConyugeMunicipioNac:conyugeVive?g('rc-cony-municipio'):'',
+    rcConyugeEntidadNac:conyugeVive?g('rc-cony-entidad'):'',
+    rcConyugePaisNac:conyugeVive?g('rc-cony-pais'):'',
+
+    rcPadreNombre:g('rc-pa-nombre'),rcPadreEstado:g('rc-pa-estado'),
+    rcPadreNacionalidad:padreVive?g('rc-pa-nacionalidad'):'',
+    rcPadreFechaNacimiento:padreVive?g('rc-pa-fecnac'):'',
+    rcPadreSexo:padreVive?g('rc-pa-sexo'):'',
+    rcPadreLocalidadNac:padreVive?g('rc-pa-localidad'):'',
+    rcPadreMunicipioNac:padreVive?g('rc-pa-municipio'):'',
+    rcPadreEntidadNac:padreVive?g('rc-pa-entidad'):'',
+    rcPadrePaisNac:padreVive?g('rc-pa-pais'):'',
+
+    rcMadreNombre:g('rc-ma-nombre'),rcMadreEstado:g('rc-ma-estado'),
+    rcMadreNacionalidad:madreVive?g('rc-ma-nacionalidad'):'',
+    rcMadreFechaNacimiento:madreVive?g('rc-ma-fecnac'):'',
+    rcMadreSexo:madreVive?g('rc-ma-sexo'):'',
+    rcMadreLocalidadNac:madreVive?g('rc-ma-localidad'):'',
+    rcMadreMunicipioNac:madreVive?g('rc-ma-municipio'):'',
+    rcMadreEntidadNac:madreVive?g('rc-ma-entidad'):'',
+    rcMadrePaisNac:madreVive?g('rc-ma-pais'):'',
+
+    rcFechaDefuncion:g('rc-fallec-fecha'),rcHoraDefuncion:g('rc-fallec-hora'),
+    rcLugarFallecimiento:g('rc-fallec-lugar'),rcFallecLugarDetalle:g('rc-fallec-lugar-detalle'),
+    rcNumeroCertificado:g('rc-fallec-certificado'),
+    rcDestinoInhumacion:chk('rc-destino-inhumacion')?'SI':'NO',
+    rcDestinoCremacion:chk('rc-destino-cremacion')?'SI':'NO',
+    rcDestinoTraslado:chk('rc-destino-traslado')?'SI':'NO',
+    rcTrasladoDestino:chk('rc-destino-traslado')?g('rc-traslado-destino'):'',
+    rcNombrePanteon:g('rc-fallec-panteon'),rcPanteonUbicacion:g('rc-fallec-panteon-ubicacion'),
+    rcFechaInhumacion:g('rc-fallec-fecinhum'),rcHoraInhumacion:g('rc-fallec-horinhum'),
+
+    rcDeclaranteNombre:g('rc-decl-nombre'),rcDeclaranteParentesco:g('rc-decl-parentesco'),
+    rcDeclaranteNacionalidad:g('rc-decl-nacionalidad'),rcDeclaranteEstadoCivil:g('rc-decl-edocivil'),
+    rcDeclaranteLocalidadNac:g('rc-decl-localidad'),rcDeclaranteMunicipioNac:g('rc-decl-municipio'),
+    rcDeclaranteEntidadNac:g('rc-decl-entidad'),rcDeclarantePaisNac:g('rc-decl-pais'),
+    rcDeclaranteDomCalle:g('rc-decl-domcalle'),rcDeclaranteDomNumero:g('rc-decl-domnumero'),
+    rcDeclaranteDomColonia:g('rc-decl-domcolonia'),rcDeclaranteDomLocalidad:g('rc-decl-domlocalidad'),
+    rcDeclaranteDomMunicipio:g('rc-decl-dommunicipio'),rcDeclaranteDomEntidad:g('rc-decl-domentidad'),
+    rcDeclaranteDomPais:g('rc-decl-dompais'),
+    rcDeclaranteFechaNacimiento:g('rc-decl-fecnac'),rcDeclaranteEdad:g('rc-decl-edad'),
+    rcDeclaranteTelefono:g('rc-decl-telefono'),
+
+    rcFunerariaNombre:g('rc-fun-nombre'),rcFunerariaCiudad:g('rc-fun-ciudad'),rcFunerariaTelefono:g('rc-fun-telefono'),
+    rcFunerarioAsiste:g('rc-fun-asiste')==='__OTRO__'?g('rc-fun-asiste-otro'):g('rc-fun-asiste'),
+
+    rcAtencionMedica:g('rc-atencion-medica'),
+    rcSituacionLaboral:g('rc-situacion-laboral'),
+    rcSituacionLaboralOtro:g('rc-situacion-laboral')==='OTRO'?g('rc-situacion-laboral-otro'):'',
+    rcEscolaridad:g('rc-escolaridad'),
+    rcEscolaridadUltimoGrado:g('rc-escolaridad')==='PRIMARIA_INCOMPLETA'?g('rc-escolaridad-ultimogrado'):'',
+    rcPosicionTrabajo:g('rc-posicion-trabajo')
+  };
+
+  ['test1','test2'].forEach(p=>{
+    const campo=p==='test1'?'Testigo1':'Testigo2';
+    datos[`rc${campo}Curp`]=g(`rc-${p}-curp`).toUpperCase();
+    datos[`rc${campo}Nombre`]=g(`rc-${p}-nombre`);
+    datos[`rc${campo}Telefono`]=g(`rc-${p}-telefono`);
+    datos[`rc${campo}FechaNacimiento`]=g(`rc-${p}-fecnac`);
+    datos[`rc${campo}Edad`]=g(`rc-${p}-edad`);
+    datos[`rc${campo}Sexo`]=g(`rc-${p}-sexo`);
+    datos[`rc${campo}LocalidadNac`]=g(`rc-${p}-localidad`);
+    datos[`rc${campo}MunicipioNac`]=g(`rc-${p}-municipio`);
+    datos[`rc${campo}EntidadNac`]=g(`rc-${p}-entidad`);
+    datos[`rc${campo}PaisNac`]=g(`rc-${p}-pais`);
+    datos[`rc${campo}EstadoCivil`]=g(`rc-${p}-edocivil`);
+    datos[`rc${campo}Parentesco`]=g(`rc-${p}-parentesco`);
+    datos[`rc${campo}Nacionalidad`]=g(`rc-${p}-nacionalidad`);
+    datos[`rc${campo}DomCalle`]=g(`rc-${p}-domcalle`);
+    datos[`rc${campo}DomNumero`]=g(`rc-${p}-domnumero`);
+    datos[`rc${campo}DomColonia`]=g(`rc-${p}-domcolonia`);
+    datos[`rc${campo}DomLocalidad`]=g(`rc-${p}-domlocalidad`);
+    datos[`rc${campo}DomMunicipio`]=g(`rc-${p}-dommunicipio`);
+    datos[`rc${campo}DomEntidad`]=g(`rc-${p}-domentidad`);
+    datos[`rc${campo}DomPais`]=g(`rc-${p}-dompais`);
+  });
+
+  if(!datos.rcFinadoNombres&&!datos.rcFinadoApellidoPaterno){toast('⚠ Ingresa el nombre del finado');return}
+
+  const arr=lRC();const idx=arr.findIndex(x=>x.folio===folio);
+  datos.creadoPor=ST.user?(ST.user.nombreCompleto||''):'';
+  datos.fechaActualizacion=new Date().toISOString();
+  if(idx>=0){datos.fechaCreacion=arr[idx].fechaCreacion;arr[idx]=datos}
+  else{datos.fechaCreacion=new Date().toISOString();arr.push(datos)}
+  sRC(arr);
+  encolar({accion:'guardarSolicitudRC',datos});
+  if(ST.online&&ST.url)sincronizarTodo(true);
+  toast('✅ Solicitud de Registro Civil guardada');
 }
 
 /* ── ACTUALIZAR LOGÍSTICA (horarios/lugar capturados horas después) ──
