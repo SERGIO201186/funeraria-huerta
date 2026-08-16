@@ -2663,8 +2663,8 @@ function encolar(item){
   $('est-q').textContent=ST.q.length;
 }
 async function sincronizarTodo(silencioso=false){
-  if(!ST.url){if(!silencioso)toast('⚠ Configura URL primero');return}
-  if(!ST.online){if(!silencioso)toast('⚠ Sin conexión');return}
+  if(!ST.url){if(!silencioso)toast('⚠ Configura URL primero');return false}
+  if(!ST.online){if(!silencioso)toast('⚠ Sin conexión');return false}
   if(!silencioso)toast('⏳ Sincronizando…',2000);
   try{
     const r=await api({
@@ -2732,9 +2732,20 @@ async function sincronizarTodo(silencioso=false){
       const lbl=new Date(now).toLocaleString('es-MX');
       $('lbl-sync').textContent=lbl;$('est-sync').textContent=lbl;$('est-q').textContent=0;
       $('sync-log').textContent='✅ '+r.mensaje+' · '+lbl;
-      updDash();if(!silencioso)toast('✅ Sincronización completa');
-    }else{if(!silencioso)toast('❌ '+(r.mensaje||r.error||'Error'))}
-  }catch(e){if(!silencioso)toast('❌ Error: '+e.message)}
+      updDash();
+      // Aunque el resto de la sincronización sí haya funcionado, algún
+      // elemento específico pudo fallar al guardarse en el servidor (ver
+      // sincronizarTodo() en Codigo.gs) — esto se avisa SIEMPRE, incluso en
+      // modo silencioso, para no repetir "dice que guardó pero no guardó".
+      if(r.erroresSync&&r.erroresSync.length){
+        console.error('Errores de sincronización:',r.erroresSync);
+        toast('⚠ '+r.erroresSync.length+' dato(s) no se guardaron — vuelve a intentar o revisa con soporte');
+        return false;
+      }
+      if(!silencioso)toast('✅ Sincronización completa');
+      return true;
+    }else{if(!silencioso)toast('❌ '+(r.mensaje||r.error||'Error'));return false}
+  }catch(e){if(!silencioso)toast('❌ Error: '+e.message);return false}
 }
 // El botón "↻ Actualizar" de cada página debe traer lo último de la nube
 // (no solo releer lo que ya hay guardado en este dispositivo), para que los
@@ -3238,7 +3249,7 @@ function abrirCertificar(folio){
   certTab(1);
   $('mo-certificar').classList.add('show');
 }
-function guardarCertificacion(){
+async function guardarCertificacion(){
   const folio=$('mo-certificar').dataset.folio;
   if(!folio){toast('⚠ Folio no encontrado');return}
   const g=id=>($(id)||{value:''}).value;
@@ -3294,8 +3305,12 @@ function guardarCertificacion(){
   else{datos.fechaCreacion=new Date().toISOString();arr.push(datos)}
   sCert(arr);
   encolar({accion:'guardarCertificacion',datos});
-  if(ST.online&&ST.url)sincronizarTodo(true);
-  toast('✅ Información de certificación guardada');
+  if(ST.online&&ST.url){
+    const ok=await sincronizarTodo(true);
+    toast(ok?'✅ Información de certificación guardada':'⚠ Se guardó localmente, pero no se pudo confirmar en la nube — revisa tu conexión y vuelve a intentar');
+  }else{
+    toast('💾 Guardado local (sin conexión) — se subirá cuando haya internet');
+  }
 }
 function etiquetaEdoCivil(v){
   return {SOLTERO:'Soltero(a)',CASADO:'Casado(a)',VIUDO:'Viudo(a)',DIVORCIADO:'Divorciado(a)',UNION_LIBRE:'Unión libre'}[v]||v||'—';
@@ -3723,7 +3738,7 @@ function rcCargar(folio){
   $('rc-blq-traslado-destino').style.display=$('rc-destino-traslado').checked?'block':'none';
   rcCalcEdad('fi');rcCalcEdad('decl');rcCalcEdad('test1');rcCalcEdad('test2');
 }
-function guardarSolicitudRC(){
+async function guardarSolicitudRC(){
   const folio=$('mo-certificar').dataset.folio;
   if(!folio){toast('⚠ Folio no encontrado');return}
   const g=id=>($(id)||{value:''}).value;
@@ -3843,8 +3858,12 @@ function guardarSolicitudRC(){
   else{datos.fechaCreacion=new Date().toISOString();arr.push(datos)}
   sRC(arr);
   encolar({accion:'guardarSolicitudRC',datos});
-  if(ST.online&&ST.url)sincronizarTodo(true);
-  toast('✅ Solicitud de Registro Civil guardada');
+  if(ST.online&&ST.url){
+    const ok=await sincronizarTodo(true);
+    toast(ok?'✅ Solicitud de Registro Civil guardada':'⚠ Se guardó localmente, pero no se pudo confirmar en la nube — revisa tu conexión y vuelve a intentar');
+  }else{
+    toast('💾 Guardado local (sin conexión) — se subirá cuando haya internet');
+  }
 }
 
 /* ── PESTAÑA 3: FORMATO XALAPA LLENO (PDF listo para imprimir) ──
