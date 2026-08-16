@@ -678,6 +678,21 @@ function obtenerAbonos(folio) {
 // ============================================================
 //  SINCRONIZACIÓN MASIVA
 // ============================================================
+// Antes, si CUALQUIER elemento de CUALQUIERA de estas listas tronaba
+// (ej. un registro viejo/corrupto en la caché de un solo dispositivo), la
+// excepción tumbaba TODA la sincronización — ni siquiera se llegaba a
+// procesar lo que venía después en la lista (certificaciones y
+// solicitudesRC son las últimas). El cliente, además, no esperaba el
+// resultado antes de avisar "guardado", así que el usuario nunca se
+// enteraba de que en realidad no se guardó nada. Ahora cada elemento se
+// procesa aislado: uno malo no bota a los demás, y los errores se
+// regresan en "erroresSync" para poder diagnosticarlos.
+function _procesarLista(lista, fn, etiqueta, errores) {
+  lista.forEach(item => {
+    try { fn(item); }
+    catch (e) { errores.push(`${etiqueta} (folio/id ${item && (item.folio||item.id)}): ${e.message}`); }
+  });
+}
 function sincronizarTodo(payload) {
   const ods            = payload.ods    || [];
   const emps           = payload.colaboradores || [];
@@ -687,17 +702,22 @@ function sincronizarTodo(payload) {
   const certificaciones= payload.certificaciones || [];
   const solicitudesRC  = payload.solicitudesRC || [];
 
-  ods.forEach(o             => guardarODS(o));
-  emps.forEach(e            => guardarColaborador(e));
-  prevs.forEach(p           => guardarPrevision(p));
-  abonos.forEach(a          => guardarAbono(a));
-  solicitudes.forEach(s     => guardarSolicitud(s));
-  certificaciones.forEach(c => guardarCertificacion(c));
-  solicitudesRC.forEach(s   => guardarSolicitudRC(s));
+  const errores = [];
+  _procesarLista(ods,             guardarODS,            "ODS",             errores);
+  _procesarLista(emps,            guardarColaborador,    "Colaborador",     errores);
+  _procesarLista(prevs,           guardarPrevision,      "Previsión",       errores);
+  _procesarLista(abonos,          guardarAbono,          "Abono",           errores);
+  _procesarLista(solicitudes,     guardarSolicitud,      "Solicitud",       errores);
+  _procesarLista(certificaciones, guardarCertificacion,  "Certificación",   errores);
+  _procesarLista(solicitudesRC,   guardarSolicitudRC,    "Solicitud RC",    errores);
+
+  if (errores.length) logActividad("sincronizarTodo:errores", "", errores.join(" | "));
 
   return {
     ok:true,
-    mensaje:`Sync OK: ${ods.length} ODS, ${emps.length} colaboradores, ${prevs.length} previsiones`,
+    erroresSync: errores,
+    mensaje:`Sync OK: ${ods.length} ODS, ${emps.length} colaboradores, ${prevs.length} previsiones`
+      + (errores.length ? ` — ⚠ ${errores.length} elemento(s) NO se pudieron guardar` : ""),
     ods:            obtenerODS({}).datos,
     colaboradores: obtenerColaboradores().datos,
     // "Previsiones" es solo para la app hermana: esta app nunca manda datos
