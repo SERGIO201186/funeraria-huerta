@@ -21,6 +21,7 @@ const SH_LOG   = "LogActividad";
 const SH_PROD  = "Productos";      // ← catálogo de ataúdes/urnas
 const SH_SOLIC = "Solicitudes";    // ← solicitudes de edición de ODS (empleados)
 const SH_CERT  = "Certificaciones"; // ← datos para certificado médico / Registro Civil
+const SH_ELIM  = "ODSEliminadas";  // ← folios borrados (evita que resuciten con una sync vieja)
 
 // — CABECERAS ODS ----------------------------------------------
 // IMPORTANTE: el ORDEN de este arreglo ya no determina en qué columna
@@ -227,6 +228,7 @@ function getAbonoSh() { return initSheet(SH_ABONO, ["id","folio","contratante","
 function getProdSh() { return initSheet(SH_PROD, PROD_COLS); }
 function getSolicSh() { return initSheet(SH_SOLIC, SOLIC_COLS); }
 function getCertSh()  { return initSheet(SH_CERT,  CERT_COLS);  }
+function getElimSh()  { return initSheet(SH_ELIM,  ["folio","fecha"]); }
 
 // Encabezados REALES de la hoja tal como están hoy (para leer/escribir
 // siempre alineado a lo que en verdad hay en la fila 1, nunca a una
@@ -316,6 +318,13 @@ function guardarODS(datos) {
   if (datos.folio) {
     const idx = findRow(sh, "folio", datos.folio);
     if (idx > 0) return actualizarODS(datos.folio, datos);
+    // El folio no existe en la hoja: puede ser una orden nueva, o una que ya
+    // se eliminó y un dispositivo con caché local vieja (de antes del
+    // borrado) la manda de nuevo al hacer una sincronización completa. Si ya
+    // está en el registro de eliminados, NO se vuelve a crear.
+    if (findRow(getElimSh(), "folio", datos.folio) > 0) {
+      return { ok:true, folio:datos.folio, eliminado:true, mensaje:"Orden eliminada anteriormente; no se vuelve a crear" };
+    }
   }
   const headers = headersReales(sh);
   datos.fechaCreacion     = datos.fechaCreacion     || new Date().toISOString();
@@ -372,8 +381,26 @@ function eliminarODS(folio) {
   const sh = getODSSh();
   const idx = findRow(sh, "folio", folio);
   if (idx > 0) sh.deleteRow(idx);
+  registrarEliminacionODS(folio);
   logActividad("eliminarODS", "", folio);
   return { ok:true };
+}
+
+// Deja constancia del borrado para que ninguna sincronización futura (de
+// este dispositivo u otro con caché vieja) pueda volver a crear el folio.
+function registrarEliminacionODS(folio) {
+  const sh = getElimSh();
+  const idx = findRow(sh, "folio", folio);
+  const fecha = new Date().toISOString();
+  if (idx > 0) { sh.getRange(idx, 2).setValue(fecha); return; }
+  sh.appendRow([folio, fecha]);
+}
+
+function obtenerFoliosEliminados() {
+  const sh = getElimSh();
+  const data = sh.getDataRange().getValues();
+  if (data.length <= 1) return [];
+  return data.slice(1).map(r => r[0]).filter(Boolean);
 }
 
 // ============================================================
@@ -583,11 +610,24 @@ function sincronizarTodo(payload) {
     mensaje:`Sync OK: ${ods.length} ODS, ${emps.length} colaboradores, ${prevs.length} previsiones`,
     ods:            obtenerODS({}).datos,
     colaboradores: obtenerColaboradores().datos,
-    previsiones:    obtenerPrevisiones({}).datos,
+    // "Previsiones" es solo para la app hermana: esta app nunca manda datos
+    // aquí. Si alguien borró esa pestaña a propósito, no hay que recrearla
+    // sola con cada sincronización — por eso solo se lee si ya existe.
+    previsiones:    _previsionesSiExiste(),
     abonos:         obtenerAbonos(null).datos,
     solicitudes:    obtenerSolicitudes({}).datos,
-    certificaciones: obtenerCertificaciones({}).datos
+    certificaciones: obtenerCertificaciones({}).datos,
+    // Folios borrados: el cliente los usa para limpiar cualquier copia local
+    // vieja que le haya quedado de antes del borrado (celular que no
+    // sincronizaba desde hace tiempo, pestaña abierta desde antes, etc.).
+    eliminados: obtenerFoliosEliminados()
   };
+}
+
+function _previsionesSiExiste() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss.getSheetByName(SH_PREV)) return [];
+  return obtenerPrevisiones({}).datos;
 }
 
 // ============================================================
@@ -808,7 +848,7 @@ function onOpen() {
     .addToUi();
 }
 function inicializarTodasLasHojas() {
-  getODSSh(); getEmpSh(); getPrevSh(); getAbonoSh(); getProdSh(); getSolicSh(); getCertSh();
+  getODSSh(); getEmpSh(); getPrevSh(); getAbonoSh(); getProdSh(); getSolicSh(); getCertSh(); getElimSh();
   SpreadsheetApp.getUi().alert("✅ Hojas inicializadas/reparadas correctamente. Cualquier columna nueva que faltaba se agregó al final de cada hoja.");
 }
 function configurarCorreoAlertasUI() {
