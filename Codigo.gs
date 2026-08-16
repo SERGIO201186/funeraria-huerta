@@ -219,6 +219,8 @@ function doPost(e) {
       case "obtenerSolicitudesRC":   result = obtenerSolicitudesRC(payload.filtros||{}); break;
       // Alertas de pendientes por correo (equipos sin recoger, saldos, solicitudes, abonos)
       case "guardarAlertaConfig":result = guardarAlertaConfig(payload.datos||{}); break;
+      case "guardarMapeoRC":    result = guardarMapeoRC(payload.mapeo||{}); break;
+      case "obtenerMapeoRC":    result = obtenerMapeoRC();               break;
       case "obtenerAlertaConfig":result = obtenerAlertaConfig();            break;
       case "enviarAlertaPrueba": result = enviarAlertasPendientes(true);    break;
       default: result = { ok:false, mensaje:"Acción desconocida: " + accion };
@@ -789,6 +791,20 @@ function generarContratoHTML(folio) {
 // ============================================================
 const PROP_ALERT_EMAIL  = "ALERT_EMAIL";
 const ALERT_TRIGGER_FN  = "enviarAlertasPendientes";
+
+// Mapeo (coordenadas) del formato de Registro Civil, calibrado a mano desde
+// la app. Un solo JSON compartido en PropertiesService — así cualquier
+// dispositivo que descargue el PDF usa la MISMA calibración, sin tener que
+// repetirla en cada celular.
+const PROP_MAPEO_RC = "MAPEO_RC";
+function guardarMapeoRC(mapeo) {
+  PropertiesService.getScriptProperties().setProperty(PROP_MAPEO_RC, JSON.stringify(mapeo || {}));
+  return { ok:true, mensaje:"Mapeo guardado" };
+}
+function obtenerMapeoRC() {
+  const raw = PropertiesService.getScriptProperties().getProperty(PROP_MAPEO_RC);
+  return { ok:true, mapeo: raw ? JSON.parse(raw) : {} };
+}
 
 function getAlertEmail() {
   return PropertiesService.getScriptProperties().getProperty(PROP_ALERT_EMAIL) || "";
