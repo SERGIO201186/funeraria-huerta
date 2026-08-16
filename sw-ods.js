@@ -3,7 +3,13 @@
 // sw-ods.js — Archivo separado requerido por GitHub Pages
 // ═══════════════════════════════════════════════════════════════
 
-const CACHE_NAME = 'huerta-ods-v2';
+// v3: se sube de versión a propósito para forzar que CUALQUIER celular con
+// una copia vieja en caché (de antes de que la app pidiera login, o de
+// cualquier versión anterior) la descarte por completo la próxima vez que
+// tenga conexión — "activate" borra cualquier caché con nombre distinto al
+// actual, así que un cambio de nombre aquí es la manera de purgar cachés
+// viejos atorados en un dispositivo específico.
+const CACHE_NAME = 'huerta-ods-v3';
 
 self.addEventListener('install', function(event) {
   event.waitUntil(
