@@ -4027,8 +4027,15 @@ async function rcSincronizarMapeo(){
   }catch(e){}
 }
 async function rcGuardarMapeoEnNube(){
-  if(!ST.url||!ST.online)return;
-  try{await api({accion:'guardarMapeoRC',mapeo:lRCMap()})}catch(e){}
+  if(!ST.url||!ST.online)return false;
+  try{
+    const r=await api({accion:'guardarMapeoRC',mapeo:lRCMap()});
+    // El servidor fusiona (nunca sobreescribe) y regresa el resultado ya
+    // combinado con lo que hayan calibrado otros dispositivos — se adopta
+    // aquí para que este mismo dispositivo también quede al día.
+    if(r.ok&&r.mapeo)sRCMap(r.mapeo);
+    return !!r.ok;
+  }catch(e){return false}
 }
 
 /* ── MAPEADOR VISUAL: clic sobre la imagen para calibrar cada campo ── */
@@ -4070,15 +4077,22 @@ function mapBorrarCampoActual(){
   mapRenderMarcadores();
   toast('Punto borrado, vuelve al valor por defecto');
 }
-function mapRestablecerTodo(){
-  if(!confirm('¿Borrar TODA la calibración y volver a las posiciones estimadas de fábrica? Se aplica en todos los dispositivos al Guardar.'))return;
+async function mapRestablecerTodo(){
+  if(!confirm('¿Borrar TODA la calibración (en este dispositivo Y en la nube, para todos) y volver a las posiciones estimadas de fábrica?'))return;
   sRCMap({});
   mapRenderMarcadores();
-  toast('Calibración restablecida (no olvides Guardar)');
+  // A diferencia de Guardar (que fusiona), restablecer sí tiene que borrar
+  // de verdad en el servidor — por eso usa su propia acción en vez de
+  // guardarMapeoRC con un objeto vacío (fusionar un {} no borra nada).
+  if(ST.url&&ST.online){
+    try{await api({accion:'reiniciarMapeoRC'})}catch(e){}
+  }
+  toast('✅ Calibración restablecida en todos los dispositivos');
 }
 async function mapGuardar(){
-  await rcGuardarMapeoEnNube();
-  toast('✅ Calibración guardada para todos los dispositivos');
+  const ok=await rcGuardarMapeoEnNube();
+  mapRenderMarcadores();
+  toast(ok?'✅ Calibración guardada para todos los dispositivos':'⚠ Sin conexión — se guardó solo en este dispositivo');
 }
 function _mapEventToInches(e){
   const img=$('map-img');

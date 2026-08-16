@@ -221,6 +221,7 @@ function doPost(e) {
       case "guardarAlertaConfig":result = guardarAlertaConfig(payload.datos||{}); break;
       case "guardarMapeoRC":    result = guardarMapeoRC(payload.mapeo||{}); break;
       case "obtenerMapeoRC":    result = obtenerMapeoRC();               break;
+      case "reiniciarMapeoRC":  result = reiniciarMapeoRC();             break;
       case "obtenerAlertaConfig":result = obtenerAlertaConfig();            break;
       case "enviarAlertaPrueba": result = enviarAlertasPendientes(true);    break;
       default: result = { ok:false, mensaje:"Acción desconocida: " + accion };
@@ -797,13 +798,30 @@ const ALERT_TRIGGER_FN  = "enviarAlertasPendientes";
 // dispositivo que descargue el PDF usa la MISMA calibración, sin tener que
 // repetirla en cada celular.
 const PROP_MAPEO_RC = "MAPEO_RC";
+// FUSIONA en vez de reemplazar — si esto sobreescribiera directo, el
+// último dispositivo en guardar borraba la calibración que hubiera hecho
+// cualquier OTRO dispositivo mientras tanto (cada quien manda su copia
+// local completa, igual que el problema ya resuelto con las ODS). Al
+// fusionar por campo, calibrar "fi_curp" en un celular y "fi_edad" en
+// otro deja los dos guardados, sin importar el orden en que se suba cada
+// uno. Devuelve el mapeo ya fusionado para que ese mismo dispositivo
+// actualice su copia local con lo que aportaron los demás.
 function guardarMapeoRC(mapeo) {
-  PropertiesService.getScriptProperties().setProperty(PROP_MAPEO_RC, JSON.stringify(mapeo || {}));
-  return { ok:true, mensaje:"Mapeo guardado" };
+  const raw = PropertiesService.getScriptProperties().getProperty(PROP_MAPEO_RC);
+  const actual = raw ? JSON.parse(raw) : {};
+  const fusionado = Object.assign(actual, mapeo || {});
+  PropertiesService.getScriptProperties().setProperty(PROP_MAPEO_RC, JSON.stringify(fusionado));
+  return { ok:true, mensaje:"Mapeo guardado", mapeo:fusionado };
 }
 function obtenerMapeoRC() {
   const raw = PropertiesService.getScriptProperties().getProperty(PROP_MAPEO_RC);
   return { ok:true, mapeo: raw ? JSON.parse(raw) : {} };
+}
+// Único camino para BORRAR calibraciones de verdad (fusionar nunca puede
+// quitar una llave) — lo usa "Restablecer Todo" del mapeador.
+function reiniciarMapeoRC() {
+  PropertiesService.getScriptProperties().setProperty(PROP_MAPEO_RC, JSON.stringify({}));
+  return { ok:true, mensaje:"Mapeo reiniciado" };
 }
 
 function getAlertEmail() {
