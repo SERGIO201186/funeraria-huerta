@@ -551,6 +551,7 @@ button:active{transform:scale(.97)}
           <span style="color:var(--text2)">Anticipo Recibido ($)</span>
           <input type="number" id="o-anticipo" style="width:110px;text-align:right;color:var(--gold2);font-weight:700" min="0" value="0" oninput="calcTotal()"/>
         </div>
+        <p id="o-anticipo-hint" style="display:none;font-size:11px;color:var(--amber);margin:2px 0 0">🔒 Al editar una orden ya creada, este campo es solo de referencia y no se guarda aquí — usa "💰 Registrar Abono" para agregar un pago, o "🧮 Ajustar Saldo" (Administrador) para corregirlo.</p>
         <div style="display:flex;justify-content:space-between;font-weight:700;color:var(--red);margin-top:4px">
           <span>Restante (Total − Anticipo)</span><span id="fin-rest">$0</span>
         </div>
@@ -2287,6 +2288,8 @@ function limpiarODS(){
   _folioEnEdicion=null;_solicitudEnUso=null;
   $('nueva-titulo').textContent='Nueva Orden de Servicio';
   $('btn-guardar-ods').textContent='💾 Guardar Orden';
+  if($('o-anticipo'))$('o-anticipo').disabled=false;
+  if($('o-anticipo-hint'))$('o-anticipo-hint').style.display='none';
 }
 
 // Sale del modo edición (si estaba activo) sin guardar cambios y deja el
@@ -4619,6 +4622,11 @@ async function precargarFormularioODS(o){
     'pg-monto':'montoPagare','pg-nombre':'nombreDeudor','pg-tel':'telefonoDeudor','pg-ine':'ineDeudor','pg-venc':'vencimientoPagare','pg-dom':'domicilioDeudor','pg-letras':'cantidadLetras'
   };
   Object.keys(directos).forEach(id=>{const el=$(id);if(el)el.value=o[directos[id]]??''});
+  // El anticipo real ya cobrado no se toca desde la edición general (ver
+  // guardarEdicionODS) — se deshabilita para que no parezca editable y
+  // termine "perdiéndose" un cambio que en realidad nunca se guarda.
+  if($('o-anticipo'))$('o-anticipo').disabled=true;
+  if($('o-anticipo-hint'))$('o-anticipo-hint').style.display='block';
   // Fecha/hora de sepelio-cremación: caen de vuelta a los campos viejos
   // (fechaSepelio/fechaCremacion, etc.) por si la orden es de antes de
   // unificarlos en un solo juego de campos.
