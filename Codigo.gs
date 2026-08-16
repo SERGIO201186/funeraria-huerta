@@ -117,7 +117,7 @@ const CERT_COLS = [
 // no se piden más datos. "rcDestinoX" son 3 casillas independientes:
 // Inhumación es excluyente; Cremación y Traslado se pueden marcar juntas.
 const RC_COLS = [
-  "folio","rcFechaFormato",
+  "folio",
   // Grupo 1 — Datos del finado
   "rcFinadoCurp","rcFinadoNombres","rcFinadoApellidoPaterno","rcFinadoApellidoMaterno",
   "rcFinadoFechaNacimiento","rcFinadoEdad","rcFinadoNacionalidad","rcFinadoSexo",

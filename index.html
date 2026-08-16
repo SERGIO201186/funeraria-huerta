@@ -1123,7 +1123,6 @@ button:active{transform:scale(.97)}
     <div id="cert-tab-2" class="cert-tab" style="display:none">
       <p style="font-size:11px;color:var(--text3);margin-top:-4px">Sigue el formato de Registro Civil de Xalapa (frente + reverso). Lo que ya se capturó en la Pestaña 1 se precarga aquí — revísalo, porque este formato pide algunos datos con más detalle.</p>
 
-      <div class="f"><label class="lbl">Fecha del Formato</label><input id="rc-fecha-formato" type="date"/></div>
 
       <!-- GRUPO 1: Datos del Finado -->
       <div class="card">
@@ -1279,12 +1278,18 @@ button:active{transform:scale(.97)}
       <p style="font-size:11px;color:var(--text3);margin-top:6px">Formatos de Tlalnehuayocan, Banderilla y Emiliano Zapata: pendientes (se agregan por separado cuando lleguen).</p>
     </div>
 
-    <!-- PESTAÑA 3: MAPEO SOBRE FORMATO OFICIAL (pendiente de la imagen) -->
+    <!-- PESTAÑA 3: MAPEO SOBRE FORMATO OFICIAL — Xalapa -->
     <div id="cert-tab-3" class="cert-tab" style="display:none">
-      <div class="card" style="text-align:center;padding:34px 16px">
-        <div style="font-size:34px;margin-bottom:8px">🚧</div>
-        <div style="font-weight:700;margin-bottom:6px">En construcción</div>
-        <p style="font-size:13px;color:var(--text2)">Falta la imagen del formato oficial (tamaño oficio, 2 caras) para mapear dónde va cada dato.</p>
+      <div class="card">
+        <div class="st">Formato de Registro Civil de Xalapa — listo para imprimir</div>
+        <p style="font-size:13px;color:var(--text2)">Genera un PDF de 2 páginas (tamaño oficio, frente y reverso) con la imagen real del formato de fondo y los datos de la Pestaña 2 ya colocados en cada casilla. Guarda primero la Pestaña 2 para que el PDF tenga lo último capturado.</p>
+        <button class="bg" style="width:100%" onclick="descargarFormatoRC()">📄 Descargar Formato Xalapa Lleno (PDF)</button>
+        <p style="font-size:11px;color:var(--text3);margin-top:8px">⚠ Es la primera versión del mapeo — la posición de cada dato se calculó a partir de la imagen del formato, pero puede necesitar ajustes finos. Imprime una prueba y avísame qué campos quedaron corridos (con cuánto y hacia dónde) para calibrarlo.</p>
+      </div>
+      <div class="card" style="text-align:center;padding:24px 16px">
+        <div style="font-size:28px;margin-bottom:6px">🚧</div>
+        <div style="font-weight:700;margin-bottom:6px">Tlalnehuayocan, Banderilla y Emiliano Zapata</div>
+        <p style="font-size:13px;color:var(--text2)">Pendientes — se agregan por separado cuando lleguen sus formatos.</p>
       </div>
     </div>
   </div>
@@ -3456,7 +3461,6 @@ function rcCargar(folio){
   const g=(id,v)=>{if($(id))$(id).value=v||''};
 
   if(rc){
-    g('rc-fecha-formato',fechaPlano(rc.rcFechaFormato));
     g('rc-fi-curp',rc.rcFinadoCurp);
     g('rc-fi-nombres',rc.rcFinadoNombres);
     g('rc-fi-ap1',rc.rcFinadoApellidoPaterno);
@@ -3571,7 +3575,6 @@ function rcCargar(folio){
     g('rc-posicion-trabajo',rc.rcPosicionTrabajo);
   }else{
     // Sin registro RC todavía: autollenar lo que coincide con la Pestaña 1.
-    g('rc-fecha-formato',new Date().toISOString().slice(0,10));
     const nom=splitNombreCompleto(cert.finadoNombre);
     g('rc-fi-nombres',nom.nombres);
     g('rc-fi-ap1',nom.ap1);
@@ -3653,7 +3656,6 @@ function guardarSolicitudRC(){
 
   const datos={
     folio,
-    rcFechaFormato:g('rc-fecha-formato'),
     rcFinadoCurp:g('rc-fi-curp').toUpperCase(),
     rcFinadoNombres:g('rc-fi-nombres'),rcFinadoApellidoPaterno:g('rc-fi-ap1'),rcFinadoApellidoMaterno:g('rc-fi-ap2'),
     rcFinadoFechaNacimiento:g('rc-fi-fecnac'),rcFinadoEdad:g('rc-fi-edad'),
@@ -3760,6 +3762,170 @@ function guardarSolicitudRC(){
   encolar({accion:'guardarSolicitudRC',datos});
   if(ST.online&&ST.url)sincronizarTodo(true);
   toast('✅ Solicitud de Registro Civil guardada');
+}
+
+/* ── PESTAÑA 3: FORMATO XALAPA LLENO (PDF listo para imprimir) ──
+   Coordenadas (en pulgadas, hoja oficio 8.5×14) medidas sobre la imagen
+   real del formato (assets/formatos/rc-xalapa-p*.png) que el usuario
+   compartió. Es un primer mapeo — puede necesitar ajuste fino tras una
+   impresión de prueba real. */
+function _rcEtiquetaParentesco(v){
+  const map={NINGUNO:'Ninguno',CONYUGE:'Cónyuge',HIJO:'Hijo(a)',PADRE:'Padre',MADRE:'Madre',
+    HERMANO:'Hermano(a)',ABUELO:'Abuelo(a)',NIETO:'Nieto(a)',TIO:'Tío(a)',SOBRINO:'Sobrino(a)',
+    PRIMO:'Primo(a)',CUNADO:'Cuñado(a)',SUEGRO:'Suegro(a)',YERNO_NUERA:'Yerno/Nuera'};
+  return map[v]||v||'';
+}
+function _rcEtiquetaEdoCivil(v){
+  return {SOLTERO:'Soltero(a)',CASADO:'Casado(a)'}[v]||v||'';
+}
+function _rcSexoLetra(v){
+  return v==='HOMBRE'?'H':v==='MUJER'?'M':'';
+}
+function _rcFecha(v){
+  const s=fechaPlano(v);
+  const m=s?String(s).match(/^(\d{4})-(\d{2})-(\d{2})/):null;
+  return m?{dia:m[3],mes:m[2],anio:m[1]}:{dia:'',mes:'',anio:''};
+}
+async function _cargarImagenDataURL(url){
+  const resp=await fetch(url);
+  const blob=await resp.blob();
+  return await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=reject;
+    reader.readAsDataURL(blob);
+  });
+}
+async function descargarFormatoRC(){
+  const folio=$('mo-certificar').dataset.folio;
+  if(!folio){toast('⚠ Folio no encontrado');return}
+  const rc=lRC().find(x=>x.folio===folio);
+  if(!rc){toast('⚠ Guarda primero la Pestaña 2 de este folio');return}
+  toast('📄 Generando PDF…',2500);
+  try{
+    const[imgFrente,imgReverso]=await Promise.all([
+      _cargarImagenDataURL('./assets/formatos/rc-xalapa-p1.png'),
+      _cargarImagenDataURL('./assets/formatos/rc-xalapa-p2.png')
+    ]);
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF({unit:'in',format:'legal'});
+    const T=(txt,x,y)=>{if(txt)pdf.text(String(txt),x,y)};
+    const X=(x,y)=>pdf.text('X',x,y);
+
+    pdf.addImage(imgFrente,'PNG',0,0,8.5,14);
+    pdf.setFont('helvetica','normal');pdf.setFontSize(9);
+
+    const fnac=_rcFecha(rc.rcFinadoFechaNacimiento);
+    T(rc.rcFinadoCurp,1.3,1.52);
+    if(rc.rcFinadoSexo==='HOMBRE')X(7.08,1.52);
+    if(rc.rcFinadoSexo==='MUJER')X(7.65,1.52);
+    T(rc.rcFinadoNombres,1.3,1.83);T(rc.rcFinadoApellidoPaterno,3.35,1.83);T(rc.rcFinadoApellidoMaterno,5.65,1.83);
+    T(fnac.dia,2.35,2.10);T(fnac.mes,2.68,2.10);T(fnac.anio,3.05,2.10);
+    T(rc.rcFinadoEdad,4.15,2.10);T(rc.rcFinadoNacionalidad,5.65,2.10);
+    T(rc.rcFinadoLocalidadNac,1.5,2.40);T(rc.rcFinadoMunicipioNac,3.4,2.40);T(rc.rcFinadoEntidadNac,5.1,2.40);T(rc.rcFinadoPaisNac,7.2,2.40);
+    T([rc.rcFinadoDomCalle,rc.rcFinadoDomNumero,rc.rcFinadoDomColonia].filter(Boolean).join(', '),1.9,2.72);
+    T(rc.rcFinadoDomLocalidad,1.5,3.02);T(rc.rcFinadoDomMunicipio,3.4,3.02);T(rc.rcFinadoDomEntidad,5.1,3.02);T(rc.rcFinadoDomPais,7.2,3.02);
+    if(rc.rcFinadoEstadoCivil==='SOLTERO')X(3.05,3.26);
+    if(rc.rcFinadoEstadoCivil==='CASADO')X(4.1,3.26);
+
+    if(rc.rcFinadoEstadoCivil==='CASADO'){
+      const cnac=_rcFecha(rc.rcConyugeFechaNacimiento);
+      T(rc.rcConyugeEstado==='FINADO'?`${rc.rcConyugeNombre||''} (finado)`.trim():rc.rcConyugeNombre,2.9,3.60);
+      T(rc.rcConyugeNacionalidad,7.0,3.60);
+      T(cnac.dia,2.55,3.84);T(cnac.mes,2.85,3.84);T(cnac.anio,3.15,3.84);
+      T(_rcSexoLetra(rc.rcConyugeSexo),4.9,3.84);
+      T(rc.rcConyugeLocalidadNac,1.5,4.11);T(rc.rcConyugeMunicipioNac,3.4,4.11);T(rc.rcConyugeEntidadNac,5.1,4.11);T(rc.rcConyugePaisNac,7.2,4.11);
+    }
+
+    const panac=_rcFecha(rc.rcPadreFechaNacimiento);
+    T(rc.rcPadreEstado==='FINADO'?`${rc.rcPadreNombre||''} (finado)`.trim():rc.rcPadreNombre,2.9,4.40);
+    T(rc.rcPadreNacionalidad,7.0,4.40);
+    T(panac.dia,2.55,4.64);T(panac.mes,2.85,4.64);T(panac.anio,3.15,4.64);
+    T(_rcSexoLetra(rc.rcPadreSexo),4.9,4.64);
+    T(rc.rcPadreLocalidadNac,1.5,4.90);T(rc.rcPadreMunicipioNac,3.4,4.90);T(rc.rcPadreEntidadNac,5.1,4.90);T(rc.rcPadrePaisNac,7.2,4.90);
+
+    const manac=_rcFecha(rc.rcMadreFechaNacimiento);
+    T(rc.rcMadreEstado==='FINADO'?`${rc.rcMadreNombre||''} (finada)`.trim():rc.rcMadreNombre,2.9,5.19);
+    T(rc.rcMadreNacionalidad,7.0,5.19);
+    T(manac.dia,2.55,5.42);T(manac.mes,2.85,5.42);T(manac.anio,3.15,5.42);
+    T(_rcSexoLetra(rc.rcMadreSexo),4.9,5.42);
+    T(rc.rcMadreLocalidadNac,1.5,5.68);T(rc.rcMadreMunicipioNac,3.4,5.68);T(rc.rcMadreEntidadNac,5.1,5.68);T(rc.rcMadrePaisNac,7.2,5.68);
+
+    const declnac=_rcFecha(rc.rcDeclaranteFechaNacimiento);
+    T(rc.rcDeclaranteNombre,2.4,6.15);T(rc.rcDeclaranteEdad,7.1,6.15);
+    T(_rcEtiquetaParentesco(rc.rcDeclaranteParentesco),1.9,6.38);
+    T(rc.rcDeclaranteNacionalidad,4.3,6.38);
+    T(_rcEtiquetaEdoCivil(rc.rcDeclaranteEstadoCivil),6.5,6.38);
+    T(rc.rcDeclaranteLocalidadNac,1.5,6.62);T(rc.rcDeclaranteMunicipioNac,3.4,6.62);T(rc.rcDeclaranteEntidadNac,5.1,6.62);T(rc.rcDeclarantePaisNac,7.2,6.62);
+    T(rc.rcDeclaranteDomCalle,1.7,6.90);T(rc.rcDeclaranteDomNumero,4.3,6.90);T(rc.rcDeclaranteDomColonia,5.9,6.90);
+    T(rc.rcDeclaranteDomLocalidad,1.5,7.12);T(rc.rcDeclaranteDomMunicipio,3.4,7.12);T(rc.rcDeclaranteDomEntidad,5.1,7.12);T(rc.rcDeclaranteDomPais,7.2,7.12);
+    T(declnac.dia,2.55,7.35);T(declnac.mes,2.85,7.35);T(declnac.anio,3.15,7.35);
+    T(rc.rcDeclaranteTelefono,5.9,7.35);
+
+    const ffec=_rcFecha(rc.rcFechaDefuncion);
+    T(ffec.dia,2.6,7.78);T(ffec.mes,3.15,7.78);T(ffec.anio,3.7,7.78);
+    T(rc.rcHoraDefuncion,6.1,7.78);
+    T(rc.rcFallecLugarDetalle,2.5,8.02);T(rc.rcNumeroCertificado,6.9,8.02);
+    if(rc.rcDestinoInhumacion==='SI')X(2.3,8.24);
+    if(rc.rcDestinoCremacion==='SI')X(3.4,8.24);
+    if(rc.rcDestinoTraslado==='SI'){X(4.55,8.24);T(rc.rcTrasladoDestino,4.9,8.24);}
+    T(rc.rcNombrePanteon,2.0,8.45);T(rc.rcPanteonUbicacion,1.6,8.65);
+
+    ['1','2'].forEach((n,i)=>{
+      const p='Testigo'+n,dy=i===0?0:1.75;
+      const tnac=_rcFecha(rc[`rc${p}FechaNacimiento`]);
+      T(rc[`rc${p}Curp`],1.3,8.98+dy);T(rc[`rc${p}Telefono`],6.9,8.98+dy);
+      T(rc[`rc${p}Nombre`],2.9,9.18+dy);
+      T(tnac.dia,2.55,9.42+dy);T(tnac.mes,2.85,9.42+dy);T(tnac.anio,3.15,9.42+dy);
+      T(rc[`rc${p}Edad`],4.4,9.42+dy);T(_rcSexoLetra(rc[`rc${p}Sexo`]),6.0,9.42+dy);
+      T(rc[`rc${p}LocalidadNac`],1.5,9.66+dy);T(rc[`rc${p}MunicipioNac`],3.4,9.66+dy);T(rc[`rc${p}EntidadNac`],5.1,9.66+dy);T(rc[`rc${p}PaisNac`],7.2,9.66+dy);
+      T(_rcEtiquetaEdoCivil(rc[`rc${p}EstadoCivil`]),1.9,9.90+dy);
+      T(_rcEtiquetaParentesco(rc[`rc${p}Parentesco`]),4.0,9.90+dy);
+      T(rc[`rc${p}Nacionalidad`],5.8,9.90+dy);
+      T([rc[`rc${p}DomCalle`],rc[`rc${p}DomNumero`],rc[`rc${p}DomColonia`]].filter(Boolean).join(', '),1.9,10.10+dy);
+      T(rc[`rc${p}DomLocalidad`],1.5,10.34+dy);T(rc[`rc${p}DomMunicipio`],3.4,10.34+dy);T(rc[`rc${p}DomEntidad`],5.1,10.34+dy);T(rc[`rc${p}DomPais`],7.2,10.34+dy);
+    });
+
+    T(rc.rcFunerariaNombre,2.0,12.55);T(rc.rcFunerariaTelefono,7.0,12.55);
+    T(rc.rcFunerariaCiudad,1.5,12.75);
+    T(rc.rcFunerarioAsiste,4.8,12.95);
+
+    pdf.addPage('legal');
+    pdf.addImage(imgReverso,'PNG',0,0,8.5,14);
+    pdf.setFontSize(11);
+    if(rc.rcAtencionMedica==='SI')X(4.33,0.72);
+    if(rc.rcAtencionMedica==='NO')X(4.94,0.72);
+    if(rc.rcAtencionMedica==='NO_SE_SABE')X(5.55,0.72);
+
+    const sit=rc.rcSituacionLaboral;
+    if(sit==='TENIA_TRABAJO')X(1.05,1.31);
+    if(sit==='ESTUDIABA')X(1.05,1.47);
+    if(sit==='LABORES_DOMESTICAS')X(3.55,1.31);
+    if(sit==='INCAPACITADO')X(3.55,1.47);
+    if(sit==='JUBILADO_PENSIONADO')X(6.55,1.31);
+    if(sit==='OTRO'){X(6.55,1.47);T(rc.rcSituacionLaboralOtro,6.85,1.47);}
+
+    const esc=rc.rcEscolaridad;
+    if(esc==='SIN_ESCOLARIDAD')X(4.13,1.90);
+    if(esc==='PRIMARIA_COMPLETA')X(4.13,2.06);
+    if(esc==='PRIMARIA_INCOMPLETA'){X(4.13,2.22);T(rc.rcEscolaridadUltimoGrado,2.63,2.22);}
+    if(esc==='SECUNDARIA')X(7.07,1.90);
+    if(esc==='PREPARATORIA')X(7.07,2.06);
+    if(esc==='PROFESIONAL')X(7.07,2.22);
+
+    const pos=rc.rcPosicionTrabajo;
+    if(pos==='OBRERO')X(1.05,2.91);
+    if(pos==='EMPLEADO')X(1.05,3.07);
+    if(pos==='JORNALERO_PEON')X(3.48,2.91);
+    if(pos==='TRABAJADOR_CUENTA_PROPIA')X(3.48,3.07);
+    if(pos==='PATRON_EMPRESARIO')X(6.58,2.91);
+    if(pos==='TRABAJADOR_NO_REMUNERADO')X(6.58,3.07);
+
+    pdf.save(`RegistroCivil_${folio}.pdf`);
+    toast('✅ PDF generado');
+  }catch(e){
+    toast('❌ Error generando el PDF: '+e.message);
+  }
 }
 
 /* ── ACTUALIZAR LOGÍSTICA (horarios/lugar capturados horas después) ──
