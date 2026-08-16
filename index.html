@@ -42,6 +42,8 @@ button:active{transform:scale(.97)}
 .bo:hover{border-color:var(--gold);color:var(--gold)}
 .br{background:var(--red2);color:#fff;font-weight:600}
 .bgr{background:var(--green2);color:#fff;font-weight:600}
+.ba{background:var(--amber);color:#1a1206;font-weight:700}
+.ba:hover{filter:brightness(1.1)}
 .bsm{padding:5px 11px;font-size:12px}
 .f{margin-bottom:11px}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -2393,13 +2395,25 @@ function verODS(folio){
         </div>`:''
       }
       ${o.anotaciones?`<div><div style="color:var(--text3)">Anotaciones</div><div>${o.anotaciones}</div></div>`:''}
+
+      ${esAdmin()?`<div class="div"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="bg" onclick="cambiarEst('${o.folio}','ACTIVA')">Activa</button>
+        ${o.estatus!=='PENDIENTE_PAGO'?`<button class="bo" onclick="cambiarEst('${o.folio}','PENDIENTE_PAGO')">🕐 Marcar Pend. Pago</button>`:''}
+        <button class="bo" onclick="cambiarEst('${o.folio}','CERRADA')">Cerrar ODS</button>
+      </div>`:''}
+
+      <div class="div"></div>
+      <div style="display:flex;gap:8px">
+        ${o.estatusEquipo==='RECOGIDO'
+          ?`<button class="bgr" style="flex:1;padding:12px 10px;font-size:14px" onclick="revertirEquipoRecogido('${o.folio}')">↺ Revertir — Equipo NO Recogido</button>`
+          :`<button class="ba" style="flex:1;padding:12px 10px;font-size:14px" onclick="equipoRecogido('${o.folio}')">📦 Equipo Recogido</button>`
+        }
+      </div>
+
       <div class="div"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${esAdmin()?`<button class="bg bsm" onclick="cambiarEst('${o.folio}','ACTIVA')">Activa</button>`:''}
-        ${esAdmin()&&o.estatus!=='PENDIENTE_PAGO'?`<button class="bo bsm" onclick="cambiarEst('${o.folio}','PENDIENTE_PAGO')">🕐 Marcar Pend. Pago</button>`:''}
-        ${esAdmin()?`<button class="bo bsm" onclick="cambiarEst('${o.folio}','CERRADA')">Cerrar ODS</button>`:''}
         ${o.estatus!=='CERRADA'?`<button class="bo bsm" onclick="abrirEdicionODS('${o.folio}')">✏️ Editar ODS</button>`:''}
-        <button class="bo bsm" onclick="equipoRecogido('${o.folio}')">📦 Equipo Recogido</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');abrirEdicionLogistica('${o.folio}')">🕐 Actualizar Logística</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');certificarODS('${o.folio}')">📝 Certificar</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');verExpedienteDeFolio('${o.folio}')">📄 Expediente</button>
@@ -2427,6 +2441,7 @@ function cambiarEst(folio,est){
   closeMo('mo-ods');cargarODS();updDash();toast(`${folio} → ${est}`)
 }
 function equipoRecogido(folio){
+  if(!confirm(`¿Marcar el equipo de ${folio} como RECOGIDO?`))return;
   const db=lDB();const i=db.findIndex(o=>o.folio===folio);if(i<0)return;
   db[i].estatusEquipo='RECOGIDO';db[i].fechaActualizacion=new Date().toISOString();sDB(db);
   encolar({accion:'actualizarODS',folio,datos:db[i]});
@@ -2435,6 +2450,22 @@ function equipoRecogido(folio){
   // a ACTIVO con el dato viejo de la nube.
   if(ST.online&&ST.url)sincronizarTodo(true);
   closeMo('mo-ods');cargarODS();updDash();toast('Equipo marcado RECOGIDO')
+}
+// Deshace un "Equipo Recogido" marcado por error. Va por el mismo camino que
+// equipoRecogido() (actualiza fechaActualizacion y sincroniza de inmediato)
+// a propósito: si en vez de esto se corrige la celda a mano en la hoja de
+// cálculo, cualquier dispositivo que todavía tenga en su caché local el
+// "RECOGIDO" viejo lo vuelve a subir en su siguiente sincronización (su
+// fechaActualizacion no cambió con la edición manual, así que no pierde la
+// comparación) y lo revierte solo — por eso la corrección tiene que salir
+// de aquí, no de editar la hoja directamente.
+function revertirEquipoRecogido(folio){
+  if(!confirm(`¿Revertir? El equipo de ${folio} va a quedar como NO recogido (Activo) otra vez.`))return;
+  const db=lDB();const i=db.findIndex(o=>o.folio===folio);if(i<0)return;
+  db[i].estatusEquipo='ACTIVO';db[i].fechaActualizacion=new Date().toISOString();sDB(db);
+  encolar({accion:'actualizarODS',folio,datos:db[i]});
+  if(ST.online&&ST.url)sincronizarTodo(true);
+  closeMo('mo-ods');cargarODS();updDash();toast('Equipo revertido a ACTIVO')
 }
 function elimODS(folio){
   if(!requiereAdmin('⚠ Solo el Administrador puede eliminar órdenes')) return;
