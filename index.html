@@ -3897,6 +3897,8 @@ const RC_POS_DEFAULT=[
   {id:'fallec_traslado',label:'Destino · X Traslado',page:1,x:4.55,y:8.24},
   {id:'fallec_traslado_a',label:'Destino · Traslado a (texto)',page:1,x:4.9,y:8.24},
   {id:'fallec_panteon',label:'Fallecimiento · Nombre del Panteón',page:1,x:2.0,y:8.45},
+  {id:'fallec_fecha_inhum',label:'Fallecimiento · Fecha de Inhumación (agregado, no está en el formato)',page:1,x:5.3,y:8.45},
+  {id:'fallec_hora_inhum',label:'Fallecimiento · Hora de Inhumación (agregado, no está en el formato)',page:1,x:6.9,y:8.45},
   {id:'fallec_ubicacion',label:'Fallecimiento · Ubicación del Panteón',page:1,x:1.6,y:8.65},
   {id:'t1_curp',label:'Testigo 1 · CURP',page:1,x:1.3,y:8.98},
   {id:'t1_telefono',label:'Testigo 1 · Teléfono',page:1,x:6.9,y:8.98},
@@ -4083,9 +4085,6 @@ function _rcEtiquetaParentesco(v){
 function _rcEtiquetaEdoCivil(v){
   return {SOLTERO:'Soltero(a)',CASADO:'Casado(a)'}[v]||v||'';
 }
-function _rcSexoLetra(v){
-  return v==='HOMBRE'?'H':v==='MUJER'?'M':'';
-}
 function _rcFecha(v){
   const s=fechaPlano(v);
   const m=s?String(s).match(/^(\d{4})-(\d{2})-(\d{2})/):null;
@@ -4128,7 +4127,7 @@ function _rcArmarMarcas(rc){
     t('cony_nombre',rc.rcConyugeEstado==='FINADO'?`${rc.rcConyugeNombre||''} (finado)`.trim():rc.rcConyugeNombre);
     t('cony_nacionalidad',rc.rcConyugeNacionalidad);
     t('cony_fecnac_dia',cnac.dia);t('cony_fecnac_mes',cnac.mes);t('cony_fecnac_anio',cnac.anio);
-    t('cony_sexo',_rcSexoLetra(rc.rcConyugeSexo));
+    t('cony_sexo',rc.rcConyugeSexo);
     t('cony_localidad',rc.rcConyugeLocalidadNac);t('cony_municipio',rc.rcConyugeMunicipioNac);t('cony_entidad',rc.rcConyugeEntidadNac);t('cony_pais',rc.rcConyugePaisNac);
   }
 
@@ -4136,14 +4135,14 @@ function _rcArmarMarcas(rc){
   t('pa_nombre',rc.rcPadreEstado==='FINADO'?`${rc.rcPadreNombre||''} (finado)`.trim():rc.rcPadreNombre);
   t('pa_nacionalidad',rc.rcPadreNacionalidad);
   t('pa_fecnac_dia',panac.dia);t('pa_fecnac_mes',panac.mes);t('pa_fecnac_anio',panac.anio);
-  t('pa_sexo',_rcSexoLetra(rc.rcPadreSexo));
+  t('pa_sexo',rc.rcPadreSexo);
   t('pa_localidad',rc.rcPadreLocalidadNac);t('pa_municipio',rc.rcPadreMunicipioNac);t('pa_entidad',rc.rcPadreEntidadNac);t('pa_pais',rc.rcPadrePaisNac);
 
   const manac=_rcFecha(rc.rcMadreFechaNacimiento);
   t('ma_nombre',rc.rcMadreEstado==='FINADO'?`${rc.rcMadreNombre||''} (finada)`.trim():rc.rcMadreNombre);
   t('ma_nacionalidad',rc.rcMadreNacionalidad);
   t('ma_fecnac_dia',manac.dia);t('ma_fecnac_mes',manac.mes);t('ma_fecnac_anio',manac.anio);
-  t('ma_sexo',_rcSexoLetra(rc.rcMadreSexo));
+  t('ma_sexo',rc.rcMadreSexo);
   t('ma_localidad',rc.rcMadreLocalidadNac);t('ma_municipio',rc.rcMadreMunicipioNac);t('ma_entidad',rc.rcMadreEntidadNac);t('ma_pais',rc.rcMadrePaisNac);
 
   const declnac=_rcFecha(rc.rcDeclaranteFechaNacimiento);
@@ -4165,6 +4164,14 @@ function _rcArmarMarcas(rc){
   if(rc.rcDestinoCremacion==='SI')x('fallec_cremacion');
   if(rc.rcDestinoTraslado==='SI'){x('fallec_traslado');t('fallec_traslado_a',rc.rcTrasladoDestino);}
   t('fallec_panteon',rc.rcNombrePanteon);t('fallec_ubicacion',rc.rcPanteonUbicacion);
+  // Fecha/hora de inhumación no existen como blanco impreso en el formato
+  // oficial — se agregan aparte, después del nombre del panteón, y solo si
+  // se capturaron (si no, se deja el espacio en blanco, sin etiqueta).
+  if(rc.rcFechaInhumacion){
+    const fi=_rcFecha(rc.rcFechaInhumacion);
+    t('fallec_fecha_inhum',`Fecha Inhum: ${fi.dia}/${fi.mes}/${fi.anio}`);
+  }
+  if(rc.rcHoraInhumacion)t('fallec_hora_inhum',`Hora: ${rc.rcHoraInhumacion}`);
 
   ['1','2'].forEach(n=>{
     const p='Testigo'+n,pre='t'+n;
@@ -4172,7 +4179,7 @@ function _rcArmarMarcas(rc){
     t(`${pre}_curp`,rc[`rc${p}Curp`]);t(`${pre}_telefono`,rc[`rc${p}Telefono`]);
     t(`${pre}_nombre`,rc[`rc${p}Nombre`]);
     t(`${pre}_fecnac_dia`,tnac.dia);t(`${pre}_fecnac_mes`,tnac.mes);t(`${pre}_fecnac_anio`,tnac.anio);
-    t(`${pre}_edad`,rc[`rc${p}Edad`]);t(`${pre}_sexo`,_rcSexoLetra(rc[`rc${p}Sexo`]));
+    t(`${pre}_edad`,rc[`rc${p}Edad`]);t(`${pre}_sexo`,rc[`rc${p}Sexo`]);
     t(`${pre}_localidad`,rc[`rc${p}LocalidadNac`]);t(`${pre}_municipio`,rc[`rc${p}MunicipioNac`]);t(`${pre}_entidad`,rc[`rc${p}EntidadNac`]);t(`${pre}_pais`,rc[`rc${p}PaisNac`]);
     t(`${pre}_edocivil`,_rcEtiquetaEdoCivil(rc[`rc${p}EstadoCivil`]));
     t(`${pre}_parentesco`,_rcEtiquetaParentesco(rc[`rc${p}Parentesco`]));
