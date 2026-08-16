@@ -22,6 +22,7 @@ const SH_PROD  = "Productos";      // ← catálogo de ataúdes/urnas
 const SH_SOLIC = "Solicitudes";    // ← solicitudes de edición de ODS (empleados)
 const SH_CERT  = "Certificaciones"; // ← datos para certificado médico / Registro Civil
 const SH_ELIM  = "ODSEliminadas";  // ← folios borrados (evita que resuciten con una sync vieja)
+const SH_RC    = "SolicitudRegistroCivil"; // ← formato oficial de Registro Civil (frente + reverso)
 
 // — CABECERAS ODS ----------------------------------------------
 // IMPORTANTE: el ORDEN de este arreglo ya no determina en qué columna
@@ -108,6 +109,57 @@ const CERT_COLS = [
   "creadoPor","fechaCreacion","fechaActualizacion"
 ];
 
+// — CABECERAS SOLICITUD REGISTRO CIVIL (formato oficial, tamaño oficio) -
+// Una fila por folio (upsert). Sigue el formato de Registro Civil de
+// Xalapa (frente + reverso); los formatos de Tlalnehuayocan, Banderilla y
+// Emiliano Zapata son parecidos y se integran después por separado.
+// "Estado" en cónyuge/padre/madre guarda "VIVE" o "FINADO" — si es finado
+// no se piden más datos. "rcDestinoX" son 3 casillas independientes:
+// Inhumación es excluyente; Cremación y Traslado se pueden marcar juntas.
+const RC_COLS = [
+  "folio","rcFechaFormato",
+  // Grupo 1 — Datos del finado
+  "rcFinadoCurp","rcFinadoNombres","rcFinadoApellidoPaterno","rcFinadoApellidoMaterno",
+  "rcFinadoFechaNacimiento","rcFinadoEdad","rcFinadoNacionalidad","rcFinadoSexo",
+  "rcFinadoLocalidadNac","rcFinadoMunicipioNac","rcFinadoEntidadNac","rcFinadoPaisNac",
+  "rcFinadoDomCalle","rcFinadoDomNumero","rcFinadoDomColonia","rcFinadoDomLocalidad",
+  "rcFinadoDomMunicipio","rcFinadoDomEntidad","rcFinadoDomPais","rcFinadoEstadoCivil",
+  // Grupo 2 — Cónyuge / Padre / Madre
+  "rcConyugeNombre","rcConyugeEstado","rcConyugeNacionalidad","rcConyugeFechaNacimiento","rcConyugeSexo",
+  "rcConyugeLocalidadNac","rcConyugeMunicipioNac","rcConyugeEntidadNac","rcConyugePaisNac",
+  "rcPadreNombre","rcPadreEstado","rcPadreNacionalidad","rcPadreFechaNacimiento","rcPadreSexo",
+  "rcPadreLocalidadNac","rcPadreMunicipioNac","rcPadreEntidadNac","rcPadrePaisNac",
+  "rcMadreNombre","rcMadreEstado","rcMadreNacionalidad","rcMadreFechaNacimiento","rcMadreSexo",
+  "rcMadreLocalidadNac","rcMadreMunicipioNac","rcMadreEntidadNac","rcMadrePaisNac",
+  // Grupo 3 — Datos del fallecimiento
+  "rcFechaDefuncion","rcHoraDefuncion","rcLugarFallecimiento","rcFallecLugarDetalle","rcNumeroCertificado",
+  "rcDestinoInhumacion","rcDestinoCremacion","rcDestinoTraslado","rcTrasladoDestino",
+  "rcNombrePanteon","rcPanteonUbicacion","rcFechaInhumacion","rcHoraInhumacion",
+  // Grupo 4 — Datos del declarante
+  "rcDeclaranteNombre","rcDeclaranteParentesco","rcDeclaranteNacionalidad","rcDeclaranteEstadoCivil",
+  "rcDeclaranteLocalidadNac","rcDeclaranteMunicipioNac","rcDeclaranteEntidadNac","rcDeclarantePaisNac",
+  "rcDeclaranteDomCalle","rcDeclaranteDomNumero","rcDeclaranteDomColonia","rcDeclaranteDomLocalidad",
+  "rcDeclaranteDomMunicipio","rcDeclaranteDomEntidad","rcDeclaranteDomPais",
+  "rcDeclaranteFechaNacimiento","rcDeclaranteEdad","rcDeclaranteTelefono",
+  // Grupo 5 — Testigo 1 y Testigo 2
+  "rcTestigo1Curp","rcTestigo1Nombre","rcTestigo1Telefono","rcTestigo1FechaNacimiento","rcTestigo1Edad",
+  "rcTestigo1Sexo","rcTestigo1LocalidadNac","rcTestigo1MunicipioNac","rcTestigo1EntidadNac","rcTestigo1PaisNac",
+  "rcTestigo1EstadoCivil","rcTestigo1Parentesco","rcTestigo1Nacionalidad",
+  "rcTestigo1DomCalle","rcTestigo1DomNumero","rcTestigo1DomColonia","rcTestigo1DomLocalidad",
+  "rcTestigo1DomMunicipio","rcTestigo1DomEntidad","rcTestigo1DomPais",
+  "rcTestigo2Curp","rcTestigo2Nombre","rcTestigo2Telefono","rcTestigo2FechaNacimiento","rcTestigo2Edad",
+  "rcTestigo2Sexo","rcTestigo2LocalidadNac","rcTestigo2MunicipioNac","rcTestigo2EntidadNac","rcTestigo2PaisNac",
+  "rcTestigo2EstadoCivil","rcTestigo2Parentesco","rcTestigo2Nacionalidad",
+  "rcTestigo2DomCalle","rcTestigo2DomNumero","rcTestigo2DomColonia","rcTestigo2DomLocalidad",
+  "rcTestigo2DomMunicipio","rcTestigo2DomEntidad","rcTestigo2DomPais",
+  // Grupo 6 — Datos de la funeraria
+  "rcFunerariaNombre","rcFunerariaCiudad","rcFunerariaTelefono","rcFunerarioAsiste",
+  // Reverso — Datos complementarios (opción múltiple)
+  "rcAtencionMedica","rcSituacionLaboral","rcSituacionLaboralOtro",
+  "rcEscolaridad","rcEscolaridadUltimoGrado","rcPosicionTrabajo",
+  "creadoPor","fechaCreacion","fechaActualizacion"
+];
+
 //
 //  SALIDA JSON
 //  NOTA: ContentService.TextOutput NO tiene método setHeader().
@@ -162,6 +214,9 @@ function doPost(e) {
       // Certificación (datos para el médico + Registro Civil)
       case "guardarCertificacion":   result = guardarCertificacion(payload.datos);   break;
       case "obtenerCertificaciones": result = obtenerCertificaciones(payload.filtros||{}); break;
+      // Solicitud Registro Civil (formato oficial, frente + reverso)
+      case "guardarSolicitudRC":     result = guardarSolicitudRC(payload.datos);     break;
+      case "obtenerSolicitudesRC":   result = obtenerSolicitudesRC(payload.filtros||{}); break;
       // Alertas de pendientes por correo (equipos sin recoger, saldos, solicitudes, abonos)
       case "guardarAlertaConfig":result = guardarAlertaConfig(payload.datos||{}); break;
       case "obtenerAlertaConfig":result = obtenerAlertaConfig();            break;
@@ -229,6 +284,7 @@ function getProdSh() { return initSheet(SH_PROD, PROD_COLS); }
 function getSolicSh() { return initSheet(SH_SOLIC, SOLIC_COLS); }
 function getCertSh()  { return initSheet(SH_CERT,  CERT_COLS);  }
 function getElimSh()  { return initSheet(SH_ELIM,  ["folio","fecha"]); }
+function getRcSh()    { return initSheet(SH_RC,    RC_COLS);  }
 
 // Encabezados REALES de la hoja tal como están hoy (para leer/escribir
 // siempre alineado a lo que en verdad hay en la fila 1, nunca a una
@@ -532,6 +588,35 @@ function obtenerCertificaciones(filtros) {
 }
 
 // ============================================================
+//  SOLICITUD REGISTRO CIVIL (formato oficial, frente + reverso)
+//  Una fila por folio, upsert igual que Certificaciones.
+// ============================================================
+function guardarSolicitudRC(datos) {
+  const sh = getRcSh();
+  const headers = headersReales(sh);
+  const idx = findRow(sh, "folio", datos.folio);
+  datos.fechaActualizacion = new Date().toISOString();
+  if (idx > 0) {
+    sh.getRange(idx, 1, 1, headers.length).setValues([toRow(headers, datos)]);
+    return { ok:true, folio:datos.folio, mensaje:"Solicitud de Registro Civil actualizada" };
+  }
+  datos.fechaCreacion = datos.fechaCreacion || new Date().toISOString();
+  sh.appendRow(toRow(headers, datos));
+  return { ok:true, folio:datos.folio, mensaje:"Solicitud de Registro Civil guardada" };
+}
+
+function obtenerSolicitudesRC(filtros) {
+  const sh = getRcSh();
+  const data = sh.getDataRange().getValues();
+  if (data.length <= 1) return { ok:true, datos:[] };
+  const headers = data[0];
+  let filas = data.slice(1).map(r => toObj(headers, r));
+  filtros = filtros || {};
+  if (filtros.folio) filas = filas.filter(r => r.folio === filtros.folio);
+  return { ok:true, datos:filas, total:filas.length };
+}
+
+// ============================================================
 //  PREVISIONES (compatibilidad app hermana)
 // ============================================================
 function guardarPrevision(datos) {
@@ -597,6 +682,7 @@ function sincronizarTodo(payload) {
   const abonos         = payload.abonos        || [];
   const solicitudes    = payload.solicitudes   || [];
   const certificaciones= payload.certificaciones || [];
+  const solicitudesRC  = payload.solicitudesRC || [];
 
   ods.forEach(o             => guardarODS(o));
   emps.forEach(e            => guardarColaborador(e));
@@ -604,6 +690,7 @@ function sincronizarTodo(payload) {
   abonos.forEach(a          => guardarAbono(a));
   solicitudes.forEach(s     => guardarSolicitud(s));
   certificaciones.forEach(c => guardarCertificacion(c));
+  solicitudesRC.forEach(s   => guardarSolicitudRC(s));
 
   return {
     ok:true,
@@ -617,6 +704,7 @@ function sincronizarTodo(payload) {
     abonos:         obtenerAbonos(null).datos,
     solicitudes:    obtenerSolicitudes({}).datos,
     certificaciones: obtenerCertificaciones({}).datos,
+    solicitudesRC:  obtenerSolicitudesRC({}).datos,
     // Folios borrados: el cliente los usa para limpiar cualquier copia local
     // vieja que le haya quedado de antes del borrado (celular que no
     // sincronizaba desde hace tiempo, pestaña abierta desde antes, etc.).
@@ -848,7 +936,7 @@ function onOpen() {
     .addToUi();
 }
 function inicializarTodasLasHojas() {
-  getODSSh(); getEmpSh(); getPrevSh(); getAbonoSh(); getProdSh(); getSolicSh(); getCertSh(); getElimSh();
+  getODSSh(); getEmpSh(); getPrevSh(); getAbonoSh(); getProdSh(); getSolicSh(); getCertSh(); getElimSh(); getRcSh();
   SpreadsheetApp.getUi().alert("✅ Hojas inicializadas/reparadas correctamente. Cualquier columna nueva que faltaba se agregó al final de cada hoja.");
 }
 function configurarCorreoAlertasUI() {
@@ -904,6 +992,10 @@ function embellecerHojas() {
   _embellecerHoja(getSolicSh(),{ freezeCols: 2 });
   _embellecerHoja(getCertSh(), { freezeCols: 2, date: ["finadoFechaNacimiento","finadoFechaDefuncion",
     "conyugeFechaNacimiento","padreFechaNacimiento","madreFechaNacimiento","fechaCreacion","fechaActualizacion"] });
+  _embellecerHoja(getRcSh(), { freezeCols: 2, date: ["rcFinadoFechaNacimiento","rcConyugeFechaNacimiento",
+    "rcPadreFechaNacimiento","rcMadreFechaNacimiento","rcFechaDefuncion","rcFechaInhumacion",
+    "rcDeclaranteFechaNacimiento","rcTestigo1FechaNacimiento","rcTestigo2FechaNacimiento",
+    "fechaCreacion","fechaActualizacion"] });
 
   _colorearEstatusODS();
 
