@@ -1035,17 +1035,27 @@ function _embellecerHoja(sh, opts) {
     rango.getBandings().forEach(b => b.remove());
     rango.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false);
 
+    // El formato de moneda/fecha/hora antes solo se aplicaba hasta la última
+    // fila que existiera EN ESE MOMENTO — cualquier orden nueva creada
+    // después (appendRow) quedaba con el formato "Automático" de Sheets, que
+    // muestra el número pelón (ej. "14000") en vez de "$14,000.00", hasta
+    // que alguien volviera a correr "Embellecer" a mano. Para que las
+    // órdenes nuevas ya salgan bien formateadas solas, se aplica el formato
+    // a un rango bastante más grande que los datos actuales (mínimo 5000
+    // filas) — Sheets conserva el formato de una celda aunque esté vacía, así
+    // que appendRow() hereda automáticamente el formato ya puesto ahí.
+    const filasAFormatear = Math.max(numRows - 1, 4999);
     (opts.money || []).forEach(col => {
       const ci = headers.indexOf(col);
-      if (ci >= 0) sh.getRange(2, ci + 1, numRows - 1, 1).setNumberFormat("$#,##0.00");
+      if (ci >= 0) sh.getRange(2, ci + 1, filasAFormatear, 1).setNumberFormat("$#,##0.00");
     });
     (opts.date || []).forEach(col => {
       const ci = headers.indexOf(col);
-      if (ci >= 0) sh.getRange(2, ci + 1, numRows - 1, 1).setNumberFormat("dd/mm/yyyy hh:mm");
+      if (ci >= 0) sh.getRange(2, ci + 1, filasAFormatear, 1).setNumberFormat("dd/mm/yyyy hh:mm");
     });
     (opts.time || []).forEach(col => {
       const ci = headers.indexOf(col);
-      if (ci >= 0) sh.getRange(2, ci + 1, numRows - 1, 1).setNumberFormat("HH:mm");
+      if (ci >= 0) sh.getRange(2, ci + 1, filasAFormatear, 1).setNumberFormat("HH:mm");
     });
   }
 }
