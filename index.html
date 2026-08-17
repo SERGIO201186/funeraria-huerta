@@ -924,6 +924,42 @@ button:active{transform:scale(.97)}
       </div>
 
       <div class="card">
+        <div class="st">Causas de la Muerte (Certificado de Defunción)</div>
+        <p style="font-size:11px;color:var(--text3);margin:-4px 0 8px">Se transcribe tal cual lo certificó el médico, para el expediente de la funeraria — no se incluye en el PDF que se manda a pedirle el certificado.</p>
+        <div class="f"><label class="lbl">I.a) Causa Directa — enfermedad o estado patológico que produjo la muerte directamente</label><input id="c-causa-directa" type="text"/></div>
+        <div class="f"><label class="lbl">Intervalo aproximado entre inicio y muerte</label><input id="c-causa-directa-intervalo" type="text" placeholder="Ej. 2 días, 6 horas…"/></div>
+        <div class="f"><label class="lbl">I.b) Debido a (o como consecuencia de) — Causa Intermedia</label><input id="c-causa-intermedia" type="text"/></div>
+        <div class="f"><label class="lbl">Intervalo aproximado entre inicio y muerte</label><input id="c-causa-intermedia-intervalo" type="text"/></div>
+        <div class="f"><label class="lbl">I.c) Debido a (o como consecuencia de) — Causa Básica</label><input id="c-causa-basica" type="text"/></div>
+        <div class="f"><label class="lbl">Intervalo aproximado entre inicio y muerte</label><input id="c-causa-basica-intervalo" type="text"/></div>
+        <div class="f"><label class="lbl">II. Otros Estados Patológicos Significativos que Contribuyeron a la Muerte</label><textarea id="c-otros-patologicos" rows="2"></textarea></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Tipo de Defunción</label>
+            <select id="c-tipo-defuncion">
+              <option value="ENFERMEDAD">Enfermedad</option>
+              <option value="ACCIDENTE">Accidente</option>
+              <option value="HOMICIDIO">Homicidio</option>
+              <option value="SUICIDIO">Suicidio</option>
+              <option value="SE_IGNORA">Se ignora</option>
+            </select>
+          </div>
+          <div class="f"><label class="lbl">¿Se practicó necropsia?</label>
+            <select id="c-necropsia">
+              <option value="NO">No</option>
+              <option value="SI">Sí</option>
+            </select>
+          </div>
+        </div>
+        <div class="f"><label class="lbl">Si es mujer: ¿Falleció durante el embarazo, parto o puerperio?</label>
+          <select id="c-embarazo-parto">
+            <option value="NO_APLICA">No aplica</option>
+            <option value="SI">Sí</option>
+            <option value="NO">No</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="st">¿El finado era casado?</div>
         <div class="f"><select id="c-fi-eracasado" onchange="toggleCertConyuge()">
           <option value="NO">No</option>
@@ -1470,7 +1506,29 @@ function lDB(){return JSON.parse(localStorage.getItem(DB)||'[]')}
 function sDB(d){localStorage.setItem(DB,JSON.stringify(d));ST.ods=d}
 function lEmp(){return JSON.parse(localStorage.getItem(EK)||'[]')}
 function sEmp(d){localStorage.setItem(EK,JSON.stringify(d));ST.emps=d}
-function genFolio(){const a=lDB();const n=(a.length+1).toString().padStart(4,'0');const y=new Date().getFullYear().toString().slice(-2);return`ODS-${y}-${n}`}
+// Antes usaba lDB().length+1 (el conteo local de ESTE celular): si la caché
+// local tenía huecos, filas en blanco o simplemente menos órdenes que las
+// que ya existen en la nube (otro dispositivo creó órdenes que este todavía
+// no sincroniza), el número quedaba repetido con el de una orden ya
+// existente. Al sincronizar, ese choque de folio hacía que la orden nueva
+// sobreescribiera por completo a la vieja (así se perdió ODS-26-0005). Ahora
+// se calcula a partir del folio más alto ya usado ESTE AÑO (según lo que
+// haya en la copia local, que se actualiza en cada sync) — sigue sin ser un
+// contador central infalible entre dispositivos offline al mismo tiempo,
+// pero ya no falla solo por tener la caché local incompleta, y el servidor
+// además detecta y corrige cualquier choque que aun así llegue a ocurrir.
+function genFolio(){
+  const y=new Date().getFullYear().toString().slice(-2);
+  const prefijo=`ODS-${y}-`;
+  let max=0;
+  lDB().forEach(o=>{
+    if(o.folio&&o.folio.indexOf(prefijo)===0){
+      const n=parseInt(o.folio.slice(prefijo.length),10);
+      if(!isNaN(n)&&n>max)max=n;
+    }
+  });
+  return prefijo+(max+1).toString().padStart(4,'0');
+}
 
 /* ── CONEXIÓN ── */
 function setOnline(v){
@@ -2685,8 +2743,13 @@ async function sincronizarTodo(silencioso=false){
         // logística capturados por otro usuario) — por eso no se veían
         // reflejados. Ahora cada folio recibido reemplaza a la copia local.
         const local=lDB(),porFolio={};
-        local.forEach(o=>{porFolio[o.folio]=o});
+        // Cualquier orden sin folio en la copia local es basura (residuo de una
+        // fila en blanco que llegó a colarse antes de esta corrección): se
+        // descarta aquí en vez de reenviarse en el próximo sync, que es
+        // justo lo que la hacía multiplicarse.
+        local.forEach(o=>{if(o.folio)porFolio[o.folio]=o});
         r.ods.forEach(ro=>{
+          if(!ro.folio)return; // el servidor ya no debería mandarlas, pero por si acaso
           // Si el estatus que manda la nube viene corrupto (ej. mezclado con
           // datos de firma), no se propaga: se usa un valor por defecto seguro.
           if(!['ACTIVA','CERRADA','PENDIENTE_PAGO'].includes(ro.estatus)) ro.estatus='ACTIVA';
@@ -3207,6 +3270,17 @@ function abrirCertificar(folio){
   $('c-fi-fecdef').value=fechaPlano(c.finadoFechaDefuncion)||'';
   $('c-fi-hordef').value=c.finadoHoraDefuncion||'';
 
+  $('c-causa-directa').value=c.causaDirecta||'';
+  $('c-causa-directa-intervalo').value=c.causaDirectaIntervalo||'';
+  $('c-causa-intermedia').value=c.causaIntermedia||'';
+  $('c-causa-intermedia-intervalo').value=c.causaIntermediaIntervalo||'';
+  $('c-causa-basica').value=c.causaBasica||'';
+  $('c-causa-basica-intervalo').value=c.causaBasicaIntervalo||'';
+  $('c-otros-patologicos').value=c.otrosEstadosPatologicos||'';
+  $('c-tipo-defuncion').value=c.tipoDefuncion||'ENFERMEDAD';
+  $('c-necropsia').value=c.seNecropsia||'NO';
+  $('c-embarazo-parto').value=c.fallecioEmbarazoPartoPuerperio||'NO_APLICA';
+
   $('c-fi-eracasado').value=c.finadoEraCasado||'NO';
   $('c-cony-nombre').value=c.conyugeNombre||'';
   $('c-cony-estado').value=c.conyugeEstado||'VIVO';
@@ -3265,6 +3339,12 @@ async function guardarCertificacion(){
     finadoGradoEstudios:g('c-fi-estudios'),finadoDomicilio:g('c-fi-domicilio'),
     finadoAfiliacionSalud:g('c-fi-afiliacion'),finadoOcupacion:g('c-fi-ocupacion'),
     finadoLugarDefuncion:g('c-fi-lugardef'),finadoFechaDefuncion:g('c-fi-fecdef'),finadoHoraDefuncion:g('c-fi-hordef'),
+    causaDirecta:g('c-causa-directa'),causaDirectaIntervalo:g('c-causa-directa-intervalo'),
+    causaIntermedia:g('c-causa-intermedia'),causaIntermediaIntervalo:g('c-causa-intermedia-intervalo'),
+    causaBasica:g('c-causa-basica'),causaBasicaIntervalo:g('c-causa-basica-intervalo'),
+    otrosEstadosPatologicos:g('c-otros-patologicos'),
+    tipoDefuncion:g('c-tipo-defuncion'),seNecropsia:g('c-necropsia'),
+    fallecioEmbarazoPartoPuerperio:g('c-embarazo-parto'),
     finadoEraCasado:g('c-fi-eracasado'),
     conyugeNombre:casado?g('c-cony-nombre'):'',
     conyugeEstado:casado?g('c-cony-estado'):'',
