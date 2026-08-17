@@ -93,6 +93,20 @@ const CERT_COLS = [
   "finadoNombre","finadoEstadoCivil","finadoFechaNacimiento","finadoEntidadNacimiento",
   "finadoGradoEstudios","finadoDomicilio","finadoAfiliacionSalud","finadoOcupacion",
   "finadoLugarDefuncion","finadoFechaDefuncion","finadoHoraDefuncion",
+  // Causas de la muerte — mismo esquema que el Certificado de Defunción
+  // oficial (SSA/INEGI): I. Enfermedad o estado patológico que produjo la
+  // muerte directamente, con las causas intermedia y básica que llevaron a
+  // ella (cada una con su intervalo aproximado entre inicio y muerte), más
+  // "II. Otros estados patológicos" y los datos complementarios del tipo de
+  // defunción. Se transcribe tal cual lo certificó el médico, para el
+  // expediente de la funeraria — no se manda al médico en el PDF de
+  // solicitud (ver _buildInfoMedicoHTML), que sigue siendo solo los datos
+  // del finado para que él pueda expedir el certificado.
+  "causaDirecta","causaDirectaIntervalo",
+  "causaIntermedia","causaIntermediaIntervalo",
+  "causaBasica","causaBasicaIntervalo",
+  "otrosEstadosPatologicos",
+  "tipoDefuncion","seNecropsia","fallecioEmbarazoPartoPuerperio",
   "finadoEraCasado",
   "conyugeNombre","conyugeEstado","conyugeFechaNacimiento",
   "conyugeLocalidadNac","conyugeMunicipioNac","conyugeEstadoNac","conyugePaisNac",
