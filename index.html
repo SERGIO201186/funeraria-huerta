@@ -1470,7 +1470,29 @@ function lDB(){return JSON.parse(localStorage.getItem(DB)||'[]')}
 function sDB(d){localStorage.setItem(DB,JSON.stringify(d));ST.ods=d}
 function lEmp(){return JSON.parse(localStorage.getItem(EK)||'[]')}
 function sEmp(d){localStorage.setItem(EK,JSON.stringify(d));ST.emps=d}
-function genFolio(){const a=lDB();const n=(a.length+1).toString().padStart(4,'0');const y=new Date().getFullYear().toString().slice(-2);return`ODS-${y}-${n}`}
+// Antes usaba lDB().length+1 (el conteo local de ESTE celular): si la caché
+// local tenía huecos, filas en blanco o simplemente menos órdenes que las
+// que ya existen en la nube (otro dispositivo creó órdenes que este todavía
+// no sincroniza), el número quedaba repetido con el de una orden ya
+// existente. Al sincronizar, ese choque de folio hacía que la orden nueva
+// sobreescribiera por completo a la vieja (así se perdió ODS-26-0005). Ahora
+// se calcula a partir del folio más alto ya usado ESTE AÑO (según lo que
+// haya en la copia local, que se actualiza en cada sync) — sigue sin ser un
+// contador central infalible entre dispositivos offline al mismo tiempo,
+// pero ya no falla solo por tener la caché local incompleta, y el servidor
+// además detecta y corrige cualquier choque que aun así llegue a ocurrir.
+function genFolio(){
+  const y=new Date().getFullYear().toString().slice(-2);
+  const prefijo=`ODS-${y}-`;
+  let max=0;
+  lDB().forEach(o=>{
+    if(o.folio&&o.folio.indexOf(prefijo)===0){
+      const n=parseInt(o.folio.slice(prefijo.length),10);
+      if(!isNaN(n)&&n>max)max=n;
+    }
+  });
+  return prefijo+(max+1).toString().padStart(4,'0');
+}
 
 /* ── CONEXIÓN ── */
 function setOnline(v){
@@ -2685,8 +2707,13 @@ async function sincronizarTodo(silencioso=false){
         // logística capturados por otro usuario) — por eso no se veían
         // reflejados. Ahora cada folio recibido reemplaza a la copia local.
         const local=lDB(),porFolio={};
-        local.forEach(o=>{porFolio[o.folio]=o});
+        // Cualquier orden sin folio en la copia local es basura (residuo de una
+        // fila en blanco que llegó a colarse antes de esta corrección): se
+        // descarta aquí en vez de reenviarse en el próximo sync, que es
+        // justo lo que la hacía multiplicarse.
+        local.forEach(o=>{if(o.folio)porFolio[o.folio]=o});
         r.ods.forEach(ro=>{
+          if(!ro.folio)return; // el servidor ya no debería mandarlas, pero por si acaso
           // Si el estatus que manda la nube viene corrupto (ej. mezclado con
           // datos de firma), no se propaga: se usa un valor por defecto seguro.
           if(!['ACTIVA','CERRADA','PENDIENTE_PAGO'].includes(ro.estatus)) ro.estatus='ACTIVA';

@@ -374,16 +374,48 @@ function _empPublic(e) {
 // ============================================================
 function guardarODS(datos) {
   const sh  = getODSSh();
-  if (datos.folio) {
-    const idx = findRow(sh, "folio", datos.folio);
-    if (idx > 0) return actualizarODS(datos.folio, datos);
+  // Sin folio no hay forma de identificar la orden ni de evitar duplicarla en
+  // cada sincronización futura. Antes esto caía directo al appendRow() de
+  // abajo y creaba una fila nueva en blanco (sin folio ni fallecido) cada vez
+  // que un dispositivo sincronizaba una copia local corrupta/incompleta —
+  // eso es lo que se veía como "ODS sin datos" multiplicándose en la hoja.
+  if (!datos || !datos.folio) {
+    return { ok:false, mensaje:"ODS sin folio: no se guardó (se evita crear una fila en blanco)" };
+  }
+  const idx = findRow(sh, "folio", datos.folio);
+  if (idx > 0) {
+    // Ya existe una fila con este folio. Antes de tratarlo como edición de la
+    // MISMA orden hay que descartar un CHOQUE DE FOLIO: como genFolio() en la
+    // app se calcula con el conteo local de cada celular, dos dispositivos
+    // que crean una orden nueva estando offline (o desincronizados) pueden
+    // generar el mismo folio para dos fallecidos distintos. Si eso pasara y
+    // se tratara como edición, la segunda orden sincronizada sobreescribiría
+    // por completo a la primera (esto fue lo que borró los datos de
+    // ODS-26-0005). La fechaCreacion es un identificador estable de "misma
+    // orden" — se conserva igual en cada edición real (ver
+    // guardarEdicionODS en el cliente) — así que si la fila ya guardada y la
+    // que llega tienen fechaCreacion distintas, son dos órdenes distintas.
+    const headers = headersReales(sh);
+    const ciCreacion = headers.indexOf("fechaCreacion");
+    const creacionGuardada = ciCreacion >= 0 ? sh.getRange(idx, ciCreacion + 1).getValue() : "";
+    const creacionEntrante = datos.fechaCreacion;
+    const tsGuardada  = creacionGuardada  ? new Date(creacionGuardada).getTime()  : 0;
+    const tsEntrante  = creacionEntrante  ? new Date(creacionEntrante).getTime()  : 0;
+    if (tsGuardada && tsEntrante && Math.abs(tsGuardada - tsEntrante) > 5000) {
+      const folioViejo = datos.folio;
+      datos.folio = _folioSiguienteDisponible(sh, folioViejo);
+      logActividad("guardarODS:choqueFolio", datos.creadoPor||"",
+        `${folioViejo} ya existía con otra orden (fechaCreacion distinta); reasignado a ${datos.folio}`);
+      // Sigue abajo como alta nueva, ya con el folio corregido.
+    } else {
+      return actualizarODS(datos.folio, datos);
+    }
+  } else if (findRow(getElimSh(), "folio", datos.folio) > 0) {
     // El folio no existe en la hoja: puede ser una orden nueva, o una que ya
     // se eliminó y un dispositivo con caché local vieja (de antes del
     // borrado) la manda de nuevo al hacer una sincronización completa. Si ya
     // está en el registro de eliminados, NO se vuelve a crear.
-    if (findRow(getElimSh(), "folio", datos.folio) > 0) {
-      return { ok:true, folio:datos.folio, eliminado:true, mensaje:"Orden eliminada anteriormente; no se vuelve a crear" };
-    }
+    return { ok:true, folio:datos.folio, eliminado:true, mensaje:"Orden eliminada anteriormente; no se vuelve a crear" };
   }
   const headers = headersReales(sh);
   datos.fechaCreacion     = datos.fechaCreacion     || new Date().toISOString();
@@ -393,12 +425,33 @@ function guardarODS(datos) {
   return { ok:true, folio:datos.folio };
 }
 
+// Siguiente folio libre a partir de uno ya ocupado (choque de folio), ej.
+// "ODS-26-0005" -> "ODS-26-0006", probando hacia arriba hasta encontrar uno
+// que no exista todavía en la hoja.
+function _folioSiguienteDisponible(sh, folioBase) {
+  const m = String(folioBase).match(/^(.*-)(\d+)$/);
+  if (!m) return folioBase + "-DUP";
+  const prefijo = m[1];
+  const ancho = m[2].length;
+  let n = parseInt(m[2], 10);
+  let candidato;
+  do {
+    n++;
+    candidato = prefijo + String(n).padStart(ancho, "0");
+  } while (findRow(sh, "folio", candidato) > 0);
+  return candidato;
+}
+
 function obtenerODS(filtros) {
   const sh   = getODSSh();
   const data = sh.getDataRange().getValues();
   if (data.length <= 1) return { ok:true, datos:[] };
   const headers = data[0];
-  let filas = data.slice(1).map(r => toObj(headers, r));
+  // Filas sin folio son basura (fila en blanco insertada a mano en la hoja, o
+  // un residuo del bug de sincronización ya corregido en guardarODS): no se
+  // regresan al cliente para que no se vuelvan a sincronizar en un ciclo sin
+  // fin, ni aparezcan como "orden vacía" en el tablero.
+  let filas = data.slice(1).map(r => toObj(headers, r)).filter(r => r.folio);
   if (filtros.estatus)   filas = filas.filter(r => r.estatus   === filtros.estatus);
   if (filtros.folio)     filas = filas.filter(r => r.folio     === filtros.folio);
   if (filtros.creadoPor) filas = filas.filter(r => r.creadoPor === filtros.creadoPor);
