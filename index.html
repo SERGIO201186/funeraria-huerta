@@ -3395,12 +3395,20 @@ async function guardarCertificacion(){
 function etiquetaEdoCivil(v){
   return {SOLTERO:'Soltero(a)',CASADO:'Casado(a)',VIUDO:'Viudo(a)',DIVORCIADO:'Divorciado(a)',UNION_LIBRE:'Unión libre'}[v]||v||'—';
 }
+function etiquetaTipoDefuncion(v){
+  return {ENFERMEDAD:'Enfermedad',ACCIDENTE:'Accidente',HOMICIDIO:'Homicidio',SUICIDIO:'Suicidio',SE_IGNORA:'Se ignora'}[v]||v||'—';
+}
+function etiquetaSiNo(v){ return v==='SI'?'Sí':(v==='NO'?'No':'—'); }
 // El PDF/JPG que se manda al médico solo lleva los datos del finado + el
 // nombre del declarante (nada de cónyuge/padres/testigos) — así lo pidió
 // expresamente el negocio: esa es toda la información que el médico necesita.
+// Las causas de la muerte SÍ se incluyen (aunque se capturan después de que
+// el médico expide el certificado): este documento también sirve como
+// registro impreso/descargable de lo que certificó, no solo como solicitud.
 function _buildInfoMedicoHTML(datos,folio){
   const fp=v=>v?fechaPlano(v):'—';
   const fila=(a,b)=>`<tr><td style="border:1px solid #999;padding:6px;width:45%"><b>${a}</b></td><td style="border:1px solid #999;padding:6px">${b||'—'}</td></tr>`;
+  const subtitulo=t=>`<tr><td colspan="2" style="border:1px solid #999;padding:6px;background:#eee;font-weight:700">${t}</td></tr>`;
   return `
   <div id="cert-print-doc" style="width:7.5in;min-height:10.1in;background:#fff;color:#111;font-family:Georgia,serif;padding:30px;box-sizing:border-box">
     <h2 style="text-align:center;margin-bottom:2px">FUNERARIA HUERTA</h2>
@@ -3419,6 +3427,18 @@ function _buildInfoMedicoHTML(datos,folio){
       ${fila('Lugar donde Ocurrió la Defunción',datos.finadoLugarDefuncion)}
       ${fila('Fecha de Defunción',fp(datos.finadoFechaDefuncion))}
       ${fila('Hora de Defunción',datos.finadoHoraDefuncion)}
+      ${subtitulo('CAUSAS DE LA MUERTE')}
+      ${fila('I.a) Causa Directa',datos.causaDirecta)}
+      ${fila('Intervalo aproximado entre inicio y muerte',datos.causaDirectaIntervalo)}
+      ${fila('I.b) Causa Intermedia (debido a)',datos.causaIntermedia)}
+      ${fila('Intervalo aproximado entre inicio y muerte',datos.causaIntermediaIntervalo)}
+      ${fila('I.c) Causa Básica (debido a)',datos.causaBasica)}
+      ${fila('Intervalo aproximado entre inicio y muerte',datos.causaBasicaIntervalo)}
+      ${fila('II. Otros Estados Patológicos Significativos',datos.otrosEstadosPatologicos)}
+      ${fila('Tipo de Defunción',etiquetaTipoDefuncion(datos.tipoDefuncion))}
+      ${fila('¿Se practicó necropsia?',etiquetaSiNo(datos.seNecropsia))}
+      ${fila('¿Falleció en embarazo, parto o puerperio?',datos.fallecioEmbarazoPartoPuerperio==='NO_APLICA'?'No aplica':etiquetaSiNo(datos.fallecioEmbarazoPartoPuerperio))}
+      ${subtitulo('DECLARANTE')}
       ${fila('Declarante',datos.declaranteNombre)}
     </table>
   </div>`;
@@ -3438,15 +3458,36 @@ async function _prepararPrintInfoMedico(){
   await new Promise(r=>setTimeout(r,60));
   return {folio,el:$('cert-print-doc')};
 }
+// Antes se forzaba el canvas completo dentro de un solo rectángulo fijo de
+// 7.5×10.1in con addImage(): si el contenido real medía más que eso (como
+// pasó al agregar la sección de Causas de la Muerte), la imagen se
+// achicaba/deformaba para caber y las filas de abajo quedaban ilegibles o
+// prácticamente invisibles — lo que se veía como "no aparece el dato".
+// Ahora se respeta el alto real del contenido (a partir de su proporción
+// real en el canvas) y, si no cabe en una sola hoja carta, se reparte en
+// páginas adicionales en vez de deformarlo.
+function _agregarCanvasPaginado(pdf,canvas,marginX,marginY,boxWidthIn,pageHeightIn){
+  const pxPerIn=canvas.width/boxWidthIn;
+  const alturaMaxPx=Math.floor(pageHeightIn*pxPerIn);
+  let y=0,primera=true;
+  while(y<canvas.height){
+    const altoSlicePx=Math.min(alturaMaxPx,canvas.height-y);
+    const slice=document.createElement('canvas');
+    slice.width=canvas.width;slice.height=altoSlicePx;
+    slice.getContext('2d').drawImage(canvas,0,y,canvas.width,altoSlicePx,0,0,canvas.width,altoSlicePx);
+    if(!primera)pdf.addPage('letter');
+    pdf.addImage(slice.toDataURL('image/jpeg',0.92),'JPEG',marginX,marginY,boxWidthIn,altoSlicePx/pxPerIn);
+    y+=altoSlicePx;primera=false;
+  }
+}
 async function descargarInfoMedicoPDF(){
   const prep=await _prepararPrintInfoMedico();
   if(!prep)return;
   toast('📄 Generando PDF…',1500);
   const canvas=await html2canvas(prep.el,{scale:2,backgroundColor:'#ffffff'});
-  const img=canvas.toDataURL('image/jpeg',0.92);
   const {jsPDF}=window.jspdf;
   const pdf=new jsPDF({unit:'in',format:'letter'});
-  pdf.addImage(img,'JPEG',0.5,0.45,7.5,10.1);
+  _agregarCanvasPaginado(pdf,canvas,0.5,0.45,7.5,10.1);
   pdf.save(`InfoMedico_${prep.folio}.pdf`);
 }
 async function descargarInfoMedicoJPG(){
