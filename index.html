@@ -1606,8 +1606,40 @@ function startSession(col){
   aplicarPermisosUI();
   mostrarBienvenida();
   updDash();
+  // Trae lo último de la nube apenas se abre la app. Antes, un dispositivo
+  // que solo consulta (no captura ni edita nada) nunca disparaba una
+  // sincronización por sí solo — dependía de que alguien se acordara de
+  // tocar "Actualizar" a mano en cada página — así que se podía quedar
+  // viendo datos viejos indefinidamente aunque otros celulares ya hubieran
+  // subido información nueva. Ahora se sincroniza solo al entrar, y de ahí
+  // en adelante cada _SYNC_INTERVALO_MS mientras la app siga abierta.
+  _refrescarTrasSync();
+  _iniciarSyncPeriodico();
 }
-function logout(){if(!confirm('¿Cerrar sesión?'))return;ST.user=null;$('login').style.display='flex';$('app').style.display='none';ST.pin='';updDots()}
+// Vuelve a pintar la página que esté activa con lo que acaba de llegar de la
+// nube (si no se hace esto, sincronizar en silencio no sirve de nada: los
+// datos quedan actualizados en localStorage pero la pantalla sigue
+// mostrando lo que ya había renderizado antes de sincronizar).
+function _refrescarTrasSync(){
+  if(!(ST.online&&ST.url))return;
+  sincronizarTodo(true).then(ok=>{
+    if(!ok)return;
+    _folioActual=genFolio();
+    const fd=$('folio-disp');if(fd)fd.textContent=_folioActual;
+    if(ST.page==='tablero')cargarODS();
+    if(ST.page==='equipos')cargarEquipos();
+    if(ST.page==='pagos')cargarPagos();
+    if(ST.page==='solicitudes')cargarSolicitudes();
+    updDash();
+  });
+}
+const _SYNC_INTERVALO_MS=5*60*1000; // 5 minutos
+let _syncIntervalId=null;
+function _iniciarSyncPeriodico(){
+  if(_syncIntervalId)clearInterval(_syncIntervalId);
+  _syncIntervalId=setInterval(_refrescarTrasSync,_SYNC_INTERVALO_MS);
+}
+function logout(){if(!confirm('¿Cerrar sesión?'))return;if(_syncIntervalId){clearInterval(_syncIntervalId);_syncIntervalId=null}ST.user=null;$('login').style.display='flex';$('app').style.display='none';ST.pin='';updDots()}
 
 /* ── PERMISOS POR ROL ──
    ADMINISTRADOR: acceso total.
@@ -4899,8 +4931,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   calcTotal();
   // Mostrar nota offline si aplica
   if(!navigator.onLine)$('offline-login-note').textContent='Sin internet — puedes iniciar sesión igual';
-  // Acceso directo: se retiró el requisito de login, se entra como Administrador automáticamente.
-  startSession({idColaborador:'ADMIN',nombreCompleto:'Administrador',puesto:'ADMINISTRADOR GENERAL'});
+  // El acceso directo como Administrador (sin pedir PIN) se quitó de nuevo:
+  // como la app es la misma en todos los celulares, ese atajo entraba como
+  // Administrador en CUALQUIER dispositivo que la abriera — incluidos los de
+  // vendedores/choferes como Ruth, que no deben ver Colaboradores, Nube ni
+  // Solicitudes. Ahora vuelve a pedirse PIN o usuario/contraseña, así cada
+  // quien entra con su propio rol.
 });
 
 // Registrar el Service Worker: sin esto el navegador no ofrece "Instalar
