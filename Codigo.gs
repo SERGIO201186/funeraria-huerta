@@ -964,7 +964,18 @@ function obtenerColaboradores() {
   const data = sh.getDataRange().getValues();
   if (data.length <= 1) return { ok:true, datos:[] };
   const headers = data[0];
-  return { ok:true, datos: data.slice(1).map(r => toObj(headers,r)) };
+  // Si por cualquier motivo (una fila pegada a mano, un conflicto de edición,
+  // etc.) la hoja termina con dos filas del mismo idColaborador, aquí solo se
+  // entrega la ÚLTIMA — así la app nunca muestra colaboradores duplicados,
+  // aunque la hoja en sí tenga filas repetidas de fondo.
+  const porId = {};
+  let sinId = 0;
+  data.slice(1).forEach(r => {
+    const o = toObj(headers, r);
+    const clave = o.idColaborador ? String(o.idColaborador) : '__sin_id_' + (sinId++);
+    porId[clave] = o;
+  });
+  return { ok:true, datos: Object.values(porId) };
 }
 
 // ============================================================
