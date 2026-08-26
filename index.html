@@ -769,6 +769,11 @@ button:active{transform:scale(.97)}
         <button class="bo" style="width:100%;margin-top:12px" onclick="copiarInstrucciones()">📋 Copiar ruta del archivo Code.gs</button>
       </div>
       <div class="card" style="border-color:var(--red)">
+        <div class="st" style="color:var(--red)">🛡 Cerrar todas las sesiones</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Fuerza a que <strong>todos los equipos</strong> (incluido este) pidan iniciar sesión de nuevo en su próxima sincronización. Úsalo después de un cambio de seguridad importante, o si sospechas que alguien más tiene acceso.</p>
+        <button class="br" style="width:100%" onclick="cerrarTodasLasSesiones()">Cerrar todas las sesiones</button>
+      </div>
+      <div class="card" style="border-color:var(--red)">
         <div class="st" style="color:var(--red)">Zona de Peligro</div>
         <button class="br" style="width:100%" onclick="resetLocal()">🗑 Borrar datos locales de este dispositivo</button>
         <div style="font-size:11px;color:var(--text3);margin-top:7px">No afecta Google Sheets ni otros dispositivos.</div>
@@ -1427,6 +1432,13 @@ button:active{transform:scale(.97)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1', CERK='huerta_certificaciones_v1', RCK='huerta_solicitudes_rc_v1';
+// Sesión persistente (por dispositivo): guarda QUIÉN inició sesión en ESTE
+// celular y la credencial (PIN o usuario/contraseña) que se manda con cada
+// sincronización para que el servidor la valide. Es distinto del atajo de
+// "acceso directo como Administrador" que se quitó antes (ese entraba como
+// Admin en CUALQUIER dispositivo sin pedir nada) — aquí cada quien solo
+// recupera SU PROPIA sesión, en el mismo equipo donde ya inició sesión una vez.
+const SESK='huerta_session_v1', AUTHK='huerta_authcred_v1', EPK='huerta_session_epoch';
 const FUNERARIA_ADDR = "Nicolás Bravo 11, Zona Centro, C.P. 91000, Xalapa, Veracruz";
 const KM_RATE1=24, KM_RATE2=28, KM_BREAK=200; // hasta 200km: $24/km; >200km: $28/km
 // Sello oficial de la funeraria en base64 (data:image/png;base64,...): timbre
@@ -1575,17 +1587,21 @@ async function doLogin(){
     if(user&&pass&&String(e.usuario)===user&&String(e.contrasena)===pass) return true;
     return false;
   });
-  if(local){startSession(local);return}
+  if(local){startSession(local, pin?{pin}:{usuario:user,contrasena:pass});return}
 
-  // PIN master de emergencia (sin nube)
-  if(pin==='0000'){startSession({idColaborador:'ADMIN',nombreCompleto:'Administrador',puesto:'ADMINISTRADOR GENERAL'});return}
+  // El PIN maestro fijo "0000" se quitó por seguridad: un valor fijo dentro
+  // del código JavaScript del navegador es visible para cualquiera que abra
+  // las herramientas de desarrollador, así que nunca fue realmente secreto
+  // — daba acceso total de Administrador a quien lo probara. Si te quedas
+  // sin acceso, corrige la fila del administrador directamente en la hoja
+  // Colaboradores de Google Sheets y vuelve a sincronizar.
 
   // Nube
   if(ST.url&&ST.online){
     try{
-      const payload=pin?{accion:'validarAcceso',pin}:{accion:'validarAcceso',usuario:user,contrasena:pass};
-      const r=await api(payload);
-      if(r.ok){startSession(r.colaborador);return}
+      const authCred=pin?{pin}:{usuario:user,contrasena:pass};
+      const r=await api(Object.assign({accion:'validarAcceso'},authCred));
+      if(r.ok){startSession(r.colaborador, authCred);return}
     }catch(e){}
   }
 
@@ -1594,8 +1610,16 @@ async function doLogin(){
   setTimeout(()=>$('l-status').textContent='',2500);
 }
 
-function startSession(col){
+function startSession(col,authCred,esNueva=true){
   ST.user=col;
+  ST.authCred=authCred||ST.authCred||null;
+  // Se guarda en ESTE dispositivo para no pedir PIN otra vez a cada recarga
+  // (antes de esto, ST.user solo vivía en memoria y se perdía siempre que la
+  // pestaña se recargaba). authCred se manda con cada sincronización para
+  // que el servidor confirme que quien pide/sube datos es un colaborador
+  // real — nunca basta con conocer la URL del Apps Script.
+  localStorage.setItem(SESK, JSON.stringify(col));
+  localStorage.setItem(AUTHK, JSON.stringify(ST.authCred));
   $('login').style.display='none';
   $('app').style.display='flex';
   $('user-rol').textContent=col.puesto||'OPERATIVO';
@@ -1604,7 +1628,7 @@ function startSession(col){
   _folioActual=genFolio();
   $('folio-disp').textContent=_folioActual;
   aplicarPermisosUI();
-  mostrarBienvenida();
+  if(esNueva)mostrarBienvenida();
   updDash();
   // Trae lo último de la nube apenas se abre la app. Antes, un dispositivo
   // que solo consulta (no captura ni edita nada) nunca disparaba una
@@ -1615,6 +1639,25 @@ function startSession(col){
   // en adelante cada _SYNC_INTERVALO_MS mientras la app siga abierta.
   _refrescarTrasSync();
   _iniciarSyncPeriodico();
+}
+// Restaura la sesión guardada en ESTE dispositivo al abrir/recargar la app,
+// para no tener que volver a teclear el PIN cada vez. Es distinto del atajo
+// de "acceso directo como Administrador" que existió antes y se quitó: ese
+// entraba como Admin en CUALQUIER celular sin pedir nada; esto solo restaura
+// la identidad de quien YA inició sesión, en el mismo equipo.
+function checkSession(){
+  try{
+    const saved=localStorage.getItem(SESK);
+    if(!saved)return;
+    const col=JSON.parse(saved);
+    if(!col)return;
+    let authCred=null;
+    try{authCred=JSON.parse(localStorage.getItem(AUTHK)||'null')}catch(ex){authCred=null}
+    startSession(col,authCred,false);
+  }catch(e){
+    localStorage.removeItem(SESK);
+    localStorage.removeItem(AUTHK);
+  }
 }
 // Vuelve a pintar la página que esté activa con lo que acaba de llegar de la
 // nube (si no se hace esto, sincronizar en silencio no sirve de nada: los
@@ -1639,7 +1682,17 @@ function _iniciarSyncPeriodico(){
   if(_syncIntervalId)clearInterval(_syncIntervalId);
   _syncIntervalId=setInterval(_refrescarTrasSync,_SYNC_INTERVALO_MS);
 }
-function logout(){if(!confirm('¿Cerrar sesión?'))return;if(_syncIntervalId){clearInterval(_syncIntervalId);_syncIntervalId=null}ST.user=null;$('login').style.display='flex';$('app').style.display='none';ST.pin='';updDots()}
+function logout(){if(!confirm('¿Cerrar sesión?'))return;_cerrarSesionLocal()}
+// Limpia la sesión de ESTE dispositivo sin pedir confirmación — la usa tanto
+// el botón "Cerrar sesión" (que sí confirma antes) como el aviso automático
+// de "un administrador cerró todas las sesiones" (que no debe preguntar).
+function _cerrarSesionLocal(){
+  if(_syncIntervalId){clearInterval(_syncIntervalId);_syncIntervalId=null}
+  ST.user=null;ST.authCred=null;
+  localStorage.removeItem(SESK);
+  localStorage.removeItem(AUTHK);
+  $('login').style.display='flex';$('app').style.display='none';ST.pin='';updDots()
+}
 
 /* ── PERMISOS POR ROL ──
    ADMINISTRADOR: acceso total.
@@ -2759,6 +2812,7 @@ async function sincronizarTodo(silencioso=false){
   try{
     const r=await api({
       accion:'sincronizarTodo',
+      auth:ST.authCred,
       ods:lDB(),
       colaboradores:lEmp(),
       abonos:lAbonos(),
@@ -2767,6 +2821,21 @@ async function sincronizarTodo(silencioso=false){
       solicitudesRC:lRC()
     });
     if(r.ok){
+      // Revisar si el admin cerró todas las sesiones: si la marca del
+      // servidor cambió respecto a la que tenía este dispositivo, un admin
+      // pidió cerrar todas las sesiones — este equipo se desloguea solo y
+      // pide iniciar sesión de nuevo (así toma credenciales frescas). La
+      // primera vez que un dispositivo ve la marca solo la guarda, sin
+      // cerrar sesión.
+      if(r.sessionEpoch){
+        const epochLocal=localStorage.getItem(EPK);
+        if(epochLocal&&String(epochLocal)!==String(r.sessionEpoch)){
+          toast('Un administrador cerró todas las sesiones. Vuelve a iniciar sesión.');
+          _cerrarSesionLocal();
+          return false;
+        }
+        localStorage.setItem(EPK,String(r.sessionEpoch));
+      }
       if(r.ods&&r.ods.length){
         // La nube es la fuente autorizada tras el merge del servidor (que ya
         // incluye lo que este mismo dispositivo acaba de enviar arriba). Antes
@@ -2839,7 +2908,14 @@ async function sincronizarTodo(silencioso=false){
       }
       if(!silencioso)toast('✅ Sincronización completa');
       return true;
-    }else{if(!silencioso)toast('❌ '+(r.mensaje||r.error||'Error'));return false}
+    }else{
+      if(!silencioso)toast('❌ '+(r.mensaje||r.error||'Error'));
+      // El servidor rechazó la credencial guardada en este dispositivo (PIN
+      // cambiado, colaborador dado de baja, etc.) — se desloguea para que
+      // pida credenciales frescas en vez de seguir intentando en silencio.
+      if(r.mensaje&&r.mensaje.indexOf('No autorizado')!==-1)_cerrarSesionLocal();
+      return false;
+    }
   }catch(e){if(!silencioso)toast('❌ Error: '+e.message);return false}
 }
 // El botón "↻ Actualizar" de cada página debe traer lo último de la nube
@@ -2855,9 +2931,32 @@ function copiarInstrucciones(){
 }
 function resetLocal(){
   if(!confirm('¿Borrar TODOS los datos locales?'))return;
-  [DB,EK,QK,SK,ABK,SOLK,CERK,RCK].forEach(k=>localStorage.removeItem(k));
+  [DB,EK,QK,SK,ABK,SOLK,CERK,RCK,SESK,AUTHK,EPK].forEach(k=>localStorage.removeItem(k));
   ST.q=[];ST.ods=[];ST.emps=[];
   toast('🗑 Datos locales eliminados');updDash();
+}
+
+// Pide el PIN de administrador para confirmar una acción sensible (no es
+// login: es solo una confirmación de que quien la pide de verdad tiene
+// permisos, la valida el servidor con verificarAdminColaborador).
+function pedirAuthAdmin(){
+  const pin=prompt('Ingresa tu PIN de administrador para confirmar esta acción:');
+  if(!pin)return null;
+  return {pin};
+}
+// Cierra la sesión de TODOS los dispositivos (incluido este) — cada uno se
+// desloguea solo la próxima vez que sincronice. Útil para forzar que todos
+// tomen credenciales nuevas sin ir equipo por equipo.
+async function cerrarTodasLasSesiones(){
+  if(!ST.url){toast('⚠ Configura URL primero');return}
+  if(!confirm('¿Cerrar la sesión de TODOS los equipos (incluido este)? Cada uno tendrá que volver a iniciar sesión la próxima vez que sincronice o recargue.'))return;
+  const adminAuth=pedirAuthAdmin();
+  if(!adminAuth)return;
+  try{
+    const r=await api({accion:'cerrarTodasLasSesiones',adminAuth});
+    if(!r.ok)throw new Error(r.mensaje||'Error desconocido');
+    toast('✅ Listo. Todos los equipos se desloguearán en su próxima sincronización.');
+  }catch(e){toast('❌ No se pudo cerrar las sesiones: '+e.message)}
 }
 
 /* ── MODAL ── */
@@ -4935,8 +5034,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   // como la app es la misma en todos los celulares, ese atajo entraba como
   // Administrador en CUALQUIER dispositivo que la abriera — incluidos los de
   // vendedores/choferes como Ruth, que no deben ver Colaboradores, Nube ni
-  // Solicitudes. Ahora vuelve a pedirse PIN o usuario/contraseña, así cada
-  // quien entra con su propio rol.
+  // Solicitudes. checkSession() es distinto: solo restaura, en ESTE mismo
+  // dispositivo, la identidad de quien ya inició sesión aquí antes con su
+  // propio PIN — si nunca inició sesión en este equipo, sigue pidiéndolo.
+  checkSession();
 });
 
 // Registrar el Service Worker: sin esto el navegador no ofrece "Instalar
