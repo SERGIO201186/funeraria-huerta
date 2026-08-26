@@ -207,7 +207,7 @@ function doPost(e) {
       case "obtenerODS":                    result = obtenerODS(payload.filtros||{}); break;
       case "actualizarODS":                 result = actualizarODS(payload.folio, payload.datos); break;
       case "eliminarODS":                   result = eliminarODS(payload.folio); break;
-      case "guardarColaborador":            result = guardarColaborador(payload.datos);break;
+      case "guardarColaborador":            result = guardarColaborador(payload.datos, verificarAdminColaborador(payload.auth));break;
       // obtenerColaboradores/sincronizarTodo devuelven el PIN y la contraseña de
       // TODO el personal (los usa el respaldo de login sin conexión) — antes
       // cualquiera con la URL del Web App los descargaba sin haber iniciado
@@ -412,11 +412,16 @@ function buscarColaboradorPorAuth(auth) {
   return null;
 }
 
-// true si el colaborador autenticado tiene rol de Administrador (mismo
-// criterio que esAdmin() en el cliente: el puesto incluye "ADMINISTRADOR").
+// true si un puesto corresponde a rol de Administrador (mismo criterio que
+// esAdmin() en el cliente: el puesto incluye "ADMINISTRADOR").
+function _esPuestoAdmin(puesto) {
+  return String(puesto || '').toUpperCase().indexOf('ADMINISTRADOR') !== -1;
+}
+
+// true si el colaborador autenticado tiene rol de Administrador.
 function verificarAdminColaborador(auth) {
   const e = buscarColaboradorPorAuth(auth);
-  return !!(e && String(e.puesto || '').toUpperCase().indexOf('ADMINISTRADOR') !== -1);
+  return !!(e && _esPuestoAdmin(e.puesto));
 }
 
 // Cambia una marca (SESSION_EPOCH) que todos los dispositivos revisan en cada
@@ -581,7 +586,14 @@ function obtenerFoliosEliminados() {
 // ============================================================
 //  COLABORADORES
 // ============================================================
-function guardarColaborador(datos) {
+// quienGuardaEsAdmin: si quien está sincronizando/guardando NO es Administrador,
+// no puede otorgarse (ni otorgarle a nadie más) el puesto de Administrador — solo
+// un admin puede. Mismo criterio que ya usa Prevision-app (app hermana) para esta
+// misma hoja de Colaboradores, compartida entre ambas apps.
+function guardarColaborador(datos, quienGuardaEsAdmin) {
+  if (!quienGuardaEsAdmin && _esPuestoAdmin(datos.puesto)) {
+    return { ok:false, mensaje:"No autorizado: solo un Administrador puede asignar ese puesto." };
+  }
   const sh = getEmpSh();
   const headers = headersReales(sh);
   const idx = findRow(sh, "idColaborador", datos.idColaborador);
@@ -818,9 +830,14 @@ function sincronizarTodo(payload) {
   const certificaciones= payload.certificaciones || [];
   const solicitudesRC  = payload.solicitudesRC || [];
 
+  // Si quien sincroniza no es Administrador, guardarColaborador() rechaza cualquier
+  // colaborador de la lista que traiga puesto de Administrador (ver ahí mismo) — así
+  // un colaborador normal no puede auto-otorgarse (ni otorgarle a nadie) ese rol
+  // coleándose en una sincronización.
+  const quienSincronizaEsAdmin = verificarAdminColaborador(payload.auth);
   const errores = [];
   _procesarLista(ods,             guardarODS,            "ODS",             errores);
-  _procesarLista(emps,            guardarColaborador,    "Colaborador",     errores);
+  _procesarLista(emps,            e => guardarColaborador(e, quienSincronizaEsAdmin), "Colaborador", errores);
   _procesarLista(prevs,           guardarPrevision,      "Previsión",       errores);
   _procesarLista(abonos,          guardarAbono,          "Abono",           errores);
   _procesarLista(solicitudes,     guardarSolicitud,      "Solicitud",       errores);
