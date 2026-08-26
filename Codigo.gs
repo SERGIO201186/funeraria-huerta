@@ -1,15 +1,30 @@
 // ====================================================
 // FUNERARIA HUERTA – Google Apps Script (Code.gs)
-// Backend COMPARTIDO entre app ODS y app de Previsiones
-// v2.2.0 — columnas por nombre (no por posición fija) + campos de
-//          logística de cremación/foráneo que antes no se guardaban
+// Backend COMPARTIDO entre app ODS y app de Previsiones — v3.0.0 — un solo
+// script y un solo libro de Google Sheets para las dos apps (antes Previsión
+// tenía su propio Apps Script y su propio libro, aparte). Este archivo ahora
+// también atiende contratos/abonos/certificados/dispositivos/pagos de
+// Mercado Pago de Previsión (mismas hojas y columnas que ya tenía en
+// producción — solo cambia quién las atiende), y comparte con esa app la
+// hoja "Colaboradores" para login/PIN.
 // INSTRUCCIONES:
-// 1. Pega en script.google.com > proyecto existente (reemplaza todo)
-// 2. Implementar > Gestionar implementaciones > Editar (lápiz) >
-//    Nueva versión > Implementar
-//    (si usas "Nueva implementación" en vez de una nueva versión de la
-//    misma, la URL cambia y hay que actualizarla en ambas apps)
-// 3. Ejecutar como: YO | Acceso: Cualquier persona
+// 1. IMPORTANTE — este script debe quedar VINCULADO al libro de Google
+//    Sheets que ya tiene los datos reales de Previsión (CONTRATOS, ABONOS,
+//    EMPLEADOS, CERTIFICADOS, DISPOSITIVOS, PAGOS_MP): abre ESE Sheet →
+//    menú Extensiones → Apps Script (así el script queda vinculado a ese
+//    archivo, no a uno nuevo vacío). Ahí, borra TODO el código que hubiera
+//    (Ctrl+A, Suprimir) y pega este archivo completo.
+//    La primera vez que el script corra, migra solo los colaboradores de la
+//    hoja vieja "EMPLEADOS" hacia la nueva hoja compartida "Colaboradores"
+//    (ver _migrarEmpleadosLegacySiHaceFalta) — no hace falta capturarlos de nuevo.
+// 2. Implementar > Nueva implementación > Tipo: Aplicación web
+//    Ejecutar como: YO | Acceso: Cualquier persona (incluso anónima)
+//    (si ya tenías una implementación y solo editas código, usa "Gestionar
+//    implementaciones > Editar (lápiz) > Nueva versión" para conservar la
+//    misma URL — si creas una implementación nueva, la URL cambia y hay que
+//    actualizarla en las DOS apps)
+// 3. Usa esa MISMA URL en "Sincronización Nube" de la app de ODS y en
+//    "Enlace de Sincronización en la Nube" de la app de Previsión.
 // ====================================================
 
 // — NOMBRES DE HOJAS
@@ -174,6 +189,34 @@ const RC_COLS = [
   "creadoPor","fechaCreacion","fechaActualizacion"
 ];
 
+// — CABECERAS DE PREVISIÓN (contratos/abonos/certificados/dispositivos/pagos MP) —
+// Antes vivían en un Apps Script COMPLETAMENTE APARTE, incrustado en el propio
+// index.html de la app de Previsión (con su propio libro de Google Sheets). Se
+// portan aquí tal cual — mismos nombres de hoja y de columna que ya existen en
+// producción — para que un solo script (y un solo libro) sirva a las dos apps.
+// No se toca el esquema ni se migran datos de estas hojas: solo cambia QUIÉN
+// las atiende. Lo único que de verdad se unifica es Colaboradores (más abajo).
+const SH_PC    = "CONTRATOS";
+const SH_PA    = "ABONOS";       // Abonos de Previsión — no confundir con SH_ABONO ("Abonos", de ODS).
+const SH_PCERT = "CERTIFICADOS"; // Histórico de certificados de liquidación — no confundir con SH_CERT ("Certificaciones").
+const SH_DISP  = "DISPOSITIVOS";
+const SH_PMP   = "PAGOS_MP";
+
+const PC_COLS = ["FOLIO","TITULAR","IDENTIFICACION","CELULAR","CORREO","REGISTRO","PAQUETE",
+  "PRECIO_TOTAL","ENGANCHE","PAGADO_A_LA_FECHA","CUOTAS","FRECUENCIA","FIRMA_BASE64","OBSERVACIONES",
+  "ASESOR","BENEFICIARIO_1","TELEFONO_1","BENEFICIARIO_2","TELEFONO_2","BENEFICIARIO_3","TELEFONO_3",
+  "ESTADO_MANUAL","MOTIVO_ESTADO","MOTIVO_DETALLE","FECHA_ESTADO","CERTIFICADO_NUM","CERTIFICADO_FECHA"];
+const PA_COLS = ["ID_PAGO","FOLIO_CLIENTE","MONTO","METODO","REFERENCIA","FECHA","NOTA"];
+const PCERT_COLS = ["NUM_CERT","FOLIO","TITULAR","PAQUETE","PRECIO_TOTAL","HASH","FECHA_EMISION","HORA_EMISION","EMITIDO_POR"];
+const DISP_COLS = ["DEVICE_ID","NOMBRE","ESTADO","FECHA_SOLICITUD","FECHA_RESPUESTA"];
+const PMP_COLS = ["ID","FOLIO","MONTO","MP_PAYMENT_ID","FECHA_PAGO","ESTADO","FECHA_REVISION"];
+
+function getPCSh()    { return initSheet(SH_PC,    PC_COLS);    }
+function getPASh()    { return initSheet(SH_PA,    PA_COLS);    }
+function getPCertSh() { return initSheet(SH_PCERT, PCERT_COLS); }
+function getDispSh()  { return initSheet(SH_DISP,  DISP_COLS);  }
+function getPMPSh()   { return initSheet(SH_PMP,   PMP_COLS);   }
+
 //
 //  SALIDA JSON
 //  NOTA: ContentService.TextOutput NO tiene método setHeader().
@@ -197,12 +240,53 @@ function doOptions(e) {
 // ============================================================
 function doPost(e) {
   try {
+    // ── WEBHOOK DE MERCADO PAGO (portado de Previsión) ──
+    // Mercado Pago llama a esta misma URL cuando hay un pago nuevo. Puede llegar como
+    // POST con cuerpo JSON ({type:'payment', data:{id:...}}) o, en configuraciones
+    // antiguas (IPN), como query params (?topic=payment&id=...). Se revisa ANTES de
+    // parsear el cuerpo como el JSON propio de la app, porque el webhook no sigue ese
+    // formato y podría no ser JSON válido. Nunca crea el abono directamente — solo
+    // deja el pago listo para que el administrador lo confirme desde "Pagos Mercado Pago".
+    const mpParamId = (e && e.parameter) ? (e.parameter['data.id'] || e.parameter.id) : null;
+    const mpParamType = (e && e.parameter) ? (e.parameter.type || e.parameter.topic) : null;
+    let mpBodyPaymentId = null;
+    if (!mpParamId && e && e.postData && e.postData.contents) {
+      try {
+        const mpBody = JSON.parse(e.postData.contents);
+        if (mpBody && (mpBody.type === 'payment' || mpBody.action === 'payment.created' || mpBody.action === 'payment.updated') && mpBody.data && mpBody.data.id) {
+          mpBodyPaymentId = mpBody.data.id;
+        }
+      } catch (mpParseErr) { /* no era JSON del webhook, sigue el flujo normal */ }
+    }
+    const mpPaymentId = mpBodyPaymentId || ((mpParamType === 'payment') ? mpParamId : null);
+    if (mpPaymentId) {
+      return jsonOut(_procesarWebhookMP(mpPaymentId));
+    }
+
     const payload = JSON.parse(e.postData.contents);
     const accion  = payload.accion || "";
+
+    // ── NOTIFICACIONES AL ADMINISTRADOR (portado de Previsión) ── usa payload.action,
+    // no payload.accion — así se manda desde la app de Previsión desde siempre.
+    if (payload.action === 'notify' && payload.adminEmail && payload.tipo) {
+      return jsonOut(_notificarAdminPrevision(payload));
+    }
+
     let result;
 
     switch (accion) {
       case "ping":                          result = { ok:true, mensaje:"Servidor Huerta v2 activo ✓" }; break;
+      // ── Previsión: dispositivos autorizados a /verificar/ y pagos de Mercado Pago ──
+      case "solicitarAccesoDispositivo":    result = solicitarAccesoDispositivo(payload); break;
+      case "actualizarDispositivo":         result = verificarAdminColaborador(payload.adminAuth) ? actualizarDispositivo(payload) : { ok:false, error:"No autorizado." }; break;
+      case "confirmarPagoMP":               result = verificarAdminColaborador(payload.adminAuth) ? confirmarPagoMP(payload) : { ok:false, error:"No autorizado." }; break;
+      case "descartarPagoMP":               result = verificarAdminColaborador(payload.adminAuth) ? descartarPagoMP(payload) : { ok:false, error:"No autorizado." }; break;
+      // Sincronización de Previsión (contratos/abonos/empleados/certificados) — los
+      // empleados que traiga se guardan con la MISMA guardarColaborador() de arriba.
+      // El cliente de Previsión espera {result:"success"} u otro {result, message}
+      // (no {ok, mensaje}) para esta acción en particular — así funcionaba su
+      // propio backend original y su syncPendingData() sigue leyendo esas claves.
+      case "sincronizarPrevision":          result = buscarColaboradorPorAuth(payload.auth) ? sincronizarPrevision(payload) : { result:"error", message:"No autorizado. Vuelve a iniciar sesión." }; break;
       case "guardarODS":                    result = guardarODS(payload.datos);  break;
       case "obtenerODS":                    result = obtenerODS(payload.filtros||{}); break;
       case "actualizarODS":                 result = actualizarODS(payload.folio, payload.datos); break;
@@ -253,11 +337,202 @@ function doPost(e) {
   }
 }
 
+// Evita XSS al insertar parámetros de la URL (o datos de las hojas) dentro de
+// HTML generado por el servidor (páginas de modo=pagar / modo=pagoResultado).
+function escapeHtml(str) {
+  return String(str === null || str === undefined ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// doGet atiende, además del ping de siempre, tres páginas propias de la app de
+// Previsión (portadas tal cual desde su script — antes vivían aparte) y la
+// sincronización de lectura de Previsión (?auth=...), gateada con la misma
+// buscarColaboradorPorAuth que ya usa sincronizarTodo.
 function doGet(e) {
-  const accion = (e.parameter && e.parameter.accion) || "ping";
-  let result = { ok:false, mensaje:"Usa POST" };
-  if (accion === "ping") result = { ok:true, mensaje:"Servidor Huerta v2 activo ✓" };
-  return jsonOut(result);
+  try {
+    // ── MODO VERIFICACIÓN (página independiente /verificar/, SOLO equipos autorizados) ──
+    // Cada equipo que abre /verificar/ genera su propio deviceId y pide acceso una vez
+    // (acción solicitarAccesoDispositivo, queda en estado "pendiente"). Mientras el
+    // administrador no lo autorice manualmente, esta llamada NO entrega ningún dato.
+    if (e && e.parameter && e.parameter.modo === 'verificar') {
+      const deviceId = e.parameter.deviceId || "";
+      let estadoDispositivo = "no_registrado";
+      if (deviceId) {
+        const dvRows = getDispSh().getDataRange().getValues();
+        for (let dvi = 1; dvi < dvRows.length; dvi++) {
+          if (String(dvRows[dvi][0]) === String(deviceId)) { estadoDispositivo = String(dvRows[dvi][2] || "pendiente"); break; }
+        }
+      }
+      const verifyResponse = { result: "success", estado: estadoDispositivo, certificados: [] };
+      if (estadoDispositivo === "autorizado") {
+        const vData = getPCertSh().getDataRange().getValues();
+        if (vData.length > 1) {
+          const vHeaders = vData[0];
+          for (let vi = 1; vi < vData.length; vi++) verifyResponse.certificados.push(toObj(vHeaders, vData[vi]));
+        }
+      }
+      return jsonOut(verifyResponse);
+    }
+
+    // ── MODO RESULTADO DE PAGO (a donde regresa Mercado Pago después de pagar) ──
+    // NUNCA debe entregar datos de contratos/abonos — es la página a la que el
+    // navegador del CLIENTE (no el administrador) llega después de pagar.
+    if (e && e.parameter && e.parameter.modo === 'pagoResultado') {
+      const estadoPago = e.parameter.estado || 'pendiente';
+      const folioResultado = e.parameter.folio || '';
+      const mensajeResultado = estadoPago === 'exito'
+        ? '✅ ¡Pago recibido! Gracias — en cuanto el administrador lo confirme quedará reflejado en tu plan.'
+        : estadoPago === 'fallo'
+          ? '❌ El pago no se completó. Puedes intentarlo de nuevo con el mismo link que te compartieron.'
+          : '⏳ Tu pago está pendiente de confirmación. Te avisaremos cuando se acredite.';
+      const htmlResultado = '<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>'
+        + '<body style="font-family:sans-serif;max-width:420px;margin:3rem auto;padding:0 1rem;text-align:center;color:#222;">'
+        + '<h2>Previsión Huerta</h2>'
+        + (folioResultado ? '<p style="color:#666;">Folio ' + escapeHtml(folioResultado) + '</p>' : '')
+        + '<p style="font-size:1.1rem;">' + mensajeResultado + '</p>'
+        + '</body></html>';
+      return HtmlService.createHtmlOutput(htmlResultado);
+    }
+
+    // ── MODO PAGO (link único y permanente por cliente hacia Mercado Pago) ──
+    // El link que se comparte con el cliente siempre es el mismo (esta misma URL con su
+    // folio), pero CADA VEZ que se abre se genera una preferencia de pago nueva con el
+    // saldo pendiente actual — así el link nunca queda desactualizado si el cliente ya abonó.
+    if (e && e.parameter && e.parameter.modo === 'pagar') {
+      const folioPagar = e.parameter.folio || "";
+      let htmlPagar;
+      try {
+        const cSh = getPCSh(), cHeaders = headersReales(cSh);
+        const cIdx = findRow(cSh, "FOLIO", folioPagar);
+        const contratoEncontrado = cIdx > 0 ? toObj(cHeaders, cSh.getRange(cIdx, 1, 1, cHeaders.length).getValues()[0]) : null;
+        if (!contratoEncontrado) {
+          htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">Folio no encontrado. Verifica el link con el administrador.</p>';
+        } else {
+          let totalAbonadoPagar = 0;
+          const apRows = getPASh().getDataRange().getValues();
+          for (let api = 1; api < apRows.length; api++) {
+            if (String(apRows[api][1]) === String(folioPagar)) totalAbonadoPagar += Number(apRows[api][2]) || 0;
+          }
+          const precioTotal = Number(contratoEncontrado.PRECIO_TOTAL) || 0;
+          const saldoPagar = precioTotal - totalAbonadoPagar;
+          if (saldoPagar <= 0) {
+            htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">✅ El folio ' + escapeHtml(folioPagar) + ' ya está liquidado. No hay ningún saldo pendiente por pagar.</p>';
+          } else {
+            const cuotas = Number(contratoEncontrado.CUOTAS) || 0;
+            const enganche = Number(contratoEncontrado.ENGANCHE) || 0;
+            let cuotaPeriodicaPagar = cuotas > 0 ? Math.round((precioTotal - enganche) / cuotas) : saldoPagar;
+            if (cuotaPeriodicaPagar > saldoPagar) cuotaPeriodicaPagar = saldoPagar;
+            if (cuotaPeriodicaPagar <= 0) cuotaPeriodicaPagar = saldoPagar;
+
+            let montoParam = e.parameter.monto ? Number(e.parameter.monto) : 0;
+
+            if (!montoParam || montoParam <= 0) {
+              // ── Paso 1: el cliente confirma o ajusta el monto antes de ir a Mercado Pago ──
+              const periodicidadTexto = contratoEncontrado.FRECUENCIA === 'quincenal' ? 'quincenal' : 'mensual';
+              htmlPagar = '<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>'
+                + '<body style="font-family:sans-serif;max-width:420px;margin:2rem auto;padding:0 1rem;color:#222;">'
+                + '<h2 style="margin-bottom:0;">Previsión Huerta</h2>'
+                + '<p style="color:#666;margin-top:4px;">Folio ' + escapeHtml(folioPagar) + ' — ' + escapeHtml(contratoEncontrado.TITULAR) + '</p>'
+                + '<p style="font-size:14px;color:#666;">Cuota ' + periodicidadTexto + ' pactada: <b>$' + cuotaPeriodicaPagar.toLocaleString('es-MX') + ' M.N.</b><br>'
+                + 'Saldo total pendiente: $' + saldoPagar.toLocaleString('es-MX') + ' M.N.</p>'
+                + '<form method="get" action="' + ScriptApp.getService().getUrl() + '" target="_top">'
+                + '<input type="hidden" name="modo" value="pagar">'
+                + '<input type="hidden" name="folio" value="' + escapeHtml(folioPagar) + '">'
+                + '<label style="display:block;margin:1rem 0 0.3rem;font-weight:bold;">Monto a pagar</label>'
+                + '<input type="number" name="monto" value="' + cuotaPeriodicaPagar + '" min="1" max="' + saldoPagar + '" step="1" '
+                + 'style="width:100%;box-sizing:border-box;font-size:1.2rem;padding:0.6rem;border:1px solid #ccc;border-radius:8px;">'
+                + '<p style="font-size:12px;color:#999;">Puedes dejar la cuota pactada o escribir otro monto (hasta el saldo total pendiente).</p>'
+                + '<button type="submit" style="width:100%;margin-top:0.5rem;padding:0.8rem;background:#00b1ea;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:bold;">Continuar al pago</button>'
+                + '</form></body></html>';
+            } else {
+              // ── Paso 2: ya con el monto elegido, genera la preferencia y redirige a Mercado Pago ──
+              if (montoParam > saldoPagar) montoParam = saldoPagar;
+              const mpTokenPagar = PropertiesService.getScriptProperties().getProperty('MP_ACCESS_TOKEN');
+              if (!mpTokenPagar) {
+                htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">El pago en línea no está disponible todavía. Contacta al administrador.</p>';
+              } else {
+                const webAppUrl = ScriptApp.getService().getUrl();
+                // IMPORTANTE: las back_urls NUNCA deben apuntar a la URL "pelona" del Web App —
+                // esa entrega (sin auth) el ping/acciones del backend. Deben ir a modo=pagoResultado.
+                const backUrlBase = webAppUrl + '?modo=pagoResultado&folio=' + encodeURIComponent(folioPagar);
+                const prefBody = {
+                  items: [{ title: 'Previsión Huerta — Folio ' + folioPagar, quantity: 1, currency_id: 'MXN', unit_price: montoParam }],
+                  external_reference: folioPagar,
+                  back_urls: { success: backUrlBase + '&estado=exito', failure: backUrlBase + '&estado=fallo', pending: backUrlBase + '&estado=pendiente' },
+                  auto_return: 'approved'
+                };
+                const prefRes = UrlFetchApp.fetch('https://api.mercadopago.com/checkout/preferences', {
+                  method: 'post', contentType: 'application/json',
+                  headers: { Authorization: 'Bearer ' + mpTokenPagar },
+                  payload: JSON.stringify(prefBody), muteHttpExceptions: true
+                });
+                const prefData = JSON.parse(prefRes.getContentText());
+                const initPoint = prefData.init_point || prefData.sandbox_init_point;
+                if (!initPoint) {
+                  htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">No se pudo generar el link de pago. Intenta de nuevo más tarde o contacta al administrador.<br><small>' + (prefData.message || '') + '</small></p>';
+                } else {
+                  // window.top.location fuerza a que TODA la pestaña navegue a Mercado Pago,
+                  // rompiendo el iframe interno de Apps Script (ver PR #10 de Previsión).
+                  htmlPagar = '<html><head><meta http-equiv="refresh" content="2;url=' + initPoint + '"></head>'
+                    + '<body style="font-family:sans-serif;padding:2rem;">Redirigiendo al pago de $' + montoParam.toLocaleString('es-MX') + ' M.N. (folio ' + escapeHtml(folioPagar) + ')…'
+                    + ' Si no avanza automáticamente, <a href="' + initPoint + '" target="_top">haz clic aquí</a>.'
+                    + '<script>window.top.location.href=' + JSON.stringify(initPoint) + ';<\/script>'
+                    + '</body></html>';
+                }
+              }
+            }
+          }
+        }
+      } catch (pagarErr) {
+        htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">Ocurrió un error generando el link de pago: ' + pagarErr.message + '</p>';
+      }
+      return HtmlService.createHtmlOutput(htmlPagar);
+    }
+
+    // ── SINCRONIZACIÓN DE PREVISIÓN (lectura) — exige credencial real de un colaborador activo ──
+    if (e && e.parameter && e.parameter.auth) {
+      let authParam = null;
+      try { authParam = JSON.parse(e.parameter.auth); } catch (authParseErr) { authParam = null; }
+      if (!buscarColaboradorPorAuth(authParam)) {
+        return jsonOut({ result: "error", message: "No autorizado." });
+      }
+      const cSh = getPCSh(), cHeaders = headersReales(cSh);
+      const cData = cSh.getDataRange().getValues();
+      const pSh = getPASh(), pHeaders = headersReales(pSh);
+      const pData = pSh.getDataRange().getValues();
+      const certSh = getPCertSh(), certHeaders = headersReales(certSh);
+      const certData = certSh.getDataRange().getValues();
+      const dispSh = getDispSh(), dispHeaders = headersReales(dispSh);
+      const dispData = dispSh.getDataRange().getValues();
+      const pmpSh = getPMPSh(), pmpHeaders = headersReales(pmpSh);
+      const pmpData = pmpSh.getDataRange().getValues();
+      const response = {
+        result: "success",
+        contracts: cData.slice(1).map(r => toObj(cHeaders, r)),
+        payments: pData.slice(1).map(r => toObj(pHeaders, r)),
+        // Los mismos Colaboradores que usa la app ODS, traducidos al formato
+        // EMPLEADOS (mayúsculas, sin PIN/CONTRASENA) que espera este cliente.
+        employees: obtenerColaboradores().datos.map(_colaboradorAEmpleadoPrevision),
+        certificados: certData.slice(1).map(r => toObj(certHeaders, r)),
+        dispositivos: dispData.slice(1).map(r => toObj(dispHeaders, r)),
+        pagosMP: pmpData.slice(1).map(r => toObj(pmpHeaders, r)),
+        sessionEpoch: PropertiesService.getScriptProperties().getProperty('SESSION_EPOCH') || '0'
+      };
+      return jsonOut(response);
+    }
+
+    // ── ping (comportamiento de siempre) ──
+    const accion = (e.parameter && e.parameter.accion) || "ping";
+    let result = { ok:false, mensaje:"Usa POST" };
+    if (accion === "ping") result = { ok:true, mensaje:"Servidor Huerta v2 activo ✓" };
+    return jsonOut(result);
+  } catch (err) {
+    return jsonOut({ result:"error", message: err.message });
+  }
 }
 
 //
@@ -297,7 +572,40 @@ function initSheet(name, headers) {
   return sh;
 }
 function getODSSh()  { return initSheet(SH_ODS,   ODS_COLS);  }
-function getEmpSh()  { return initSheet(SH_EMP,   EMP_COLS);  }
+function getEmpSh()  { _migrarEmpleadosLegacySiHaceFalta(); return initSheet(SH_EMP, EMP_COLS); }
+
+// Migra una sola vez los colaboradores que ya existieran en una hoja "EMPLEADOS"
+// (esquema viejo de Previsión: ID,NOMBRE,PUESTO,TELEFONO,ESTATUS,USUARIO,CONTRASENA,PIN)
+// hacia la hoja compartida "Colaboradores" — así los empleados que ya tenías
+// capturados en Previsión no se pierden ni hay que volver a darlos de alta a mano.
+// Corre una sola vez (marca EMPLEADOS_MIGRADOS en Propiedades del script) y nunca
+// sobreescribe un colaborador que ya exista en Colaboradores con el mismo idColaborador.
+function _migrarEmpleadosLegacySiHaceFalta() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EMPLEADOS_MIGRADOS')) return;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const legacy = ss.getSheetByName('EMPLEADOS');
+  if (legacy) {
+    const data = legacy.getDataRange().getValues();
+    if (data.length > 1) {
+      const legacyHeaders = data[0];
+      const empSh = initSheet(SH_EMP, EMP_COLS);
+      const empHeaders = headersReales(empSh);
+      data.slice(1).forEach(row => {
+        const legacyEmp = toObj(legacyHeaders, row);
+        if (!legacyEmp.ID) return;
+        if (findRow(empSh, "idColaborador", legacyEmp.ID) !== -1) return; // ya existe, no se toca
+        empSh.appendRow(toRow(empHeaders, {
+          idColaborador: legacyEmp.ID, nombreCompleto: legacyEmp.NOMBRE, puesto: legacyEmp.PUESTO,
+          telefono: legacyEmp.TELEFONO, estatus: legacyEmp.ESTATUS, usuario: legacyEmp.USUARIO,
+          contrasena: legacyEmp.CONTRASENA || "", pin: legacyEmp.PIN || "",
+          fechaRegistro: new Date().toISOString()
+        }));
+      });
+    }
+  }
+  props.setProperty('EMPLEADOS_MIGRADOS', String(Date.now()));
+}
 function getPrevSh() { return initSheet(SH_PREV,  ["folio","titular","ine","celular","correo","beneficiario1","telBen1","beneficiario2",
 "telBen2","paquete","asesor","precioTotal","enganche","cuotas","frecuencia","cuotaMonto","restante","estatus","creadoPor","fechaCreacion",
 "fechaActualizacion"]); }
@@ -370,7 +678,7 @@ function validarAcceso(payload) {
 
   for (let i = 1; i < data.length; i++) {
     const e = toObj(headers, data[i]);
-    if (String(e.estatus) !== "ACTIVO") continue;
+    if (!_esActivo(e.estatus)) continue;
 
     // Por PIN
     if (payload.pin && String(e.pin) === String(payload.pin)) {
@@ -389,6 +697,31 @@ function _empPublic(e) {
   return { id:e.idColaborador, nombre:e.nombreCompleto, puesto:e.puesto, telefono:e.telefono };
 }
 
+// Compara estatus sin distinguir mayúsculas/minúsculas: funeraria-huerta siempre
+// escribió "ACTIVO", pero Previsión históricamente usa "Activo" — ahora que
+// ambas apps comparten la misma hoja de Colaboradores, ambas grafías deben
+// dejar entrar por igual.
+function _esActivo(estatus) {
+  return String(estatus || '').toUpperCase() === 'ACTIVO';
+}
+
+// Traduce un Colaborador (esquema de funeraria-huerta) al formato EMPLEADOS que
+// espera el cliente de Previsión (columnas en MAYÚSCULAS). CONTRASENA/PIN nunca
+// se mandan por esta vía — mismo criterio que _empPublic.
+function _colaboradorAEmpleadoPrevision(c) {
+  return { ID: c.idColaborador, NOMBRE: c.nombreCompleto, PUESTO: c.puesto,
+           TELEFONO: c.telefono, ESTATUS: c.estatus, USUARIO: c.usuario };
+}
+// Traduce un empleado en el formato que manda el cliente de Previsión
+// (id,nombre,puesto,telefono,estatus,usuario,contrasena,pin) al Colaborador de
+// funeraria-huerta, para poder guardarlo con la misma guardarColaborador() que
+// ya usa el resto del sistema.
+function _empleadoPrevisionAColaborador(emp) {
+  return { idColaborador: emp.id, nombreCompleto: emp.nombre, puesto: emp.puesto,
+           telefono: emp.telefono, estatus: emp.estatus, usuario: emp.usuario,
+           contrasena: emp.contrasena || "", pin: emp.pin || "" };
+}
+
 // Busca en Colaboradores un empleado ACTIVO cuyo PIN o usuario/contraseña
 // coincidan con los que mandó la llamada. Devuelve el registro completo (uso
 // interno) o null. Es la puerta de entrada de obtenerColaboradores/
@@ -403,7 +736,7 @@ function buscarColaboradorPorAuth(auth) {
   const headers = data[0];
   for (let i = 1; i < data.length; i++) {
     const e = toObj(headers, data[i]);
-    if (String(e.estatus) !== "ACTIVO") continue;
+    if (!_esActivo(e.estatus)) continue;
     if (auth.pin && String(e.pin) === String(auth.pin)) return e;
     if (auth.usuario && auth.contrasena &&
         String(e.usuario) === String(auth.usuario) &&
@@ -597,12 +930,19 @@ function guardarColaborador(datos, quienGuardaEsAdmin) {
   const sh = getEmpSh();
   const headers = headersReales(sh);
   const idx = findRow(sh, "idColaborador", datos.idColaborador);
-  datos.fechaRegistro = new Date().toISOString();
   if (idx > 0) {
-    sh.getRange(idx,1,1,headers.length).setValues([toRow(headers, datos)]);
+    // Se FUSIONA con lo que ya había en vez de sobrescribir la fila completa: quien
+    // llama (ej. la sincronización de Previsión, que no conoce domicilio/contacto de
+    // emergencia/fecha de ingreso/notas — campos propios de la ficha de ODS) puede
+    // mandar solo un subconjunto de columnas. Sin este merge, esos campos se
+    // borrarían solos cada vez que Previsión edita a ese mismo colaborador.
+    const existente = toObj(headers, sh.getRange(idx, 1, 1, headers.length).getValues()[0]);
+    const fusionado = Object.assign({}, existente, datos, { fechaRegistro: existente.fechaRegistro || new Date().toISOString() });
+    sh.getRange(idx,1,1,headers.length).setValues([toRow(headers, fusionado)]);
     return { ok:true, mensaje:"Colaborador actualizado" };
   }
   datos.estatus = datos.estatus || "ACTIVO";
+  datos.fechaRegistro = new Date().toISOString();
   sh.appendRow(toRow(headers, datos));
   return { ok:true, mensaje:"Colaborador registrado" };
 }
@@ -1515,4 +1855,300 @@ function aplicarReorganizacionODS() {
     "La versión anterior quedó guardada como \"" + nombreRespaldo + "\" — bórrala tú mismo cuando " +
     "confirmes que todo está bien (Sheets no lo hace solo)."
   );
+}
+
+// ============================================================
+//  PREVISIÓN — dispositivos autorizados a /verificar/, pagos de Mercado
+//  Pago, y la sincronización de contratos/abonos/certificados. Portado tal
+//  cual desde el script propio que tenía la app de Previsión, adaptado para
+//  usar la MISMA autenticación (buscarColaboradorPorAuth/
+//  verificarAdminColaborador) y la MISMA guardarColaborador() de empleados
+//  que ya usa el resto de este archivo.
+// ============================================================
+
+// ── DISPOSITIVOS (página independiente /verificar/) ──
+function solicitarAccesoDispositivo(payload) {
+  if (!payload.deviceId) return { ok:false, error:"Falta deviceId" };
+  try {
+    const sh = getDispSh();
+    const headers = headersReales(sh);
+    const idx = findRow(sh, "DEVICE_ID", payload.deviceId);
+    let estadoActual;
+    if (idx === -1) {
+      sh.appendRow([payload.deviceId, payload.nombre || "", "pendiente", new Date().toLocaleString('es-MX'), ""]);
+      estadoActual = "pendiente";
+    } else {
+      const fila = toObj(headers, sh.getRange(idx, 1, 1, headers.length).getValues()[0]);
+      estadoActual = String(fila.ESTADO || "pendiente");
+      if (payload.nombre && payload.nombre !== fila.NOMBRE) sh.getRange(idx, headers.indexOf("NOMBRE") + 1).setValue(payload.nombre);
+    }
+    return { ok:true, estado: estadoActual };
+  } catch (dErr) {
+    return { ok:false, error: dErr.message };
+  }
+}
+
+// Autorizar/revocar un dispositivo — ya viene gateado con verificarAdminColaborador
+// desde el switch de doPost, esta función solo aplica el cambio.
+function actualizarDispositivo(payload) {
+  if (!payload.deviceId || !payload.estado) return { ok:false, error:"Faltan datos" };
+  try {
+    const sh = getDispSh();
+    const headers = headersReales(sh);
+    const idx = findRow(sh, "DEVICE_ID", payload.deviceId);
+    if (idx !== -1) {
+      sh.getRange(idx, headers.indexOf("ESTADO") + 1).setValue(payload.estado);
+      sh.getRange(idx, headers.indexOf("FECHA_RESPUESTA") + 1).setValue(new Date().toLocaleString('es-MX'));
+    }
+    return { ok:true };
+  } catch (d2Err) {
+    return { ok:false, error: d2Err.message };
+  }
+}
+
+// ── PAGOS DE MERCADO PAGO ──
+// Llamado desde doPost cuando el cuerpo/parámetros coinciden con el webhook de
+// Mercado Pago (ver la detección al inicio de doPost). Nunca crea el abono
+// directamente — solo deja el pago listo para que el administrador lo confirme.
+function _procesarWebhookMP(mpPaymentId) {
+  let mpPay;
+  try {
+    const mpToken = PropertiesService.getScriptProperties().getProperty('MP_ACCESS_TOKEN');
+    if (!mpToken) throw new Error('MP_ACCESS_TOKEN no configurado en Propiedades del script.');
+    const mpPayRes = UrlFetchApp.fetch('https://api.mercadopago.com/v1/payments/' + encodeURIComponent(mpPaymentId), {
+      headers: { Authorization: 'Bearer ' + mpToken }, muteHttpExceptions: true
+    });
+    mpPay = JSON.parse(mpPayRes.getContentText());
+    if (mpPay && mpPay.status === 'approved' && mpPay.external_reference) {
+      const sh = getPMPSh();
+      const yaExiste = findRow(sh, "MP_PAYMENT_ID", mpPaymentId) !== -1;
+      if (!yaExiste) {
+        sh.appendRow([Utilities.getUuid(), mpPay.external_reference, mpPay.transaction_amount || 0,
+          String(mpPaymentId), new Date().toLocaleString('es-MX'), 'pendiente_revision', '']);
+      }
+    }
+    Logger.log('Webhook MP procesado: pago ' + mpPaymentId + ', status ' + (mpPay && mpPay.status));
+  } catch (mpErr) {
+    Logger.log('Error procesando webhook de Mercado Pago: ' + mpErr.toString());
+  }
+  return { result: 'ok' };
+}
+
+// Confirma un pago pendiente de revisión: lo convierte en abono real y suma el
+// monto al saldo abonado del contrato. Ya viene gateado con verificarAdminColaborador.
+function confirmarPagoMP(payload) {
+  if (!payload.idPagoMP) return { ok:false, error:"Falta idPagoMP" };
+  try {
+    const sh = getPMPSh();
+    const headers = headersReales(sh);
+    const idx = findRow(sh, "ID", payload.idPagoMP);
+    if (idx === -1) throw new Error('Pago no encontrado.');
+    const fila = toObj(headers, sh.getRange(idx, 1, 1, headers.length).getValues()[0]);
+    if (String(fila.ESTADO) !== 'pendiente_revision') throw new Error('Este pago ya fue revisado.');
+
+    const pSh = getPASh();
+    pSh.appendRow(toRow(headersReales(pSh), {
+      ID_PAGO: Utilities.getUuid(), FOLIO_CLIENTE: fila.FOLIO, MONTO: fila.MONTO, METODO: 'Mercado Pago',
+      REFERENCIA: 'MP-' + fila.MP_PAYMENT_ID, FECHA: fila.FECHA_PAGO,
+      NOTA: 'Confirmado por admin desde pago de Mercado Pago #' + fila.MP_PAYMENT_ID
+    }));
+    sh.getRange(idx, headers.indexOf("ESTADO") + 1).setValue('confirmado');
+    sh.getRange(idx, headers.indexOf("FECHA_REVISION") + 1).setValue(new Date().toLocaleString('es-MX'));
+
+    // El dashboard lee "Abonado" directo de PAGADO_A_LA_FECHA en CONTRATOS (no lo
+    // calcula sumando abonos) — sin esto, el pago no se reflejaría en el saldo.
+    const cSh = getPCSh(), cHeaders = headersReales(cSh);
+    const cIdx = findRow(cSh, "FOLIO", fila.FOLIO);
+    if (cIdx !== -1) {
+      const ciPagado = cHeaders.indexOf("PAGADO_A_LA_FECHA");
+      const pagadoActual = Number(cSh.getRange(cIdx, ciPagado + 1).getValue()) || 0;
+      cSh.getRange(cIdx, ciPagado + 1).setValue(pagadoActual + Number(fila.MONTO));
+    }
+    return { ok:true };
+  } catch (cmErr) {
+    return { ok:false, error: cmErr.message };
+  }
+}
+
+// Descarta un pago pendiente de revisión (no genera abono). Ya viene gateado
+// con verificarAdminColaborador.
+function descartarPagoMP(payload) {
+  if (!payload.idPagoMP) return { ok:false, error:"Falta idPagoMP" };
+  try {
+    const sh = getPMPSh();
+    const headers = headersReales(sh);
+    const idx = findRow(sh, "ID", payload.idPagoMP);
+    if (idx !== -1) {
+      sh.getRange(idx, headers.indexOf("ESTADO") + 1).setValue('descartado');
+      sh.getRange(idx, headers.indexOf("FECHA_REVISION") + 1).setValue(new Date().toLocaleString('es-MX'));
+    }
+    return { ok:true };
+  } catch (dmErr) {
+    return { ok:false, error: dmErr.message };
+  }
+}
+
+// ── NOTIFICACIONES AL ADMINISTRADOR (Previsión) ──
+function _notificarAdminPrevision(payload) {
+  try {
+    let asunto, cuerpo;
+    const fecha = payload.fecha || new Date().toLocaleString();
+    const asesor = payload.asesor || 'Un asesor';
+    const d = payload.datos || {};
+
+    if (payload.tipo === 'nuevo_contrato') {
+      asunto = '📋 Nuevo contrato registrado — ' + (d.folio||'') + ' · Huerta';
+      cuerpo = 'Hola Admin,\n\n' + asesor + ' acaba de registrar un nuevo contrato:\n\n'
+        + '  Folio:    ' + (d.folio||'-') + '\n'
+        + '  Titular:  ' + (d.titular||'-') + '\n'
+        + '  Paquete:  ' + (d.paquete||'-') + '\n'
+        + '  Precio:   $' + (Number(d.precio)||0).toLocaleString('es-MX') + ' M.N.\n'
+        + '  Enganche: $' + (Number(d.enganche)||0).toLocaleString('es-MX') + ' M.N.\n'
+        + '  Fecha:    ' + fecha + '\n\n'
+        + 'Revisa la app de gestión para más detalles.\n\n'
+        + '-- Servicios Funerarios Huerta · Sistema de Previsión';
+    } else if (payload.tipo === 'certificado_emitido') {
+      asunto = '🏅 Certificado de liquidación emitido — ' + (d.numCert||'') + ' · Huerta';
+      cuerpo = 'Hola Admin,\n\nSe ha emitido un Certificado de Liquidación Total:\n\n'
+        + '  N° Certificado: ' + (d.numCert||'-') + '\n'
+        + '  Folio contrato: ' + (d.folio||'-') + '\n'
+        + '  Titular:        ' + (d.titular||'-') + '\n'
+        + '  Paquete:        ' + (d.paquete||'-') + '\n'
+        + '  Monto total:    $' + (Number(d.precioTotal)||0).toLocaleString('es-MX') + ' M.N.\n'
+        + '  Fecha emisión:  ' + (d.fechaEmision||'-') + '\n'
+        + '  Emitido por:    ' + asesor + '\n\n'
+        + 'Guarda este número de certificado en tus registros.\n\n'
+        + '-- Servicios Funerarios Huerta · Sistema de Previsión';
+    } else if (payload.tipo === 'nuevo_abono') {
+      asunto = '💰 Abono registrado — ' + (d.folio||'') + ' (' + (d.titular||'') + ')';
+      cuerpo = 'Hola Admin,\n\n' + asesor + ' acaba de registrar un abono:\n\n'
+        + '  Folio:          ' + (d.folio||'-') + '\n'
+        + '  Titular:        ' + (d.titular||'-') + '\n'
+        + '  Monto abonado:  $' + (Number(d.monto)||0).toLocaleString('es-MX') + ' M.N.\n'
+        + '  Método de pago: ' + (d.metodo||'-') + '\n'
+        + '  Fecha de pago:  ' + (d.fecha||'-') + '\n'
+        + '  Saldo restante: $' + (Number(d.saldoRestante)||0).toLocaleString('es-MX') + ' M.N.\n'
+        + '  Registrado:     ' + fecha + '\n\n'
+        + 'Revisa la app de gestión para más detalles.\n\n'
+        + '-- Servicios Funerarios Huerta · Sistema de Previsión';
+    }
+
+    if (asunto && cuerpo) GmailApp.sendEmail(payload.adminEmail, asunto, cuerpo);
+  } catch (emailErr) {
+    Logger.log('Error enviando notificación de Previsión: ' + emailErr.toString());
+  }
+  return { result: 'notified' };
+}
+
+// ── SINCRONIZACIÓN DE CONTRATOS/ABONOS/EMPLEADOS/CERTIFICADOS ──
+// Solo escribe lo que llega (ver doPost: ya viene gateado con
+// buscarColaboradorPorAuth). La relectura completa la hace el cliente por
+// separado con un GET a este mismo script (?auth=...), igual que siempre.
+function _contratoPrevisionAFila(c) {
+  const b = c.beneficiarios || [];
+  return {
+    FOLIO: c.folio, TITULAR: c.nombre, IDENTIFICACION: c.identificacion, CELULAR: c.telefono,
+    CORREO: c.correo, REGISTRO: c.fechaRegistro, PAQUETE: c.nombrePaquete,
+    PRECIO_TOTAL: c.precioTotal, ENGANCHE: c.enganche, PAGADO_A_LA_FECHA: c.montoPagado,
+    CUOTAS: c.mensualidades, FRECUENCIA: c.frecuenciaPago,
+    // La firma solo vive en localStorage del dispositivo — nunca se sube aquí.
+    FIRMA_BASE64: "", OBSERVACIONES: c.observaciones || "", ASESOR: c.asesor || "",
+    BENEFICIARIO_1: b[0] ? b[0].nombre : "", TELEFONO_1: b[0] ? b[0].telefono : "",
+    BENEFICIARIO_2: b[1] ? b[1].nombre : "", TELEFONO_2: b[1] ? b[1].telefono : "",
+    BENEFICIARIO_3: b[2] ? b[2].nombre : "", TELEFONO_3: b[2] ? b[2].telefono : "",
+    ESTADO_MANUAL: c.estadoManual || "Activo", MOTIVO_ESTADO: c.motivoEstado || "",
+    MOTIVO_DETALLE: c.motivoDetalle || "", FECHA_ESTADO: c.estadoFecha || "",
+    CERTIFICADO_NUM: (c.certificados && c.certificados.length) ? c.certificados[c.certificados.length - 1].numCert : "",
+    CERTIFICADO_FECHA: (c.certificados && c.certificados.length) ? c.certificados[c.certificados.length - 1].fechaEmision : ""
+  };
+}
+function _abonoPrevisionAFila(p) {
+  return { ID_PAGO: p.id, FOLIO_CLIENTE: p.clienteId, MONTO: p.monto, METODO: p.metodo || "",
+           REFERENCIA: p.referencia || "", FECHA: p.fecha, NOTA: p.nota || "" };
+}
+function _certPrevisionAFila(cert) {
+  return { NUM_CERT: cert.numCert, FOLIO: cert.folio, TITULAR: cert.titular || "",
+           PAQUETE: cert.paquete || "", PRECIO_TOTAL: cert.precioTotal || 0, HASH: cert.hash || "",
+           FECHA_EMISION: cert.fechaEmision || "", HORA_EMISION: cert.horaEmision || "", EMITIDO_POR: cert.emitidoPor || "" };
+}
+
+function sincronizarPrevision(payload) {
+  const cSh = getPCSh(), cHeaders = headersReales(cSh);
+
+  // ── Contratos ──
+  if (payload.contracts && payload.contracts.length > 0) {
+    payload.contracts.forEach(c => {
+      const idx = findRow(cSh, "FOLIO", c.folio);
+      const filaRow = toRow(cHeaders, _contratoPrevisionAFila(c));
+      if (idx !== -1) cSh.getRange(idx, 1, 1, cHeaders.length).setValues([filaRow]);
+      else cSh.appendRow(filaRow);
+    });
+  }
+
+  // ── Abonos ──
+  if (payload.payments && payload.payments.length > 0) {
+    const pSh = getPASh(), pHeaders = headersReales(pSh);
+    payload.payments.forEach(p => {
+      const idx = findRow(pSh, "ID_PAGO", p.id);
+      const filaRow = toRow(pHeaders, _abonoPrevisionAFila(p));
+      if (idx !== -1) pSh.getRange(idx, 1, 1, pHeaders.length).setValues([filaRow]);
+      else pSh.appendRow(filaRow);
+    });
+  }
+
+  // ── Empleados: se guardan con la MISMA guardarColaborador() que usa el resto
+  // del sistema, así quedan en la única hoja compartida de Colaboradores. ──
+  if (payload.employees && payload.employees.length > 0) {
+    const quienSincronizaEsAdmin = verificarAdminColaborador(payload.auth);
+    payload.employees.forEach(emp => {
+      if (emp.id === 'admin-default') return; // cuenta de respaldo solo local, nunca sube a la nube
+      // Un colaborador sin rol de administrador no puede tocar (crear, editar ni
+      // borrar) un registro que tenga puesto de Administrador — solo un admin puede.
+      if (!quienSincronizaEsAdmin && _esPuestoAdmin(emp.puesto)) return;
+      const empSh = getEmpSh();
+      if (String(emp.estatus) === "Eliminado") {
+        const idx = findRow(empSh, "idColaborador", emp.id);
+        if (idx !== -1) empSh.deleteRow(idx);
+        return;
+      }
+      guardarColaborador(_empleadoPrevisionAColaborador(emp), quienSincronizaEsAdmin);
+    });
+  }
+
+  // ── Migración: rescatar certificados emitidos ANTES de que existiera la hoja
+  // CERTIFICADOS (antes solo se guardaba el último en las columnas CERTIFICADO_NUM/
+  // CERTIFICADO_FECHA de CONTRATOS, que se sobrescribían en cada nueva emisión). ──
+  const certSh = getPCertSh(), certHeaders = headersReales(certSh);
+  const knownCertNums = {};
+  certSh.getDataRange().getValues().slice(1).forEach(r => { knownCertNums[String(r[0])] = true; });
+  const allContractsData = cSh.getDataRange().getValues();
+  if (allContractsData.length > 1) {
+    const idxFolio = cHeaders.indexOf("FOLIO"), idxTitular = cHeaders.indexOf("TITULAR"),
+          idxPaquete = cHeaders.indexOf("PAQUETE"), idxPrecio = cHeaders.indexOf("PRECIO_TOTAL"),
+          idxCertNum = cHeaders.indexOf("CERTIFICADO_NUM"), idxCertFecha = cHeaders.indexOf("CERTIFICADO_FECHA");
+    if (idxCertNum !== -1) {
+      allContractsData.slice(1).forEach(crow => {
+        const numCertLegacy = String(crow[idxCertNum] || "").trim();
+        if (numCertLegacy && !knownCertNums[numCertLegacy]) {
+          certSh.appendRow(toRow(certHeaders, {
+            NUM_CERT: numCertLegacy, FOLIO: crow[idxFolio], TITULAR: crow[idxTitular], PAQUETE: crow[idxPaquete],
+            PRECIO_TOTAL: crow[idxPrecio] || 0, HASH: "", FECHA_EMISION: crow[idxCertFecha] || "",
+            HORA_EMISION: "", EMITIDO_POR: "Migración automática"
+          }));
+          knownCertNums[numCertLegacy] = true;
+        }
+      });
+    }
+  }
+
+  // ── Certificados de Liquidación (histórico completo, uno por emisión) ──
+  if (payload.certificados && payload.certificados.length > 0) {
+    payload.certificados.forEach(cert => {
+      const idx = findRow(certSh, "NUM_CERT", cert.numCert);
+      // Los certificados son inmutables una vez emitidos: solo se agregan, nunca se sobrescriben.
+      if (idx === -1) certSh.appendRow(toRow(certHeaders, _certPrevisionAFila(cert)));
+    });
+  }
+
+  return { result: "success" };
 }
