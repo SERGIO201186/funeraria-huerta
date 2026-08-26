@@ -31,7 +31,12 @@
 const SH_ODS   = "OrdenesTrabajo";
 const SH_EMP   = "Colaboradores";  // ← COMPARTIDA entre las dos apps
 const SH_PREV  = "Previsiones";
-const SH_ABONO = "Abonos";
+// "AbonosODS" (no "Abonos" a secas): Google Sheets no distingue mayúsculas de
+// minúsculas al buscar hojas por nombre, así que "Abonos" chocaba con "ABONOS"
+// (la hoja de abonos de Previsión, más abajo) — getSheetByName("Abonos")
+// encontraba la de Previsión y la migración de ODS se saltaba pensando que ya
+// existía, sin copiar nunca los abonos reales de ODS.
+const SH_ABONO = "AbonosODS";
 const SH_LOG   = "LogActividad";
 const SH_PROD  = "Productos";      // ← catálogo de ataúdes/urnas
 const SH_SOLIC = "Solicitudes";    // ← solicitudes de edición de ODS (empleados)
@@ -197,7 +202,7 @@ const RC_COLS = [
 // No se toca el esquema ni se migran datos de estas hojas: solo cambia QUIÉN
 // las atiende. Lo único que de verdad se unifica es Colaboradores (más abajo).
 const SH_PC    = "CONTRATOS";
-const SH_PA    = "ABONOS";       // Abonos de Previsión — no confundir con SH_ABONO ("Abonos", de ODS).
+const SH_PA    = "ABONOS";       // Abonos de Previsión — no confundir con SH_ABONO ("AbonosODS").
 const SH_PCERT = "CERTIFICADOS"; // Histórico de certificados de liquidación — no confundir con SH_CERT ("Certificaciones").
 const SH_DISP  = "DISPOSITIVOS";
 const SH_PMP   = "PAGOS_MP";
