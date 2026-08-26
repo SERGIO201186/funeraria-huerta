@@ -750,10 +750,17 @@ function buscarColaboradorPorAuth(auth) {
   return null;
 }
 
-// true si un puesto corresponde a rol de Administrador (mismo criterio que
-// esAdmin() en el cliente: el puesto incluye "ADMINISTRADOR").
+// true si un puesto corresponde a rol de Administrador. Antes solo se
+// aceptaba la palabra completa "ADMINISTRADOR" como subcadena — pero los
+// colaboradores migrados desde ODS usan el código corto "admin" (ej. Sergio
+// Armando Cadena Huerta), que "ADMIN".indexOf("ADMINISTRADOR") nunca
+// encuentra (es más corta que lo que se busca). Se acepta también "admin"
+// como valor EXACTO (no como subcadena) para no dar de alta por accidente a
+// puestos que solo contengan "admin" dentro de otra palabra, como "Auxiliar
+// Administrativo". Mismo criterio que esAdmin() en el cliente.
 function _esPuestoAdmin(puesto) {
-  return String(puesto || '').toUpperCase().indexOf('ADMINISTRADOR') !== -1;
+  const p = String(puesto || '').trim().toUpperCase();
+  return p === 'ADMIN' || p.indexOf('ADMINISTRADOR') !== -1;
 }
 
 // true si el colaborador autenticado tiene rol de Administrador.

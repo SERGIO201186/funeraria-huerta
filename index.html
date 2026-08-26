@@ -1702,7 +1702,12 @@ function _cerrarSesionLocal(){
    aplican de inmediato al saldo), y consultar tablero/equipos/pagos. No
    pueden cerrar ni eliminar órdenes, ni entrar a Colaboradores o Nube. */
 function esAdmin(){
-  return !!(ST.user && String(ST.user.puesto||'').toUpperCase().includes('ADMINISTRADOR'));
+  // Acepta tanto "ADMINISTRADOR" (subcadena) como el código corto "admin"
+  // (valor EXACTO, no subcadena — así no da de alta por accidente a un
+  // puesto como "Auxiliar Administrativo"). Mismo criterio que
+  // _esPuestoAdmin() en Codigo.gs.
+  const p = String(ST.user && ST.user.puesto || '').trim().toUpperCase();
+  return p === 'ADMIN' || p.includes('ADMINISTRADOR');
 }
 function requiereAdmin(mensaje){
   if(esAdmin())return true;
@@ -2832,6 +2837,12 @@ async function sincronizarTodo(silencioso=false){
       if(r.sessionEpoch){
         const epochLocal=localStorage.getItem(EPK);
         if(epochLocal&&String(epochLocal)!==String(r.sessionEpoch)){
+          // Guardar el epoch NUEVO antes de desloguear: si no se hace esto aquí,
+          // el próximo intento de sincronizar vuelve a comparar contra el epoch
+          // viejo y se repite el cierre de sesión para siempre (así se quedó
+          // atorada la app después de migrar al backend compartido, cuyo
+          // SESSION_EPOCH partía de cero en vez del que ya tenía cada dispositivo).
+          localStorage.setItem(EPK,String(r.sessionEpoch));
           toast('Un administrador cerró todas las sesiones. Vuelve a iniciar sesión.');
           _cerrarSesionLocal();
           return false;
