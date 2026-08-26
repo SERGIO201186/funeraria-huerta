@@ -208,9 +208,15 @@ function doPost(e) {
       case "actualizarODS":                 result = actualizarODS(payload.folio, payload.datos); break;
       case "eliminarODS":                   result = eliminarODS(payload.folio); break;
       case "guardarColaborador":            result = guardarColaborador(payload.datos);break;
-      case "obtenerColaboradores":          result = obtenerColaboradores();          break;
+      // obtenerColaboradores/sincronizarTodo devuelven el PIN y la contraseña de
+      // TODO el personal (los usa el respaldo de login sin conexión) — antes
+      // cualquiera con la URL del Web App los descargaba sin haber iniciado
+      // sesión nunca. Ahora hace falta payload.auth (PIN o usuario/contraseña
+      // de un colaborador ACTIVO) para poder pedirlos.
+      case "obtenerColaboradores":          result = buscarColaboradorPorAuth(payload.auth) ? obtenerColaboradores() : { ok:false, mensaje:"No autorizado." }; break;
       case "validarAcceso":                 result = validarAcceso(payload);          break;
-      case "sincronizarTodo":               result = sincronizarTodo(payload);        break;
+      case "sincronizarTodo":               result = buscarColaboradorPorAuth(payload.auth) ? sincronizarTodo(payload) : { ok:false, mensaje:"No autorizado. Vuelve a iniciar sesión." }; break;
+      case "cerrarTodasLasSesiones":         result = cerrarTodasLasSesiones(payload); break;
       // Previsiones (compatibilidad con app hermana)
       case "guardarPrevision":   result = guardarPrevision(payload.datos);  break;
       case "obtenerPrevisiones": result = obtenerPrevisiones(payload.filtros||{}); break;
@@ -381,6 +387,49 @@ function validarAcceso(payload) {
 }
 function _empPublic(e) {
   return { id:e.idColaborador, nombre:e.nombreCompleto, puesto:e.puesto, telefono:e.telefono };
+}
+
+// Busca en Colaboradores un empleado ACTIVO cuyo PIN o usuario/contraseña
+// coincidan con los que mandó la llamada. Devuelve el registro completo (uso
+// interno) o null. Es la puerta de entrada de obtenerColaboradores/
+// sincronizarTodo: nunca basta con conocer la URL del Web App — hace falta
+// una credencial real de un colaborador activo, igual que ya exige
+// validarAcceso para el login.
+function buscarColaboradorPorAuth(auth) {
+  if (!auth) return null;
+  const sh = getEmpSh();
+  const data = sh.getDataRange().getValues();
+  if (data.length <= 1) return null;
+  const headers = data[0];
+  for (let i = 1; i < data.length; i++) {
+    const e = toObj(headers, data[i]);
+    if (String(e.estatus) !== "ACTIVO") continue;
+    if (auth.pin && String(e.pin) === String(auth.pin)) return e;
+    if (auth.usuario && auth.contrasena &&
+        String(e.usuario) === String(auth.usuario) &&
+        String(e.contrasena) === String(auth.contrasena)) return e;
+  }
+  return null;
+}
+
+// true si el colaborador autenticado tiene rol de Administrador (mismo
+// criterio que esAdmin() en el cliente: el puesto incluye "ADMINISTRADOR").
+function verificarAdminColaborador(auth) {
+  const e = buscarColaboradorPorAuth(auth);
+  return !!(e && String(e.puesto || '').toUpperCase().indexOf('ADMINISTRADOR') !== -1);
+}
+
+// Cambia una marca (SESSION_EPOCH) que todos los dispositivos revisan en cada
+// sincronizarTodo() — si no coincide con la que tenían guardada, se
+// desloguean solos y piden credenciales de nuevo. Sirve para forzar que
+// todos tomen credenciales nuevas sin ir equipo por equipo (ver
+// cerrarTodasLasSesiones() en el cliente).
+function cerrarTodasLasSesiones(payload) {
+  if (!verificarAdminColaborador(payload.adminAuth)) {
+    return { ok:false, mensaje:"No autorizado: se requieren credenciales de administrador." };
+  }
+  PropertiesService.getScriptProperties().setProperty('SESSION_EPOCH', String(Date.now()));
+  return { ok:true };
 }
 
 // ============================================================
@@ -798,7 +847,11 @@ function sincronizarTodo(payload) {
     // Folios borrados: el cliente los usa para limpiar cualquier copia local
     // vieja que le haya quedado de antes del borrado (celular que no
     // sincronizaba desde hace tiempo, pestaña abierta desde antes, etc.).
-    eliminados: obtenerFoliosEliminados()
+    eliminados: obtenerFoliosEliminados(),
+    // Marca que cambia cuando un admin pide "cerrar todas las sesiones" — el
+    // cliente compara con la que tenía guardada y se desloguea solo si no
+    // coincide (ver cerrarTodasLasSesiones más arriba).
+    sessionEpoch: PropertiesService.getScriptProperties().getProperty('SESSION_EPOCH') || '0'
   };
 }
 
