@@ -1452,7 +1452,16 @@ const SELLO_HUERTA_B64="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA10AAANdCA
 const TIENDA_URL="https://script.google.com/macros/s/AKfycbzJtOwVJ5m2ziBGW2nkQy57x1nOo5ZLuyLtcISgwK1uaMMkoVKsHglDrSBbeJe-idr3Mw/exec";
 let _catalogoTienda=[]; // caché del catálogo cargado (productos segment="inmediato")
 
-let ST={user:null,online:navigator.onLine,url:localStorage.getItem(UK)||'',page:'dash',ods:[],emps:[],q:JSON.parse(localStorage.getItem(QK)||'[]'),pin:'',loginTab:'pin'};
+// Backend compartido (Codigo.gs, un solo libro para ODS y Previsión). El enlace
+// también se puede pegar a mano en Sincronización Nube (ST.url ahí siempre gana),
+// pero eso requiere haber iniciado sesión como Administrador en ESE dispositivo
+// primero — y localStorage es por dispositivo/navegador, así que un celular nuevo
+// (o reinstalado) nunca lo tenía configurado. Sin URL, el login no podía consultar
+// la nube y caía siempre en "Credenciales incorrectas" aunque el PIN fuera
+// correcto, solo en esos dispositivos. Este valor por defecto rompe ese círculo.
+const DEFAULT_APPS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwYAzofFgAYk9QP7xJBkFfF0JBcxjf_e7DCwvQArfzdy1N6XZaIHre2jmsI6NOUHEPnaw/exec";
+
+let ST={user:null,online:navigator.onLine,url:localStorage.getItem(UK)||DEFAULT_APPS_SCRIPT_URL,page:'dash',ods:[],emps:[],q:JSON.parse(localStorage.getItem(QK)||'[]'),pin:'',loginTab:'pin'};
 let _firmaPendiente=null;
 
 const $=id=>document.getElementById(id);
@@ -5038,7 +5047,7 @@ function asegurarOpcionSeleccionada(selectId,id,nombre,costo){
 /* ── INIT ── */
 document.addEventListener('DOMContentLoaded',()=>{
   setOnline(navigator.onLine);
-  ST.url=localStorage.getItem(UK)||'';
+  ST.url=localStorage.getItem(UK)||DEFAULT_APPS_SCRIPT_URL;
   setTimeout(()=>{$('loader').style.display='none'},600);
   calcTotal();
   // Mostrar nota offline si aplica
