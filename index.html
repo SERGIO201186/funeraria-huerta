@@ -1441,6 +1441,12 @@ const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync',
 // Admin en CUALQUIER dispositivo sin pedir nada) — aquí cada quien solo
 // recupera SU PROPIA sesión, en el mismo equipo donde ya inició sesión una vez.
 const SESK='huerta_session_v1', AUTHK='huerta_authcred_v1', EPK='huerta_session_epoch';
+// Cierre de sesión por inactividad: si no hay clics/teclas/toques durante
+// SESSION_IDLE_MS, o si la app estuvo cerrada más tiempo que eso, se pide el PIN
+// de nuevo en vez de dejar la sesión abierta indefinidamente en el dispositivo.
+const SESSION_IDLE_MS=10*60*1000; // 10 minutos
+const ACTIVITY_KEY='huerta_last_activity';
+let lastActivityTs=Date.now();
 const FUNERARIA_ADDR = "Nicolás Bravo 11, Zona Centro, C.P. 91000, Xalapa, Veracruz";
 const KM_RATE1=24, KM_RATE2=28, KM_BREAK=200; // hasta 200km: $24/km; >200km: $28/km
 // Sello oficial de la funeraria en base64 (data:image/png;base64,...): timbre
@@ -1642,6 +1648,7 @@ function startSession(col,authCred,esNueva=true){
   // real — nunca basta con conocer la URL del Apps Script.
   localStorage.setItem(SESK, JSON.stringify(col));
   localStorage.setItem(AUTHK, JSON.stringify(ST.authCred));
+  registrarActividad();
   $('login').style.display='none';
   $('app').style.display='flex';
   $('user-rol').textContent=col.puesto||'OPERATIVO';
@@ -1661,6 +1668,7 @@ function startSession(col,authCred,esNueva=true){
   // en adelante cada _SYNC_INTERVALO_MS mientras la app siga abierta.
   _refrescarTrasSync();
   _iniciarSyncPeriodico();
+  _iniciarControlInactividad();
 }
 // Restaura la sesión guardada en ESTE dispositivo al abrir/recargar la app,
 // para no tener que volver a teclear el PIN cada vez. Es distinto del atajo
@@ -1671,6 +1679,16 @@ function checkSession(){
   try{
     const saved=localStorage.getItem(SESK);
     if(!saved)return;
+    // Si el dispositivo llevaba más de SESSION_IDLE_MS sin actividad (o la app
+    // estuvo cerrada más tiempo que eso), no se restaura la sesión: se pide el
+    // PIN de nuevo, igual que si hubiera cerrado sesión.
+    const lastActivity=Number(localStorage.getItem(ACTIVITY_KEY)||0);
+    if(!lastActivity || (Date.now()-lastActivity)>SESSION_IDLE_MS){
+      localStorage.removeItem(SESK);
+      localStorage.removeItem(AUTHK);
+      localStorage.removeItem(ACTIVITY_KEY);
+      return;
+    }
     const col=JSON.parse(saved);
     if(!col)return;
     let authCred=null;
@@ -1681,6 +1699,13 @@ function checkSession(){
     localStorage.removeItem(AUTHK);
   }
 }
+// Registra la última actividad del usuario (clic, tecla, toque o movimiento del
+// mouse) mientras hay sesión activa, para poder detectar inactividad.
+function registrarActividad(){
+  lastActivityTs=Date.now();
+  if(ST.user) localStorage.setItem(ACTIVITY_KEY, String(lastActivityTs));
+}
+['click','keydown','touchstart','mousemove'].forEach(ev=>document.addEventListener(ev, registrarActividad, {passive:true}));
 // Vuelve a pintar la página que esté activa con lo que acaba de llegar de la
 // nube (si no se hace esto, sincronizar en silencio no sirve de nada: los
 // datos quedan actualizados en localStorage pero la pantalla sigue
@@ -1704,15 +1729,31 @@ function _iniciarSyncPeriodico(){
   if(_syncIntervalId)clearInterval(_syncIntervalId);
   _syncIntervalId=setInterval(_refrescarTrasSync,_SYNC_INTERVALO_MS);
 }
+let _inactividadIntervalId=null;
+function _iniciarControlInactividad(){
+  if(_inactividadIntervalId)clearInterval(_inactividadIntervalId);
+  _inactividadIntervalId=setInterval(()=>{
+    if(!ST.user)return;
+    if(Date.now()-lastActivityTs>SESSION_IDLE_MS){
+      _cerrarSesionLocal();
+      toast('Sesión cerrada por inactividad. Ingresa tu PIN de nuevo.');
+    }
+  },15000); // revisa cada 15s — suficiente frente a un límite de 10 minutos
+}
+function _detenerControlInactividad(){
+  if(_inactividadIntervalId){clearInterval(_inactividadIntervalId);_inactividadIntervalId=null}
+}
 function logout(){if(!confirm('¿Cerrar sesión?'))return;_cerrarSesionLocal()}
 // Limpia la sesión de ESTE dispositivo sin pedir confirmación — la usa tanto
 // el botón "Cerrar sesión" (que sí confirma antes) como el aviso automático
 // de "un administrador cerró todas las sesiones" (que no debe preguntar).
 function _cerrarSesionLocal(){
   if(_syncIntervalId){clearInterval(_syncIntervalId);_syncIntervalId=null}
+  _detenerControlInactividad();
   ST.user=null;ST.authCred=null;
   localStorage.removeItem(SESK);
   localStorage.removeItem(AUTHK);
+  localStorage.removeItem(ACTIVITY_KEY);
   $('login').style.display='flex';$('app').style.display='none';ST.pin='';updDots()
 }
 
