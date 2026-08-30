@@ -1584,6 +1584,17 @@ function switchLoginTab(t,btn){
 function pinP(n){if(ST.pin.length>=4)return;ST.pin+=n;updDots();if(ST.pin.length===4)setTimeout(doLogin,180)}
 function pinDel(){ST.pin=ST.pin.slice(0,-1);updDots()}
 function updDots(){for(let i=0;i<4;i++)$(`pd${i}`).classList.toggle('on',i<ST.pin.length)}
+// Permite teclear el PIN desde el teclado físico (números 0-9, Backspace para
+// borrar y Enter para confirmar) sin tener que dar clic en los botones, para
+// computadoras donde se inicia sesión sin pantalla táctil.
+document.addEventListener('keydown', function(e){
+  const login=$('login'), pinPanel=$('pin-panel');
+  if(!login || login.style.display==='none') return;
+  if(!pinPanel || pinPanel.style.display==='none') return;
+  if(e.key>='0'&&e.key<='9'){e.preventDefault();pinP(Number(e.key));}
+  else if(e.key==='Backspace'){e.preventDefault();pinDel();}
+  else if(e.key==='Enter'){e.preventDefault();doLogin();}
+});
 
 async function doLogin(){
   const pin=ST.pin,user=($('l-user')||{value:''}).value.trim(),pass=($('l-pass')||{value:''}).value;
