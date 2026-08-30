@@ -1662,6 +1662,32 @@ function startSession(col,authCred,esNueva=true){
   _refrescarTrasSync();
   _iniciarSyncPeriodico();
 }
+// Inicio de sesión único cuando esta app se abre desde el panel Omnia
+// Control (iniciopc): ese panel manda, en la URL, la MISMA credencial (PIN
+// o usuario+contraseña) que el colaborador ya usó para entrar ahí — así no
+// hay que volver a teclearla aquí. Se valida contra el mismo backend
+// compartido de siempre (accion "validarAcceso"), exactamente igual que si
+// el propio colaborador la hubiera escrito en esta pantalla. La URL se
+// limpia enseguida (history.replaceState) para no dejar la credencial
+// visible en la barra de direcciones ni en el historial del navegador.
+async function autoLoginDesdeURL(){
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get('omniaAuth');
+  if (!raw) return false;
+  // Limpiar la URL de inmediato, haya éxito o no, para no dejar la
+  // credencial ahí ni que un refresh la vuelva a mandar.
+  params.delete('omniaAuth');
+  const query = params.toString();
+  history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+  let authCred = null;
+  try { authCred = JSON.parse(raw); } catch(e) { return false; }
+  if (!authCred || (!authCred.pin && !(authCred.usuario && authCred.contrasena))) return false;
+  try {
+    const r = await api(Object.assign({accion:'validarAcceso'}, authCred));
+    if (r && r.ok) { startSession(r.colaborador, authCred); return true; }
+  } catch(e) {}
+  return false;
+}
 // Restaura la sesión guardada en ESTE dispositivo al abrir/recargar la app,
 // para no tener que volver a teclear el PIN cada vez. Es distinto del atajo
 // de "acceso directo como Administrador" que existió antes y se quitó: ese
@@ -5056,13 +5082,17 @@ function asegurarOpcionSeleccionada(selectId,id,nombre,costo){
 }
 
 /* ── INIT ── */
-document.addEventListener('DOMContentLoaded',()=>{
+document.addEventListener('DOMContentLoaded',async ()=>{
   setOnline(navigator.onLine);
   ST.url=localStorage.getItem(UK)||DEFAULT_APPS_SCRIPT_URL;
   setTimeout(()=>{$('loader').style.display='none'},600);
   calcTotal();
   // Mostrar nota offline si aplica
   if(!navigator.onLine)$('offline-login-note').textContent='Sin internet — puedes iniciar sesión igual';
+  // Si se abrió desde el panel Omnia Control con una credencial en la URL,
+  // entra sola con ella (inicio de sesión único). Si no había credencial en
+  // la URL, o no fue válida, cae al comportamiento de siempre: restaurar la
+  // sesión que ya hubiera en ESTE dispositivo.
   // El acceso directo como Administrador (sin pedir PIN) se quitó de nuevo:
   // como la app es la misma en todos los celulares, ese atajo entraba como
   // Administrador en CUALQUIER dispositivo que la abriera — incluidos los de
@@ -5070,7 +5100,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   // Solicitudes. checkSession() es distinto: solo restaura, en ESTE mismo
   // dispositivo, la identidad de quien ya inició sesión aquí antes con su
   // propio PIN — si nunca inició sesión en este equipo, sigue pidiéndolo.
-  checkSession();
+  const entroPorSSO = await autoLoginDesdeURL();
+  if (!entroPorSSO) checkSession();
 });
 
 // Registrar el Service Worker: sin esto el navegador no ofrece "Instalar
