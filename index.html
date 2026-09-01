@@ -267,6 +267,7 @@ button:active{transform:scale(.97)}
 
     <!-- ── DASHBOARD ── -->
     <div class="page act" id="page-dash">
+      <div id="box-solicitudes-aprobadas"></div>
       <div class="st">Resumen de Turno</div>
       <div class="sg">
         <div class="sc ac"><div class="v" id="st-tot">0</div><div class="l">ODS Totales</div></div>
@@ -1435,6 +1436,22 @@ button:active{transform:scale(.97)}
   </div>
 </div>
 
+<div class="mo" id="mo-forma-pago">
+  <div class="mb">
+    <button class="mc" onclick="cancelarFormaPago()">✕</button>
+    <div class="mt2">Confirma la forma de pago</div>
+    <p style="font-size:12px;color:var(--text2);margin-top:-6px;margin-bottom:10px" id="fp-detalle">—</p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="bo" onclick="elegirFormaPago('EFECTIVO')">💵 Efectivo</button>
+      <button class="bo" onclick="elegirFormaPago('TARJETA')">💳 Tarjeta (terminal bancaria)</button>
+      <button class="bo" onclick="elegirFormaPago('TRANSFERENCIA')">🏦 Transferencia</button>
+      <button class="bo" onclick="elegirFormaPago('DEPOSITO')">🧾 Depósito</button>
+      <button class="bg" onclick="elegirFormaPago('MP_TERMINAL')">💳 Terminal Mercado Pago</button>
+      <button class="bg" onclick="elegirFormaPago('MP_LINK')">🔗 Link / QR de pago</button>
+    </div>
+  </div>
+</div>
+
 <div class="mo" id="mo-cobro">
   <div class="mb">
     <button class="mc" onclick="closeMo('mo-cobro')">✕</button>
@@ -1883,6 +1900,7 @@ function updDash(){
   $('bdg-eq').textContent=equipos.length;
   $('bdg-pg').textContent=ods.filter(o=>+o.restante>0).length;
   const bdgSol=$('bdg-sol');if(bdgSol)bdgSol.textContent=lSolic().filter(s=>s.estado==='pendiente').length;
+  renderSolicitudesAprobadas();
 
   const hoyD=new Date();hoyD.setHours(0,0,0,0);
   const alertas=equipos.filter(o=>{
@@ -2441,7 +2459,7 @@ function recopilar(){
   };
 }
 
-function guardarODS(){
+async function guardarODS(){
   if(_folioEnEdicion){ guardarEdicionODS(); return; }
   // Red de seguridad: si dibujaron la firma pero no tocaron "Confirmar
   // Firma" antes de guardar, se captura aquí para que no se pierda.
@@ -2452,22 +2470,46 @@ function guardarODS(){
   if(!d.fallecido||!d.contratante){toast('⚠ Completa fallecido y contratante');return}
   if(d.modalidadServicio==='INHUMACION'&&!d.ataudId){toast('⚠ Selecciona un ataúd del inventario disponible');return}
   if(d.modalidadServicio==='CREMACION'&&!d.urnaId){toast('⚠ Selecciona una urna del inventario disponible');return}
-  d.fechaActualizacion=new Date().toISOString();
-  const db=lDB();db.unshift(d);sDB(db);
-  encolar({accion:'guardarODS',datos:d});
-  reservarPiezasDeOrden(d).then(()=>cargarCatalogoTienda()); // aparta la pieza y refresca el inventario visible
-  toast(`✅ ${d.folio} guardada`);
-  if(ST.online&&ST.url)sincronizarTodo(true);
-  const folioGuardado=d.folio;
-  _firmaPendiente=null;
-  _folioActual=genFolio();
-  limpiarODS();updDash();navTo('tablero');
-  // Ofrecer ver expediente o enviarlo por WhatsApp
-  window._folioPostGuardado=folioGuardado;
-  setTimeout(()=>{
-    $('post-guardado-folio').textContent=`${folioGuardado} guardada`;
-    $('mo-post-guardado').classList.add('show');
-  },350);
+
+  // Si hay anticipo, es obligatorio confirmar con qué se cobró antes de guardar.
+  let metodoAnticipo=null;
+  if(+d.anticipo>0){
+    metodoAnticipo=await pedirFormaPago(`Anticipo de ${d.folio} — ${fmt(+d.anticipo)}`);
+    if(!metodoAnticipo){toast('⚠ Confirma la forma de pago del anticipo para guardar la orden');return}
+  }
+
+  const btnGuardar=$('btn-guardar-ods');
+  if(btnGuardar.disabled)return; // evita doble captura por doble clic mientras se procesa
+  btnGuardar.disabled=true;
+  try{
+    d.fechaActualizacion=new Date().toISOString();
+    const db=lDB();db.unshift(d);sDB(db);
+    encolar({accion:'guardarODS',datos:d});
+    if(metodoAnticipo&&metodoAnticipo!=='MP_TERMINAL'&&metodoAnticipo!=='MP_LINK'){
+      registrarAbonoManual(d.folio, d.contratante, d.anticipo, metodoAnticipo, 'ENGANCHE-INICIAL', 'Anticipo capturado al crear la orden');
+    }
+    reservarPiezasDeOrden(d).then(()=>cargarCatalogoTienda()); // aparta la pieza y refresca el inventario visible
+    toast(`✅ ${d.folio} guardada`);
+    if(ST.online&&ST.url)sincronizarTodo(true);
+    const folioGuardado=d.folio;
+    _firmaPendiente=null;
+    _folioActual=genFolio();
+    limpiarODS();updDash();navTo('tablero');
+    // Ofrecer ver expediente o enviarlo por WhatsApp
+    window._folioPostGuardado=folioGuardado;
+    setTimeout(()=>{
+      $('post-guardado-folio').textContent=`${folioGuardado} guardada`;
+      $('mo-post-guardado').classList.add('show');
+      // Anticipo cobrado en línea: se abre el cobro justo después de guardar
+      // (la orden ya tiene que existir en el servidor antes de poder mandarle
+      // un cobro por folio).
+      if(metodoAnticipo==='MP_TERMINAL'||metodoAnticipo==='MP_LINK'){
+        setTimeout(()=>abrirCobroODS(folioGuardado, d.anticipo),400);
+      }
+    },350);
+  }finally{
+    btnGuardar.disabled=false;
+  }
 }
 
 // Guarda los cambios de una orden YA EXISTENTE (modo edición), en vez de
@@ -2697,11 +2739,31 @@ function verODS(folio){
     </div>`;
   $('mo-ods').classList.add('show');
 }
-function cambiarEst(folio,est){
+async function cambiarEst(folio,est){
   if(!requiereAdmin('⚠ Solo el Administrador puede cerrar o reactivar órdenes')) return;
   const db=lDB();const i=db.findIndex(o=>o.folio===folio);if(i<0)return;
   const o=db[i];
   const eraCerrada=o.estatus==='CERRADA';
+
+  // Obligatorio confirmar cómo se cobró el saldo antes de poder cerrar la orden.
+  if(est==='CERRADA'&&!eraCerrada&&+o.restante>0){
+    const metodo=await pedirFormaPago(`Saldo pendiente de ${folio} — ${fmt(+o.restante)}`);
+    if(!metodo){toast('⚠ Confirma la forma de pago del saldo para cerrar la orden');return}
+    if(metodo==='MP_TERMINAL'||metodo==='MP_LINK'){
+      // Cobro en línea: no cierra todavía — se acredita solo cuando el pago se
+      // confirme (terminal) o cuando el cliente pague el link/QR más tarde.
+      // Vuelve a tocar "Cerrar ODS" una vez que el saldo llegue a $0.
+      closeMo('mo-ods');
+      abrirCobroODS(folio, o.restante);
+      toast('💳 Completa el cobro — cuando el saldo llegue a $0 podrás cerrar la orden.');
+      return;
+    }
+    // Efectivo/Tarjeta/Transferencia/Depósito: ya se cobró en mano, se registra y se liquida.
+    registrarAbonoManual(folio, o.contratante, o.restante, metodo, 'LIQUIDACION-CIERRE', 'Saldo liquidado al cerrar la orden');
+    o.anticipo=(+o.anticipo||0)+(+o.restante||0);
+    o.restante=0;
+  }
+
   o.estatus=est;o.fechaActualizacion=new Date().toISOString();db[i]=o;sDB(db);
   encolar({accion:'actualizarODS',folio,datos:o});
   // Al CERRAR la orden, las piezas reservadas se eliminan definitivamente del inventario
@@ -3524,6 +3586,40 @@ async function enviarODSPorWhatsapp(folio){
   },500);
 }
 
+/* ── CONFIRMAR FORMA DE PAGO (paso obligatorio: anticipo al crear la orden,
+   y saldo al cerrarla) ── */
+let _fpResolve=null;
+function pedirFormaPago(detalleTexto){
+  return new Promise(resolve=>{
+    _fpResolve=resolve;
+    $('fp-detalle').textContent=detalleTexto||'';
+    $('mo-forma-pago').classList.add('show');
+  });
+}
+function cancelarFormaPago(){
+  closeMo('mo-forma-pago');
+  if(_fpResolve){_fpResolve(null);_fpResolve=null}
+}
+function elegirFormaPago(metodo){
+  closeMo('mo-forma-pago');
+  if(_fpResolve){_fpResolve(metodo);_fpResolve=null}
+}
+// Registra un abono con forma de pago confirmada — lo usan tanto el anticipo
+// capturado al crear la orden como la liquidación del saldo al cerrarla (los
+// métodos EFECTIVO/TARJETA/TRANSFERENCIA/DEPOSITO ya se cobraron en mano; los
+// cobros en línea (MP_TERMINAL/MP_LINK) NO pasan por aquí — esos los acredita
+// el backend solo, cuando el pago realmente se confirma).
+function registrarAbonoManual(folio, contratante, monto, metodo, referencia, nota){
+  const abono={
+    id:`AB-${Date.now()}`, folio, contratante:contratante||'', monto:+monto||0,
+    porcentaje:'', fecha:hoy(), metodo, referencia, nota,
+    cajero:ST.user?(ST.user.nombreCompleto||''):'', estado:'confirmado',
+    fechaRegistro:new Date().toISOString()
+  };
+  const abs=lAbonos();abs.push(abono);sAbonos(abs);
+  encolar({accion:'guardarAbono',datos:abono});
+}
+
 /* ── COBRAR EN LÍNEA (QR + terminal Mercado Pago Point) ──
    Backend compartido con Prevision-app (mismo Codigo.gs, mismo libro de Sheets) — modo=pagar
    con &tipo=ods identifica que el folio es de OrdenesTrabajo, no de CONTRATOS. */
@@ -3536,13 +3632,15 @@ function paymentLinkForODS(folio){
   return new URL('pagar/?folio='+encodeURIComponent(folio), window.location.href).href;
 }
 
-function abrirCobroODS(folio){
+function abrirCobroODS(folio, montoSugerido){
   const db=lDB();
   const o=db.find(x=>x.folio===folio);
   if(!o){toast('⚠ No se encontró la orden '+folio);return}
   _cobroFolioODS=folio;
   $('cobro-folio-ods').value=folio;
-  $('cobro-monto-terminal-ods').value=Math.round(+o.restante||0);
+  // montoSugerido llega cuando se abre justo después de guardar (para cobrar el
+  // anticipo específico recién capturado) — si no, se sugiere el saldo pendiente total.
+  $('cobro-monto-terminal-ods').value=Math.round(+(montoSugerido!=null?montoSugerido:o.restante)||0);
   $('cobro-terminal-status-ods').style.display='none';
   _renderQRCobroODS(paymentLinkForODS(folio));
   $('mo-cobro').classList.add('show');
@@ -5105,6 +5203,30 @@ function abrirEdicionODS(folio){
 function solicitudAprobadaPara(folio){
   const uid=ST.user?(ST.user.idColaborador||ST.user.id||''):'';
   return lSolic().find(s=>s.folio===folio&&s.empleadoId===uid&&s.estado==='aprobada');
+}
+// Avisa de forma bien visible (arriba del tablero) cuando a ESTE empleado le
+// autorizaron una edición pendiente de usar — antes, "autorizar" solo
+// marcaba la solicitud como aprobada sin avisarle a nadie que ya podía
+// editar, así que quien pedía el cambio no sabía que tenía que volver a
+// entrar a "Editar ODS" en esa misma orden; por confusión terminaba
+// capturando la orden de nuevo como si fuera otra, duplicando el folio.
+function renderSolicitudesAprobadas(){
+  const el=$('box-solicitudes-aprobadas');if(!el)return;
+  if(esAdmin()){el.innerHTML='';return}
+  const uid=ST.user?(ST.user.idColaborador||ST.user.id||''):'';
+  const aprobadas=lSolic().filter(s=>s.empleadoId===uid&&s.estado==='aprobada');
+  el.innerHTML=aprobadas.length?aprobadas.map(s=>{
+    const o=lDB().find(x=>x.folio===s.folio);
+    return `<div class="card" style="border-color:var(--green);margin-bottom:10px" onclick="irAEditarAprobada('${s.folio}')">
+      <div style="font-weight:700;color:var(--green)">✅ Tu solicitud para ${s.folio} fue autorizada</div>
+      <div style="font-size:13px;color:var(--text2)">${o?o.fallecido:'—'} — toca aquí para editar la orden ahora</div>
+    </div>`;
+  }).join(''):'';
+}
+function irAEditarAprobada(folio){
+  const o=lDB().find(x=>x.folio===folio);
+  if(!o){toast('⚠ Esta orden todavía no se sincroniza en este equipo — intenta "Sincronizar Todo" en Nube y vuelve a intentar');return}
+  abrirEdicionODS(folio);
 }
 function iniciarEdicionODS(o, solicitudId){
   _folioEnEdicion=o.folio;
