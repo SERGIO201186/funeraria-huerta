@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagar mi saldo · Servicios Funerarios Huerta</title>
+    <meta name="robots" content="noindex, nofollow">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    </style>
+</head>
+<body class="h-full text-slate-100">
+    <div class="min-h-full flex items-center justify-center p-4">
+        <div class="w-full max-w-sm text-center">
+            <div class="bg-amber-600/10 border border-amber-500/30 rounded-full h-14 w-14 flex items-center justify-center mx-auto mb-4">
+                <span class="font-serif font-black text-xl text-amber-500">FH</span>
+            </div>
+            <h1 class="text-lg font-bold text-slate-100 mb-1">Servicios Funerarios Huerta</h1>
+            <p id="status-text" class="text-sm text-slate-400">Redirigiendo al pago…</p>
+            <div id="spinner" class="mt-5 h-6 w-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto"
+                 style="animation: spin 0.8s linear infinite;"></div>
+            <a id="fallback-link" href="#" class="hidden mt-5 inline-block bg-amber-600 hover:bg-amber-700 text-slate-950 font-bold px-5 py-2.5 rounded-lg text-sm">
+                Continuar al pago
+            </a>
+            <p id="error-text" class="hidden mt-4 text-xs text-red-400"></p>
+        </div>
+    </div>
+    <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+    <script>
+        // ═══════════════════════════════════════════════════════════════
+        // Página de redirección para links de pago de ÓRDENES DE SERVICIO (ODS) — vive en
+        // /pagar/ solo para que el cliente vea "sergio201186.github.io/.../pagar/" en vez de
+        // la URL larga y técnica de script.google.com. No guarda ni procesa nada: únicamente
+        // arma la URL real de Apps Script y redirige. Mismo patrón que Prevision-app/pagar/,
+        // pero con &tipo=ods fijo — así el backend compartido sabe que este folio es de
+        // OrdenesTrabajo (ODS), no de CONTRATOS (Previsión).
+        //
+        // IMPORTANTE: si algún día se crea una implementación NUEVA en Apps Script (no una
+        // "Nueva versión" sobre la existente), la URL cambia y hay que actualizar la
+        // constante de abajo con la URL nueva — LA MISMA que se usa en Prevision-app/pagar/,
+        // porque ambas apps comparten un solo backend (Codigo.gs) y un solo libro de Sheets.
+        // ═══════════════════════════════════════════════════════════════
+        var APPS_SCRIPT_BASE_URL = 'https://script.google.com/macros/s/AKfycbwYAzofFgAYk9QP7xJBkFfF0JBcxjf_e7DCwvQArfzdy1N6XZaIHre2jmsI6NOUHEPnaw/exec'; // ⚠️ actualiza esto con la URL del backend compartido
+
+        var params = new URLSearchParams(window.location.search);
+        var folio = params.get('folio');
+
+        if (!folio) {
+            document.getElementById('spinner').classList.add('hidden');
+            document.getElementById('status-text').textContent = 'Link incompleto.';
+            var errEl = document.getElementById('error-text');
+            errEl.textContent = 'Este link no incluye un folio válido. Pide al administrador que te comparta el link de nuevo.';
+            errEl.classList.remove('hidden');
+        } else {
+            var destino = APPS_SCRIPT_BASE_URL + '?modo=pagar&tipo=ods&folio=' + encodeURIComponent(folio);
+            var fallback = document.getElementById('fallback-link');
+            fallback.href = destino;
+            fallback.classList.remove('hidden');
+            window.location.replace(destino);
+        }
+    </script>
+</body>
+</html>

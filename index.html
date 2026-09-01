@@ -757,6 +757,18 @@ button:active{transform:scale(.97)}
         <div style="margin-top:8px;font-size:12px;color:var(--text3)" id="al-status">—</div>
       </div>
       <div class="card">
+        <div class="st">💳 Terminal Mercado Pago Point</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">La terminal que elijas aquí es la que se usa al "Cobrar en línea → Terminal" desde cualquier orden — se comparte automáticamente con la app de Previsión (misma cuenta de Mercado Pago).</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <select id="config-terminal-select-ods" style="flex:1;min-width:160px">
+            <option value="">-- Presiona "Buscar terminales" --</option>
+          </select>
+          <button class="bo" onclick="buscarTerminalesMPODS()">🔍 Buscar terminales</button>
+          <button class="bg" onclick="guardarTerminalMPODS()">🔗 Vincular</button>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text3)" id="config-terminal-actual-ods">—</div>
+      </div>
+      <div class="card">
         <div class="st">Cómo implementar el Code.gs</div>
         <p style="font-size:12px;color:var(--text3);margin-bottom:6px">Este mismo script ahora atiende TAMBIÉN a la app de Previsión (contratos, abonos, certificados, dispositivos, pagos de Mercado Pago y colaboradores) — las dos apps comparten un solo Apps Script y un solo libro de Google Sheets.</p>
         <ol style="color:var(--text2);font-size:13px;line-height:2.1;padding-left:18px">
@@ -1423,6 +1435,20 @@ button:active{transform:scale(.97)}
   </div>
 </div>
 
+<div class="mo" id="mo-cobro">
+  <div class="mb">
+    <button class="mc" onclick="closeMo('mo-cobro')">✕</button>
+    <div class="mt2">Cobrar en línea</div>
+    <div class="f"><label class="lbl">Folio</label><input id="cobro-folio-ods" type="text" readonly style="background:var(--bg)"/></div>
+    <div style="background:#fff;border-radius:12px;padding:12px;display:flex;align-items:center;justify-content:center;min-height:180px" id="cobro-qr-wrap-ods"></div>
+    <div style="font-size:11px;color:var(--text3);text-align:center;margin:8px 0">El cliente escanea este QR con la cámara de su celular para pagar.</div>
+    <div class="f"><label class="lbl">Monto a cobrar en terminal</label><input id="cobro-monto-terminal-ods" type="number" min="1"/></div>
+    <button class="bg" style="width:100%" onclick="cobrarConTerminalODS()">💳 Cobrar en terminal</button>
+    <div id="cobro-terminal-status-ods" style="display:none;font-size:12px;color:var(--amber);text-align:center;margin-top:8px">⏳ Esperando pago en la terminal…</div>
+    <button class="bo" style="width:100%;margin-top:9px" onclick="enviarLinkPagoWhatsApp(document.getElementById('cobro-folio-ods').value)">📤 Enviar link por WhatsApp</button>
+  </div>
+</div>
+
 <div id="print-area" style="position:absolute;left:-9999px;top:0;width:8.5in"></div>
 
 <div id="toast"></div>
@@ -1432,6 +1458,7 @@ button:active{transform:scale(.97)}
 ════════════════════════════════════════ -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
 const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1', CERK='huerta_certificaciones_v1', RCK='huerta_solicitudes_rc_v1';
 // Sesión persistente (por dispositivo): guarda QUIÉN inició sesión en ESTE
@@ -2663,6 +2690,7 @@ function verODS(folio){
         <button class="bo bsm" onclick="closeMo('mo-ods');certificarODS('${o.folio}')">📝 Certificar</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');verExpedienteDeFolio('${o.folio}')">📄 Expediente</button>
         <button class="bo bsm" onclick="closeMo('mo-ods');enviarODSPorWhatsapp('${o.folio}')">📤 Enviar ODS</button>
+        ${+o.restante>0?`<button class="bo bsm" onclick="closeMo('mo-ods');abrirCobroODS('${o.folio}')">💳 Cobrar (QR/Terminal)</button>`:''}
         ${esAdmin()?`<button class="bo bsm" onclick="closeMo('mo-ods');abrirAjusteSaldo('${o.folio}')">🧮 Ajustar Saldo</button>`:''}
         ${esAdmin()?`<button class="br bsm" onclick="elimODS('${o.folio}')">🗑</button>`:''}
       </div>
@@ -2783,7 +2811,10 @@ function cargarPagos(){
       <div style="text-align:right"><div style="color:var(--red);font-weight:700;font-size:16px">${fmt(o.restante)}</div><div style="font-size:11px;color:var(--text3)">pendiente</div></div>
     </div>
     ${verAbonosDe(o.folio)}
-    <button class="bg bsm" style="width:100%;margin-top:9px" onclick="abrirAbono('${o.folio}')">💰 Registrar Abono / Pago Parcial</button>
+    <div style="display:flex;gap:8px;margin-top:9px">
+      <button class="bg bsm" style="flex:1" onclick="abrirAbono('${o.folio}')">💰 Registrar Abono</button>
+      <button class="bo bsm" style="flex:1" onclick="abrirCobroODS('${o.folio}')">💳 Cobrar en línea</button>
+    </div>
   </div>`).join(''):'<div style="color:var(--green);font-size:13px;text-align:center;padding:30px 0">✅ Sin pagos pendientes</div>';
 }
 
@@ -2830,6 +2861,43 @@ function initNube(){
   $('sc-url').value=ST.url;
   $('lbl-sync').textContent=(()=>{const ls=localStorage.getItem(SK);return ls?new Date(ls).toLocaleString('es-MX'):'Nunca.'})();
   cargarAlertaConfig();
+  cargarConfigTerminalODS();
+}
+
+/* ── TERMINAL MERCADO PAGO POINT (compartida con Prevision-app) ── */
+async function cargarConfigTerminalODS(){
+  const el=$('config-terminal-actual-ods');if(!el)return;
+  if(!ST.url){el.textContent='Configura el enlace de Apps Script primero.';return}
+  try{
+    const r=await api({accion:'obtenerConfigPagos'});
+    el.textContent=(r.ok&&r.deviceId)?('Terminal vinculada actualmente: '+r.deviceId):'Ninguna terminal vinculada todavía.';
+  }catch(e){el.textContent='No se pudo consultar la terminal vinculada.'}
+}
+async function buscarTerminalesMPODS(){
+  if(!ST.url){toast('⚠ Configura URL primero');return}
+  const adminAuth=pedirAuthAdmin();
+  if(!adminAuth)return;
+  try{
+    const r=await api({accion:'obtenerTerminalesMP',adminAuth});
+    if(!r.ok)throw new Error(r.error||'Error desconocido');
+    const sel=$('config-terminal-select-ods');
+    sel.innerHTML=(r.terminales&&r.terminales.length)
+      ?r.terminales.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('')
+      :'<option value="">Sin terminales encontradas</option>';
+  }catch(e){toast('❌ No se pudieron buscar terminales: '+e.message)}
+}
+async function guardarTerminalMPODS(){
+  if(!ST.url)return;
+  const deviceId=$('config-terminal-select-ods').value;
+  if(!deviceId){toast('⚠ Busca y selecciona una terminal primero');return}
+  const adminAuth=pedirAuthAdmin();
+  if(!adminAuth)return;
+  try{
+    const r=await api({accion:'guardarConfigPagos',deviceId,adminAuth});
+    if(!r.ok)throw new Error(r.error||'Error desconocido');
+    toast('✅ Terminal vinculada.');
+    cargarConfigTerminalODS();
+  }catch(e){toast('❌ No se pudo vincular la terminal: '+e.message)}
 }
 async function cargarAlertaConfig(){
   const el=$('al-status');if(!el)return;
@@ -3454,6 +3522,111 @@ async function enviarODSPorWhatsapp(folio){
     toast('📎 Ahora adjunta el PDF descargado desde WhatsApp');
     window.open(url,'_blank');
   },500);
+}
+
+/* ── COBRAR EN LÍNEA (QR + terminal Mercado Pago Point) ──
+   Backend compartido con Prevision-app (mismo Codigo.gs, mismo libro de Sheets) — modo=pagar
+   con &tipo=ods identifica que el folio es de OrdenesTrabajo, no de CONTRATOS. */
+let _cobroFolioODS=null, _cobroPollTimerODS=null;
+
+// Mismo patrón que paymentLinkFor() de Prevision-app: pasa por /pagar/ (este mismo dominio)
+// en vez de la URL larga de Apps Script.
+function paymentLinkForODS(folio){
+  if(!ST.url) return '';
+  return new URL('pagar/?folio='+encodeURIComponent(folio), window.location.href).href;
+}
+
+function abrirCobroODS(folio){
+  const db=lDB();
+  const o=db.find(x=>x.folio===folio);
+  if(!o){toast('⚠ No se encontró la orden '+folio);return}
+  _cobroFolioODS=folio;
+  $('cobro-folio-ods').value=folio;
+  $('cobro-monto-terminal-ods').value=Math.round(+o.restante||0);
+  $('cobro-terminal-status-ods').style.display='none';
+  _renderQRCobroODS(paymentLinkForODS(folio));
+  $('mo-cobro').classList.add('show');
+}
+
+function _renderQRCobroODS(link){
+  const wrap=$('cobro-qr-wrap-ods');
+  if(!link){wrap.innerHTML='<span style="font-size:11px;color:#94a3b8">Configura primero la URL de Apps Script.</span>';return}
+  try{
+    const qr=qrcode(0,'M');
+    qr.addData(link);
+    qr.make();
+    wrap.innerHTML=qr.createSvgTag(4,4).replace(/width="\d+px?"/,'width="180"').replace(/height="\d+px?"/,'height="180"');
+  }catch(e){
+    wrap.innerHTML='<span style="font-size:11px;color:#94a3b8">No se pudo generar el QR.</span>';
+  }
+}
+
+// Manda el cobro a la terminal Point vinculada (configurada en Sincronización Nube) — se
+// acredita solo al terminar (ver consultarIntentoPagoMP en el backend), sin pasar por
+// "Pagos Mercado Pago pendientes" como sí pasa con QR/link, porque quien lo inició ya está
+// presente y autenticado como admin.
+async function cobrarConTerminalODS(){
+  if(!ST.url){toast('⚠ Configura URL primero');return}
+  const monto=Number($('cobro-monto-terminal-ods').value);
+  if(!monto||monto<=0){toast('⚠ Escribe un monto válido');return}
+  const adminAuth=pedirAuthAdmin();
+  if(!adminAuth)return;
+  const statusEl=$('cobro-terminal-status-ods');
+  statusEl.style.display='block';
+  statusEl.textContent='⏳ Enviando cobro a la terminal…';
+  try{
+    const r=await api({accion:'crearIntentoPagoMP',folio:_cobroFolioODS,tipo:'ods',monto,adminAuth});
+    if(!r.ok)throw new Error(r.error||'Error desconocido');
+    statusEl.textContent='⏳ Esperando pago en la terminal…';
+    _pollIntentoPagoODS(r.intentId,adminAuth);
+  }catch(e){
+    statusEl.style.display='none';
+    toast('❌ No se pudo iniciar el cobro: '+e.message);
+  }
+}
+
+function _pollIntentoPagoODS(intentId,adminAuth){
+  if(_cobroPollTimerODS)clearInterval(_cobroPollTimerODS);
+  _cobroPollTimerODS=setInterval(async()=>{
+    try{
+      const r=await api({accion:'consultarIntentoPagoMP',intentId,adminAuth});
+      if(!r.ok){
+        clearInterval(_cobroPollTimerODS);_cobroPollTimerODS=null;
+        $('cobro-terminal-status-ods').style.display='none';
+        toast('❌ No se pudo confirmar el cobro: '+r.error);
+        return;
+      }
+      if(r.estado==='aprobado'){
+        clearInterval(_cobroPollTimerODS);_cobroPollTimerODS=null;
+        $('cobro-terminal-status-ods').style.display='none';
+        toast('✅ Cobro aprobado y acreditado.');
+        closeMo('mo-cobro');
+        if(ST.online&&ST.url)sincronizarTodo(true);
+        cargarPagos();
+      }else if(r.estado==='rechazado'){
+        clearInterval(_cobroPollTimerODS);_cobroPollTimerODS=null;
+        $('cobro-terminal-status-ods').style.display='none';
+        toast('❌ El cobro fue rechazado o cancelado en la terminal.');
+      }
+      // 'pendiente': sigue esperando, no hace nada — el próximo tick vuelve a consultar.
+    }catch(e){ /* fallo de red puntual: se reintenta en el próximo tick */ }
+  },3000);
+}
+
+// Manda por WhatsApp el link de pago (no el expediente en PDF) — mismo patrón wa.me que
+// enviarODSPorWhatsapp(), pero sin descarga de PDF porque aquí no hay nada que adjuntar.
+function enviarLinkPagoWhatsApp(folio){
+  const db=lDB();
+  const o=db.find(x=>x.folio===folio);
+  if(!o){toast('⚠ No se encontró la orden '+folio);return}
+  const link=paymentLinkForODS(folio);
+  if(!link){toast('⚠ Configura primero la URL de Apps Script.');return}
+  const mensaje=`Hola ${o.contratante||''}, le compartimos el link para pagar el saldo pendiente de ${fmt(+o.restante||0)} del folio ${folio}.\n\n${link}`;
+  const telDigits=(o.telefono||'').replace(/\D/g,'');
+  const url=telDigits
+    ? `https://wa.me/52${telDigits}?text=${encodeURIComponent(mensaje)}`
+    : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+  window.open(url,'_blank');
 }
 
 /* ── ABONOS / PAGOS PARCIALES ── */
