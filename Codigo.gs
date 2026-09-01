@@ -214,7 +214,7 @@ const PC_COLS = ["FOLIO","TITULAR","IDENTIFICACION","CELULAR","CORREO","REGISTRO
 const PA_COLS = ["ID_PAGO","FOLIO_CLIENTE","MONTO","METODO","REFERENCIA","FECHA","NOTA"];
 const PCERT_COLS = ["NUM_CERT","FOLIO","TITULAR","PAQUETE","PRECIO_TOTAL","HASH","FECHA_EMISION","HORA_EMISION","EMITIDO_POR"];
 const DISP_COLS = ["DEVICE_ID","NOMBRE","ESTADO","FECHA_SOLICITUD","FECHA_RESPUESTA"];
-const PMP_COLS = ["ID","FOLIO","MONTO","MP_PAYMENT_ID","FECHA_PAGO","ESTADO","FECHA_REVISION"];
+const PMP_COLS = ["ID","FOLIO","MONTO","MP_PAYMENT_ID","FECHA_PAGO","ESTADO","FECHA_REVISION","TIPO"];
 
 function getPCSh()    { return initSheet(SH_PC,    PC_COLS);    }
 function getPASh()    { return initSheet(SH_PA,    PA_COLS);    }
@@ -286,6 +286,12 @@ function doPost(e) {
       case "actualizarDispositivo":         result = verificarAdminColaborador(payload.adminAuth) ? actualizarDispositivo(payload) : { ok:false, error:"No autorizado." }; break;
       case "confirmarPagoMP":               result = verificarAdminColaborador(payload.adminAuth) ? confirmarPagoMP(payload) : { ok:false, error:"No autorizado." }; break;
       case "descartarPagoMP":               result = verificarAdminColaborador(payload.adminAuth) ? descartarPagoMP(payload) : { ok:false, error:"No autorizado." }; break;
+      case "buscarPagoMP":                  result = verificarAdminColaborador(payload.adminAuth) ? buscarPagoMP(payload) : { ok:false, error:"No autorizado." }; break;
+      case "obtenerTerminalesMP":           result = verificarAdminColaborador(payload.adminAuth) ? obtenerTerminalesMP() : { ok:false, error:"No autorizado." }; break;
+      case "guardarConfigPagos":            result = verificarAdminColaborador(payload.adminAuth) ? guardarConfigPagos(payload) : { ok:false, error:"No autorizado." }; break;
+      case "obtenerConfigPagos":            result = obtenerConfigPagos(); break;
+      case "crearIntentoPagoMP":            result = verificarAdminColaborador(payload.adminAuth) ? crearIntentoPagoMP(payload) : { ok:false, error:"No autorizado." }; break;
+      case "consultarIntentoPagoMP":        result = verificarAdminColaborador(payload.adminAuth) ? consultarIntentoPagoMP(payload) : { ok:false, error:"No autorizado." }; break;
       // Sincronización de Previsión (contratos/abonos/empleados/certificados) — los
       // empleados que traiga se guardan con la MISMA guardarColaborador() de arriba.
       // El cliente de Previsión espera {result:"success"} u otro {result, message}
@@ -407,87 +413,75 @@ function doGet(e) {
     // El link que se comparte con el cliente siempre es el mismo (esta misma URL con su
     // folio), pero CADA VEZ que se abre se genera una preferencia de pago nueva con el
     // saldo pendiente actual — así el link nunca queda desactualizado si el cliente ya abonó.
+    // &tipo=ods identifica links generados desde la app ODS (ver _datosParaPagar) — sin ese
+    // parámetro se asume Previsión, igual que siempre (compatibilidad con links ya repartidos).
     if (e && e.parameter && e.parameter.modo === 'pagar') {
       const folioPagar = e.parameter.folio || "";
+      const tipoPagar = e.parameter.tipo === 'ods' ? 'ods' : 'prevision';
       let htmlPagar;
       try {
-        const cSh = getPCSh(), cHeaders = headersReales(cSh);
-        const cIdx = findRow(cSh, "FOLIO", folioPagar);
-        const contratoEncontrado = cIdx > 0 ? toObj(cHeaders, cSh.getRange(cIdx, 1, 1, cHeaders.length).getValues()[0]) : null;
-        if (!contratoEncontrado) {
+        const datosPagar = _datosParaPagar(tipoPagar, folioPagar);
+        if (!datosPagar) {
           htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">Folio no encontrado. Verifica el link con el administrador.</p>';
+        } else if (datosPagar.saldo <= 0) {
+          htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">✅ El folio ' + escapeHtml(folioPagar) + ' ya está liquidado. No hay ningún saldo pendiente por pagar.</p>';
         } else {
-          let totalAbonadoPagar = 0;
-          const apRows = getPASh().getDataRange().getValues();
-          for (let api = 1; api < apRows.length; api++) {
-            if (String(apRows[api][1]) === String(folioPagar)) totalAbonadoPagar += Number(apRows[api][2]) || 0;
-          }
-          const precioTotal = Number(contratoEncontrado.PRECIO_TOTAL) || 0;
-          const saldoPagar = precioTotal - totalAbonadoPagar;
-          if (saldoPagar <= 0) {
-            htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">✅ El folio ' + escapeHtml(folioPagar) + ' ya está liquidado. No hay ningún saldo pendiente por pagar.</p>';
+          let montoParam = e.parameter.monto ? Number(e.parameter.monto) : 0;
+
+          if (!montoParam || montoParam <= 0) {
+            // ── Paso 1: el cliente confirma o ajusta el monto antes de ir a Mercado Pago ──
+            htmlPagar = '<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>'
+              + '<body style="font-family:sans-serif;max-width:420px;margin:2rem auto;padding:0 1rem;color:#222;">'
+              + '<h2 style="margin-bottom:0;">Servicios Funerarios Huerta</h2>'
+              + '<p style="color:#666;margin-top:4px;">Folio ' + escapeHtml(folioPagar) + ' — ' + escapeHtml(datosPagar.nombre) + '</p>'
+              + '<p style="font-size:14px;color:#666;">' + (datosPagar.textoSugerencia ? datosPagar.textoSugerencia + '<br>' : '')
+              + 'Saldo total pendiente: $' + datosPagar.saldo.toLocaleString('es-MX') + ' M.N.</p>'
+              + '<form method="get" action="' + ScriptApp.getService().getUrl() + '" target="_top">'
+              + '<input type="hidden" name="modo" value="pagar">'
+              + '<input type="hidden" name="folio" value="' + escapeHtml(folioPagar) + '">'
+              + '<input type="hidden" name="tipo" value="' + escapeHtml(tipoPagar) + '">'
+              + '<label style="display:block;margin:1rem 0 0.3rem;font-weight:bold;">Monto a pagar</label>'
+              + '<input type="number" name="monto" value="' + datosPagar.cuotaSugerida + '" min="1" max="' + datosPagar.saldo + '" step="1" '
+              + 'style="width:100%;box-sizing:border-box;font-size:1.2rem;padding:0.6rem;border:1px solid #ccc;border-radius:8px;">'
+              + '<p style="font-size:12px;color:#999;">Puedes dejar el monto sugerido o escribir otro (hasta el saldo total pendiente).</p>'
+              + '<button type="submit" style="width:100%;margin-top:0.5rem;padding:0.8rem;background:#00b1ea;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:bold;">Continuar al pago</button>'
+              + '</form></body></html>';
           } else {
-            const cuotas = Number(contratoEncontrado.CUOTAS) || 0;
-            const enganche = Number(contratoEncontrado.ENGANCHE) || 0;
-            let cuotaPeriodicaPagar = cuotas > 0 ? Math.round((precioTotal - enganche) / cuotas) : saldoPagar;
-            if (cuotaPeriodicaPagar > saldoPagar) cuotaPeriodicaPagar = saldoPagar;
-            if (cuotaPeriodicaPagar <= 0) cuotaPeriodicaPagar = saldoPagar;
-
-            let montoParam = e.parameter.monto ? Number(e.parameter.monto) : 0;
-
-            if (!montoParam || montoParam <= 0) {
-              // ── Paso 1: el cliente confirma o ajusta el monto antes de ir a Mercado Pago ──
-              const periodicidadTexto = contratoEncontrado.FRECUENCIA === 'quincenal' ? 'quincenal' : 'mensual';
-              htmlPagar = '<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>'
-                + '<body style="font-family:sans-serif;max-width:420px;margin:2rem auto;padding:0 1rem;color:#222;">'
-                + '<h2 style="margin-bottom:0;">Previsión Huerta</h2>'
-                + '<p style="color:#666;margin-top:4px;">Folio ' + escapeHtml(folioPagar) + ' — ' + escapeHtml(contratoEncontrado.TITULAR) + '</p>'
-                + '<p style="font-size:14px;color:#666;">Cuota ' + periodicidadTexto + ' pactada: <b>$' + cuotaPeriodicaPagar.toLocaleString('es-MX') + ' M.N.</b><br>'
-                + 'Saldo total pendiente: $' + saldoPagar.toLocaleString('es-MX') + ' M.N.</p>'
-                + '<form method="get" action="' + ScriptApp.getService().getUrl() + '" target="_top">'
-                + '<input type="hidden" name="modo" value="pagar">'
-                + '<input type="hidden" name="folio" value="' + escapeHtml(folioPagar) + '">'
-                + '<label style="display:block;margin:1rem 0 0.3rem;font-weight:bold;">Monto a pagar</label>'
-                + '<input type="number" name="monto" value="' + cuotaPeriodicaPagar + '" min="1" max="' + saldoPagar + '" step="1" '
-                + 'style="width:100%;box-sizing:border-box;font-size:1.2rem;padding:0.6rem;border:1px solid #ccc;border-radius:8px;">'
-                + '<p style="font-size:12px;color:#999;">Puedes dejar la cuota pactada o escribir otro monto (hasta el saldo total pendiente).</p>'
-                + '<button type="submit" style="width:100%;margin-top:0.5rem;padding:0.8rem;background:#00b1ea;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:bold;">Continuar al pago</button>'
-                + '</form></body></html>';
+            // ── Paso 2: ya con el monto elegido, genera la preferencia y redirige a Mercado Pago ──
+            if (montoParam > datosPagar.saldo) montoParam = datosPagar.saldo;
+            const mpTokenPagar = PropertiesService.getScriptProperties().getProperty('MP_ACCESS_TOKEN');
+            if (!mpTokenPagar) {
+              htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">El pago en línea no está disponible todavía. Contacta al administrador.</p>';
             } else {
-              // ── Paso 2: ya con el monto elegido, genera la preferencia y redirige a Mercado Pago ──
-              if (montoParam > saldoPagar) montoParam = saldoPagar;
-              const mpTokenPagar = PropertiesService.getScriptProperties().getProperty('MP_ACCESS_TOKEN');
-              if (!mpTokenPagar) {
-                htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">El pago en línea no está disponible todavía. Contacta al administrador.</p>';
+              const webAppUrl = ScriptApp.getService().getUrl();
+              // IMPORTANTE: las back_urls NUNCA deben apuntar a la URL "pelona" del Web App —
+              // esa entrega (sin auth) el ping/acciones del backend. Deben ir a modo=pagoResultado.
+              const backUrlBase = webAppUrl + '?modo=pagoResultado&folio=' + encodeURIComponent(folioPagar);
+              const prefBody = {
+                items: [{ title: datosPagar.tituloItem, quantity: 1, currency_id: 'MXN', unit_price: montoParam }],
+                // tipo#folio: así _registrarPagoMPPendiente sabe a qué app/hoja acreditar el
+                // pago cuando llegue el webhook — ver sección "PAGOS DE MERCADO PAGO" abajo.
+                external_reference: tipoPagar + '#' + folioPagar,
+                back_urls: { success: backUrlBase + '&estado=exito', failure: backUrlBase + '&estado=fallo', pending: backUrlBase + '&estado=pendiente' },
+                auto_return: 'approved'
+              };
+              const prefRes = UrlFetchApp.fetch('https://api.mercadopago.com/checkout/preferences', {
+                method: 'post', contentType: 'application/json',
+                headers: { Authorization: 'Bearer ' + mpTokenPagar },
+                payload: JSON.stringify(prefBody), muteHttpExceptions: true
+              });
+              const prefData = JSON.parse(prefRes.getContentText());
+              const initPoint = prefData.init_point || prefData.sandbox_init_point;
+              if (!initPoint) {
+                htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">No se pudo generar el link de pago. Intenta de nuevo más tarde o contacta al administrador.<br><small>' + (prefData.message || '') + '</small></p>';
               } else {
-                const webAppUrl = ScriptApp.getService().getUrl();
-                // IMPORTANTE: las back_urls NUNCA deben apuntar a la URL "pelona" del Web App —
-                // esa entrega (sin auth) el ping/acciones del backend. Deben ir a modo=pagoResultado.
-                const backUrlBase = webAppUrl + '?modo=pagoResultado&folio=' + encodeURIComponent(folioPagar);
-                const prefBody = {
-                  items: [{ title: 'Previsión Huerta — Folio ' + folioPagar, quantity: 1, currency_id: 'MXN', unit_price: montoParam }],
-                  external_reference: folioPagar,
-                  back_urls: { success: backUrlBase + '&estado=exito', failure: backUrlBase + '&estado=fallo', pending: backUrlBase + '&estado=pendiente' },
-                  auto_return: 'approved'
-                };
-                const prefRes = UrlFetchApp.fetch('https://api.mercadopago.com/checkout/preferences', {
-                  method: 'post', contentType: 'application/json',
-                  headers: { Authorization: 'Bearer ' + mpTokenPagar },
-                  payload: JSON.stringify(prefBody), muteHttpExceptions: true
-                });
-                const prefData = JSON.parse(prefRes.getContentText());
-                const initPoint = prefData.init_point || prefData.sandbox_init_point;
-                if (!initPoint) {
-                  htmlPagar = '<p style="font-family:sans-serif;padding:2rem;">No se pudo generar el link de pago. Intenta de nuevo más tarde o contacta al administrador.<br><small>' + (prefData.message || '') + '</small></p>';
-                } else {
-                  // window.top.location fuerza a que TODA la pestaña navegue a Mercado Pago,
-                  // rompiendo el iframe interno de Apps Script (ver PR #10 de Previsión).
-                  htmlPagar = '<html><head><meta http-equiv="refresh" content="2;url=' + initPoint + '"></head>'
-                    + '<body style="font-family:sans-serif;padding:2rem;">Redirigiendo al pago de $' + montoParam.toLocaleString('es-MX') + ' M.N. (folio ' + escapeHtml(folioPagar) + ')…'
-                    + ' Si no avanza automáticamente, <a href="' + initPoint + '" target="_top">haz clic aquí</a>.'
-                    + '<script>window.top.location.href=' + JSON.stringify(initPoint) + ';<\/script>'
-                    + '</body></html>';
-                }
+                // window.top.location fuerza a que TODA la pestaña navegue a Mercado Pago,
+                // rompiendo el iframe interno de Apps Script (ver PR #10 de Previsión).
+                htmlPagar = '<html><head><meta http-equiv="refresh" content="2;url=' + initPoint + '"></head>'
+                  + '<body style="font-family:sans-serif;padding:2rem;">Redirigiendo al pago de $' + montoParam.toLocaleString('es-MX') + ' M.N. (folio ' + escapeHtml(folioPagar) + ')…'
+                  + ' Si no avanza automáticamente, <a href="' + initPoint + '" target="_top">haz clic aquí</a>.'
+                  + '<script>window.top.location.href=' + JSON.stringify(initPoint) + ';<\/script>'
+                  + '</body></html>';
               }
             }
           }
@@ -1930,6 +1924,49 @@ function actualizarDispositivo(payload) {
 }
 
 // ── PAGOS DE MERCADO PAGO ──
+// Datos necesarios para armar la pantalla/preferencia de modo=pagar y para el cobro con
+// terminal (crearIntentoPagoMP) — según la app de origen. 'ods' lee OrdenesTrabajo (mismos
+// nombres de columna en la hoja que en el frontend: folio/contratante/totalGeneral/anticipo/
+// restante); cualquier otro valor (incluido "sin tipo", compatibilidad con links viejos) lee
+// CONTRATOS/ABONOS de Previsión como siempre. Regresa null si el folio no existe.
+function _datosParaPagar(tipo, folio) {
+  if (tipo === 'ods') {
+    const oSh = getODSSh(), oHeaders = headersReales(oSh);
+    const oIdx = findRow(oSh, "folio", folio);
+    if (oIdx <= 0) return null;
+    const orden = toObj(oHeaders, oSh.getRange(oIdx, 1, 1, oHeaders.length).getValues()[0]);
+    const totalGeneral = Number(orden.totalGeneral) || 0;
+    const anticipo = Number(orden.anticipo) || 0;
+    const saldo = Math.max(0, totalGeneral - anticipo);
+    return {
+      nombre: orden.contratante || '', saldo: saldo, cuotaSugerida: saldo,
+      tituloItem: 'Orden de Servicio Huerta — Folio ' + folio, textoSugerencia: ''
+    };
+  }
+  const cSh = getPCSh(), cHeaders = headersReales(cSh);
+  const cIdx = findRow(cSh, "FOLIO", folio);
+  if (cIdx <= 0) return null;
+  const contrato = toObj(cHeaders, cSh.getRange(cIdx, 1, 1, cHeaders.length).getValues()[0]);
+  let totalAbonado = 0;
+  const apRows = getPASh().getDataRange().getValues();
+  for (let api = 1; api < apRows.length; api++) {
+    if (String(apRows[api][1]) === String(folio)) totalAbonado += Number(apRows[api][2]) || 0;
+  }
+  const precioTotal = Number(contrato.PRECIO_TOTAL) || 0;
+  const saldo = precioTotal - totalAbonado;
+  const cuotas = Number(contrato.CUOTAS) || 0;
+  const enganche = Number(contrato.ENGANCHE) || 0;
+  let cuotaSugerida = cuotas > 0 ? Math.round((precioTotal - enganche) / cuotas) : saldo;
+  if (cuotaSugerida > saldo) cuotaSugerida = saldo;
+  if (cuotaSugerida <= 0) cuotaSugerida = saldo;
+  const periodicidadTexto = contrato.FRECUENCIA === 'quincenal' ? 'quincenal' : 'mensual';
+  return {
+    nombre: contrato.TITULAR || '', saldo: saldo, cuotaSugerida: cuotaSugerida,
+    tituloItem: 'Previsión Huerta — Folio ' + folio,
+    textoSugerencia: 'Cuota ' + periodicidadTexto + ' pactada: <b>$' + cuotaSugerida.toLocaleString('es-MX') + ' M.N.</b>'
+  };
+}
+
 // Llamado desde doPost cuando el cuerpo/parámetros coinciden con el webhook de
 // Mercado Pago (ver la detección al inicio de doPost). Nunca crea el abono
 // directamente — solo deja el pago listo para que el administrador lo confirme.
@@ -1943,12 +1980,7 @@ function _procesarWebhookMP(mpPaymentId) {
     });
     mpPay = JSON.parse(mpPayRes.getContentText());
     if (mpPay && mpPay.status === 'approved' && mpPay.external_reference) {
-      const sh = getPMPSh();
-      const yaExiste = findRow(sh, "MP_PAYMENT_ID", mpPaymentId) !== -1;
-      if (!yaExiste) {
-        sh.appendRow([Utilities.getUuid(), mpPay.external_reference, mpPay.transaction_amount || 0,
-          String(mpPaymentId), new Date().toLocaleString('es-MX'), 'pendiente_revision', '']);
-      }
+      _registrarPagoMPPendiente(mpPay);
     }
     Logger.log('Webhook MP procesado: pago ' + mpPaymentId + ', status ' + (mpPay && mpPay.status));
   } catch (mpErr) {
@@ -1957,8 +1989,113 @@ function _procesarWebhookMP(mpPaymentId) {
   return { result: 'ok' };
 }
 
+// Separa "tipo#folio" (armado en _datosParaPagar/doGet modo=pagar) de un external_reference
+// de Mercado Pago. Sin "#" (links viejos, de antes de que existiera ODS en línea) se asume
+// "prevision" — así los pagos ya generados siguen funcionando igual que antes.
+function _partirReferenciaMP(externalReference) {
+  const ref = String(externalReference || '');
+  const hashIdx = ref.indexOf('#');
+  return hashIdx === -1
+    ? { tipo: 'prevision', folio: ref }
+    : { tipo: ref.slice(0, hashIdx) || 'prevision', folio: ref.slice(hashIdx + 1) };
+}
+
+// Agrega (si no existe ya) un pago aprobado de Mercado Pago a la hoja PAGOS_MP como
+// pendiente de revisión. La usan tanto el webhook (_procesarWebhookMP) como la búsqueda
+// manual por ID (buscarPagoMP) — mismo criterio de "ya existe" para no duplicar.
+function _registrarPagoMPPendiente(mpPay) {
+  const sh = getPMPSh();
+  const mpPaymentId = String(mpPay.id);
+  const yaExiste = findRow(sh, "MP_PAYMENT_ID", mpPaymentId) !== -1;
+  if (!yaExiste) {
+    const ref = _partirReferenciaMP(mpPay.external_reference);
+    sh.appendRow([Utilities.getUuid(), ref.folio, mpPay.transaction_amount || 0,
+      mpPaymentId, new Date().toLocaleString('es-MX'), 'pendiente_revision', '', ref.tipo]);
+  }
+  return { yaExistia: yaExiste };
+}
+
+// Reconciliación manual: cuando el webhook de Mercado Pago no llegó (URL de notificaciones
+// mal configurada, evento "Pagos" no activado, el Web App se volvió a implementar y cambió
+// de URL, etc.) el pago nunca queda en PAGOS_MP aunque el dinero ya esté en la cuenta de MP.
+// Esta acción deja al administrador pegar el ID de pago de Mercado Pago (visible en el
+// detalle de la operación en su panel) y lo agrega a revisión sin depender del webhook.
+// Ya viene gateada con verificarAdminColaborador.
+function buscarPagoMP(payload) {
+  if (!payload.mpPaymentId) return { ok:false, error:"Falta el ID de pago de Mercado Pago." };
+  try {
+    const mpToken = PropertiesService.getScriptProperties().getProperty('MP_ACCESS_TOKEN');
+    if (!mpToken) throw new Error('MP_ACCESS_TOKEN no configurado en Propiedades del script.');
+    const mpPayRes = UrlFetchApp.fetch('https://api.mercadopago.com/v1/payments/' + encodeURIComponent(payload.mpPaymentId), {
+      headers: { Authorization: 'Bearer ' + mpToken }, muteHttpExceptions: true
+    });
+    const mpPayCode = mpPayRes.getResponseCode();
+    const mpPayBody = mpPayRes.getContentText();
+    Logger.log('buscarPagoMP: consulta a Mercado Pago devolvió HTTP ' + mpPayCode + ' — ' + mpPayBody);
+    // Se incluye el código y el cuerpo de la respuesta de Mercado Pago tal cual en el error —
+    // así el administrador ve la causa real (token inválido, pago de otra cuenta, etc.) directo
+    // en el mensaje de la app, sin tener que ir a revisar las Ejecuciones de Apps Script.
+    if (mpPayCode !== 200) throw new Error('Mercado Pago respondió ' + mpPayCode + ': ' + mpPayBody);
+    const mpPay = JSON.parse(mpPayBody);
+    if (!mpPay || !mpPay.id) throw new Error('Mercado Pago no encontró ese pago. Verifica el ID.');
+    if (mpPay.status !== 'approved') throw new Error('Ese pago no está aprobado (estado actual: ' + mpPay.status + ').');
+    if (!mpPay.external_reference) throw new Error('Ese pago no tiene folio asociado (external_reference vacío).');
+    const resultado = _registrarPagoMPPendiente(mpPay);
+    const folioLimpio = _partirReferenciaMP(mpPay.external_reference).folio;
+    return resultado.yaExistia
+      ? { ok:true, mensaje:'Este pago ya estaba en la lista (folio ' + folioLimpio + ').' }
+      : { ok:true, mensaje:'Pago agregado a revisión: folio ' + folioLimpio + ', $' + (Number(mpPay.transaction_amount)||0).toLocaleString('es-MX') + '.' };
+  } catch (bpErr) {
+    return { ok:false, error: bpErr.message };
+  }
+}
+
+// Acredita un pago de Mercado Pago ya aprobado al contrato de Previsión o a la orden de ODS
+// correspondiente, según "tipo" (ver _partirReferenciaMP). La usan confirmarPagoMP (revisión
+// manual de QR/link) y consultarIntentoPagoMP (cobro con terminal — ver más abajo).
+function _acreditarPagoMP(tipo, folio, monto, referencia, nota) {
+  const fechaHoy = new Date().toLocaleString('es-MX');
+  if (tipo === 'ods') {
+    const oSh = getODSSh(), oHeaders = headersReales(oSh);
+    const oIdx = findRow(oSh, "folio", folio);
+    let contratante = '';
+    if (oIdx !== -1) {
+      const ciAnticipo = oHeaders.indexOf("anticipo"), ciRestante = oHeaders.indexOf("restante"),
+            ciTotal = oHeaders.indexOf("totalGeneral"), ciContratante = oHeaders.indexOf("contratante");
+      contratante = oSh.getRange(oIdx, ciContratante + 1).getValue();
+      const anticipoActual = Number(oSh.getRange(oIdx, ciAnticipo + 1).getValue()) || 0;
+      const totalGeneral = Number(oSh.getRange(oIdx, ciTotal + 1).getValue()) || 0;
+      const nuevoAnticipo = anticipoActual + Number(monto);
+      oSh.getRange(oIdx, ciAnticipo + 1).setValue(nuevoAnticipo);
+      oSh.getRange(oIdx, ciRestante + 1).setValue(Math.max(0, totalGeneral - nuevoAnticipo));
+    }
+    const aSh = getAbonoSh();
+    aSh.appendRow(toRow(headersReales(aSh), {
+      id: 'AB-' + Utilities.getUuid(), folio: folio, contratante: contratante, monto: monto,
+      porcentaje: '', fecha: fechaHoy, metodo: 'Mercado Pago', referencia: referencia, nota: nota,
+      cajero: 'Mercado Pago', estado: 'confirmado', fechaRegistro: new Date().toISOString()
+    }));
+    return;
+  }
+  // tipo 'prevision' (default — incluye pagos ya registrados antes de que existiera TIPO).
+  const pSh = getPASh();
+  pSh.appendRow(toRow(headersReales(pSh), {
+    ID_PAGO: Utilities.getUuid(), FOLIO_CLIENTE: folio, MONTO: monto, METODO: 'Mercado Pago',
+    REFERENCIA: referencia, FECHA: fechaHoy, NOTA: nota
+  }));
+  // El dashboard lee "Abonado" directo de PAGADO_A_LA_FECHA en CONTRATOS (no lo
+  // calcula sumando abonos) — sin esto, el pago no se reflejaría en el saldo.
+  const cSh = getPCSh(), cHeaders = headersReales(cSh);
+  const cIdx = findRow(cSh, "FOLIO", folio);
+  if (cIdx !== -1) {
+    const ciPagado = cHeaders.indexOf("PAGADO_A_LA_FECHA");
+    const pagadoActual = Number(cSh.getRange(cIdx, ciPagado + 1).getValue()) || 0;
+    cSh.getRange(cIdx, ciPagado + 1).setValue(pagadoActual + Number(monto));
+  }
+}
+
 // Confirma un pago pendiente de revisión: lo convierte en abono real y suma el
-// monto al saldo abonado del contrato. Ya viene gateado con verificarAdminColaborador.
+// monto al saldo abonado del contrato/orden. Ya viene gateado con verificarAdminColaborador.
 function confirmarPagoMP(payload) {
   if (!payload.idPagoMP) return { ok:false, error:"Falta idPagoMP" };
   try {
@@ -1969,24 +2106,11 @@ function confirmarPagoMP(payload) {
     const fila = toObj(headers, sh.getRange(idx, 1, 1, headers.length).getValues()[0]);
     if (String(fila.ESTADO) !== 'pendiente_revision') throw new Error('Este pago ya fue revisado.');
 
-    const pSh = getPASh();
-    pSh.appendRow(toRow(headersReales(pSh), {
-      ID_PAGO: Utilities.getUuid(), FOLIO_CLIENTE: fila.FOLIO, MONTO: fila.MONTO, METODO: 'Mercado Pago',
-      REFERENCIA: 'MP-' + fila.MP_PAYMENT_ID, FECHA: fila.FECHA_PAGO,
-      NOTA: 'Confirmado por admin desde pago de Mercado Pago #' + fila.MP_PAYMENT_ID
-    }));
+    _acreditarPagoMP(String(fila.TIPO || 'prevision'), fila.FOLIO, Number(fila.MONTO),
+      'MP-' + fila.MP_PAYMENT_ID, 'Confirmado por admin desde pago de Mercado Pago #' + fila.MP_PAYMENT_ID);
+
     sh.getRange(idx, headers.indexOf("ESTADO") + 1).setValue('confirmado');
     sh.getRange(idx, headers.indexOf("FECHA_REVISION") + 1).setValue(new Date().toLocaleString('es-MX'));
-
-    // El dashboard lee "Abonado" directo de PAGADO_A_LA_FECHA en CONTRATOS (no lo
-    // calcula sumando abonos) — sin esto, el pago no se reflejaría en el saldo.
-    const cSh = getPCSh(), cHeaders = headersReales(cSh);
-    const cIdx = findRow(cSh, "FOLIO", fila.FOLIO);
-    if (cIdx !== -1) {
-      const ciPagado = cHeaders.indexOf("PAGADO_A_LA_FECHA");
-      const pagadoActual = Number(cSh.getRange(cIdx, ciPagado + 1).getValue()) || 0;
-      cSh.getRange(cIdx, ciPagado + 1).setValue(pagadoActual + Number(fila.MONTO));
-    }
     return { ok:true };
   } catch (cmErr) {
     return { ok:false, error: cmErr.message };
@@ -2008,6 +2132,115 @@ function descartarPagoMP(payload) {
     return { ok:true };
   } catch (dmErr) {
     return { ok:false, error: dmErr.message };
+  }
+}
+
+// ── COBRO CON TERMINAL MERCADO PAGO POINT ──
+// La terminal física ya existe (vinculada a la MISMA cuenta de MP_ACCESS_TOKEN, usada hoy por
+// otro negocio del mismo dueño) — aquí solo se le manda el cobro por la API de Point, sin
+// hardware nuevo. Un solo dispositivo compartido por Previsión y ODS (MP_POINT_DEVICE_ID en
+// Propiedades del script) — configurable desde cualquiera de las dos apps.
+//
+// NOTA IMPORTANTE: el contrato exacto de la API de Point (unidad del monto, forma exacta de
+// la respuesta) no se pudo verificar contra la documentación vigente de Mercado Pago al
+// escribir esto (mercadopago.com está bloqueado desde este entorno de desarrollo). Se
+// implementó con la convención más común de Mercado Pago (monto en centavos) y todos los
+// errores muestran la respuesta cruda de Mercado Pago tal cual (como en buscarPagoMP) para
+// poder diagnosticar sin adivinar. PRUEBA ESTO PRIMERO con un cobro chico real (ej. $10)
+// antes de usarlo con clientes — la propia terminal muestra el monto en pantalla antes de que
+// el cliente pague, así que es fácil notar si el monto viene mal y cancelar ahí mismo.
+
+// Lista las terminales Point vinculadas a la cuenta, para elegir cuál usar.
+function obtenerTerminalesMP() {
+  try {
+    const mpToken = PropertiesService.getScriptProperties().getProperty('MP_ACCESS_TOKEN');
+    if (!mpToken) throw new Error('MP_ACCESS_TOKEN no configurado en Propiedades del script.');
+    const res = UrlFetchApp.fetch('https://api.mercadopago.com/point/integration-api/devices', {
+      headers: { Authorization: 'Bearer ' + mpToken }, muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) throw new Error('Mercado Pago respondió ' + res.getResponseCode() + ': ' + res.getContentText());
+    const data = JSON.parse(res.getContentText());
+    const devices = (data && data.devices) || [];
+    return { ok:true, terminales: devices.map(function (d) { return { id: d.id, nombre: d.pos_id || d.id }; }) };
+  } catch (otErr) {
+    return { ok:false, error: otErr.message };
+  }
+}
+
+function guardarConfigPagos(payload) {
+  PropertiesService.getScriptProperties().setProperty('MP_POINT_DEVICE_ID', payload.deviceId || '');
+  return { ok:true };
+}
+
+// No requiere auth: solo dice qué terminal está vinculada (un ID de dispositivo no es
+// secreto por sí solo — para cobrar hace falta MP_ACCESS_TOKEN, eso nunca se expone aquí).
+function obtenerConfigPagos() {
+  return { ok:true, deviceId: PropertiesService.getScriptProperties().getProperty('MP_POINT_DEVICE_ID') || '' };
+}
+
+// Manda un cobro a la terminal vinculada. El admin ve "Esperando pago en la terminal…" en la
+// app mientras el cliente paga ahí (ver consultarIntentoPagoMP, que hace polling y acredita
+// solo al terminar — sin pasar por "Pagos Mercado Pago — Pendientes de Revisión" como sí pasa
+// con QR/link, porque aquí quien lo inició ya está presente y autenticado como admin).
+function crearIntentoPagoMP(payload) {
+  if (!payload.folio || !payload.monto) return { ok:false, error:"Falta folio o monto." };
+  try {
+    const mpToken = PropertiesService.getScriptProperties().getProperty('MP_ACCESS_TOKEN');
+    if (!mpToken) throw new Error('MP_ACCESS_TOKEN no configurado en Propiedades del script.');
+    const deviceId = PropertiesService.getScriptProperties().getProperty('MP_POINT_DEVICE_ID');
+    if (!deviceId) throw new Error('No hay ninguna terminal vinculada todavía. Configúrala primero.');
+    const tipo = payload.tipo === 'ods' ? 'ods' : 'prevision';
+    const body = {
+      amount: Math.round(Number(payload.monto) * 100),
+      additional_info: { external_reference: tipo + '#' + payload.folio, print_on_terminal: false }
+    };
+    const res = UrlFetchApp.fetch('https://api.mercadopago.com/point/integration-api/devices/' + encodeURIComponent(deviceId) + '/payment-intents', {
+      method: 'post', contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + mpToken }, payload: JSON.stringify(body), muteHttpExceptions: true
+    });
+    const code = res.getResponseCode();
+    const bodyText = res.getContentText();
+    if (code !== 200 && code !== 201) throw new Error('Mercado Pago respondió ' + code + ': ' + bodyText);
+    const data = JSON.parse(bodyText);
+    if (!data || !data.id) throw new Error('Mercado Pago no regresó un ID de cobro. Respuesta: ' + bodyText);
+    return { ok:true, intentId: data.id };
+  } catch (ciErr) {
+    return { ok:false, error: ciErr.message };
+  }
+}
+
+// Consulta el estado de un cobro en terminal. Al terminar aprobado, acredita directo (ver
+// _acreditarPagoMP) y deja un registro en PAGOS_MP ya "confirmado" (no "pendiente_revision")
+// para tener el mismo rastro/auditoría que los pagos por QR/link, y para poder detectar si
+// esta misma consulta se repite (no se acredita dos veces el mismo MP_PAYMENT_ID).
+function consultarIntentoPagoMP(payload) {
+  if (!payload.intentId) return { ok:false, error:"Falta intentId" };
+  try {
+    const mpToken = PropertiesService.getScriptProperties().getProperty('MP_ACCESS_TOKEN');
+    if (!mpToken) throw new Error('MP_ACCESS_TOKEN no configurado en Propiedades del script.');
+    const res = UrlFetchApp.fetch('https://api.mercadopago.com/point/integration-api/payment-intents/' + encodeURIComponent(payload.intentId), {
+      headers: { Authorization: 'Bearer ' + mpToken }, muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) throw new Error('Mercado Pago respondió ' + res.getResponseCode() + ': ' + res.getContentText());
+    const data = JSON.parse(res.getContentText());
+    const estado = String(data.state || '').toUpperCase();
+    if (estado === 'FINISHED') {
+      const ref = _partirReferenciaMP(data.additional_info && data.additional_info.external_reference);
+      const paymentId = data.payment && data.payment.id;
+      const yaAcreditado = paymentId && findRow(getPMPSh(), "MP_PAYMENT_ID", String(paymentId)) !== -1;
+      if (!yaAcreditado && ref.folio) {
+        const montoCobrado = Number(data.amount) / 100;
+        _acreditarPagoMP(ref.tipo, ref.folio, montoCobrado, paymentId ? ('MP-' + paymentId) : 'MP-Point',
+          'Cobro en terminal Mercado Pago Point');
+        getPMPSh().appendRow([Utilities.getUuid(), ref.folio, montoCobrado, String(paymentId || payload.intentId),
+          new Date().toLocaleString('es-MX'), 'confirmado', new Date().toLocaleString('es-MX'), ref.tipo]);
+      }
+      return { ok:true, estado:'aprobado' };
+    }
+    if (estado === 'CANCELED' || estado === 'ERROR') return { ok:true, estado:'rechazado' };
+    return { ok:true, estado:'pendiente' };
+  } catch (ciErr) {
+    return { ok:false, error: ciErr.message };
   }
 }
 
