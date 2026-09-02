@@ -998,8 +998,8 @@ button:active{transform:scale(.97)}
           <option value="SI">Sí</option>
         </select></div>
         <div id="c-blq-conyuge" style="display:none">
-          <div class="f"><label class="lbl">Nombre del Cónyuge</label><input id="c-cony-nombre" type="text"/></div>
-          <div class="f"><label class="lbl">¿El cónyuge vive?</label>
+          <div class="f"><label class="lbl">Nombre del Esposo(a)</label><input id="c-cony-nombre" type="text"/></div>
+          <div class="f"><label class="lbl">¿El esposo(a) vive?</label>
             <select id="c-cony-estado" onchange="toggleCertVivo('cony')">
               <option value="VIVO">Vivo</option>
               <option value="FINADO">Finado</option>
@@ -1070,7 +1070,7 @@ button:active{transform:scale(.97)}
           <div class="f"><label class="lbl">Parentesco con el Finado</label>
             <select id="c-decl-parentesco">
               <option value="NINGUNO">Ninguno (no consanguíneo)</option>
-              <option value="CONYUGE">Cónyuge</option>
+              <option value="CONYUGE">Esposo(a)</option>
               <option value="HIJO">Hijo(a)</option>
               <option value="PADRE">Padre</option>
               <option value="MADRE">Madre</option>
@@ -1113,7 +1113,7 @@ button:active{transform:scale(.97)}
           <div class="f"><label class="lbl">Parentesco con el Finado</label>
             <select id="c-test1-parentesco">
               <option value="NINGUNO">Ninguno (no consanguíneo)</option>
-              <option value="CONYUGE">Cónyuge</option>
+              <option value="CONYUGE">Esposo(a)</option>
               <option value="HIJO">Hijo(a)</option>
               <option value="PADRE">Padre</option>
               <option value="MADRE">Madre</option>
@@ -1156,7 +1156,7 @@ button:active{transform:scale(.97)}
           <div class="f"><label class="lbl">Parentesco con el Finado</label>
             <select id="c-test2-parentesco">
               <option value="NINGUNO">Ninguno (no consanguíneo)</option>
-              <option value="CONYUGE">Cónyuge</option>
+              <option value="CONYUGE">Esposo(a)</option>
               <option value="HIJO">Hijo(a)</option>
               <option value="PADRE">Padre</option>
               <option value="MADRE">Madre</option>
@@ -1231,7 +1231,7 @@ button:active{transform:scale(.97)}
         </div>
       </div>
 
-      <!-- GRUPO 2: Cónyuge / Padre / Madre -->
+      <!-- GRUPO 2: Esposo(a) / Padre / Madre -->
       <div id="rc-grupo2-body"></div>
 
       <!-- GRUPO 3: Datos del Fallecimiento -->
@@ -4076,8 +4076,49 @@ function _setSiVacio(id,val){
   if(!el||!val)return 0;
   if(String(el.value||'').trim())return 0;
   el.value=val;
+  if(el.value!==val)return 0; // el navegador rechazó el valor (formato de fecha/hora/opción inválida) — no cuenta como aplicado ni se marca
   _marcarIA(el);
   return 1;
+}
+// La IA no siempre regresa fecha/hora exactamente en el formato que piden los
+// <input type=date>/<input type=time> (que rechazan en silencio cualquier
+// otro formato, dejando el campo vacío sin avisar) — se normaliza aquí antes
+// de intentar aplicarlo.
+function _normFecha(v){
+  v=(v||'').trim();
+  if(!v)return '';
+  let m=v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m)return v;
+  m=v.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if(m)return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  const meses={enero:'01',febrero:'02',marzo:'03',abril:'04',mayo:'05',junio:'06',julio:'07',agosto:'08',septiembre:'09',setiembre:'09',octubre:'10',noviembre:'11',diciembre:'12'};
+  m=v.toLowerCase().match(/(\d{1,2})\s*(?:de)?\s*([a-záéíóúñ]+)\s*(?:de|del)?\s*(\d{4})/);
+  if(m&&meses[m[2]])return `${m[3]}-${meses[m[2]]}-${m[1].padStart(2,'0')}`;
+  return '';
+}
+function _normHora(v){
+  v=(v||'').trim();
+  if(!v)return '';
+  let m=v.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if(m){const h=+m[1];if(h>=0&&h<=23)return String(h).padStart(2,'0')+':'+m[2]}
+  m=v.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  if(m){let h=+m[1];const ap=m[3].toLowerCase();if(ap==='pm'&&h<12)h+=12;if(ap==='am'&&h===12)h=0;return String(h).padStart(2,'0')+':'+m[2]}
+  return '';
+}
+// Específico de la INE mexicana: solo imprime "H" o "M" junto a SEXO — nunca
+// Masculino/Femenino, así que no hay ambigüedad con "M" de Mujer.
+function _normSexoINE(v){
+  v=(v||'').trim().toUpperCase();
+  if(v==='H'||v==='HOMBRE')return 'HOMBRE';
+  if(v==='M'||v==='MUJER')return 'MUJER';
+  return '';
+}
+// La INE imprime primero los apellidos y después el/los nombre(s) — el
+// backend ya pide los 3 campos por separado para no depender de que la IA
+// "reordene" un texto ya concatenado; aquí se arma siempre en el orden
+// correcto: nombre(s) primero, apellidos después.
+function _nombreCompletoDesdeINE(d){
+  return [d.nombres,d.apellidoPaterno,d.apellidoMaterno].map(x=>(x||'').trim()).filter(Boolean).join(' ');
 }
 function aplicarExtraccionRC(tipo,d){
   let n=0;
@@ -4085,7 +4126,7 @@ function aplicarExtraccionRC(tipo,d){
     n+=_setSiVacio('rc-fi-nombres',d.nombres);
     n+=_setSiVacio('rc-fi-ap1',d.apellidoPaterno);
     n+=_setSiVacio('rc-fi-ap2',d.apellidoMaterno);
-    n+=_setSiVacio('rc-fi-fecnac',d.fechaNacimiento);
+    n+=_setSiVacio('rc-fi-fecnac',_normFecha(d.fechaNacimiento));
     n+=_setSiVacio('rc-fi-localidad',d.lugarNacimientoLocalidad);
     n+=_setSiVacio('rc-fi-municipio',d.lugarNacimientoMunicipio);
     n+=_setSiVacio('rc-fi-entidad',d.lugarNacimientoEntidad);
@@ -4094,8 +4135,12 @@ function aplicarExtraccionRC(tipo,d){
     n+=_setSiVacio('rc-ma-nombre',d.nombreMadre);
     if($('rc-fi-fecnac').value)rcCalcEdad('fi');
   }else if(tipo==='INE_FINADO'){
+    n+=_setSiVacio('rc-fi-nombres',d.nombres);
+    n+=_setSiVacio('rc-fi-ap1',d.apellidoPaterno);
+    n+=_setSiVacio('rc-fi-ap2',d.apellidoMaterno);
     n+=_setSiVacio('rc-fi-curp',(d.curp||'').toUpperCase());
-    n+=_setSiVacio('rc-fi-fecnac',d.fechaNacimiento);
+    n+=_setSiVacio('rc-fi-sexo',_normSexoINE(d.sexo));
+    n+=_setSiVacio('rc-fi-fecnac',_normFecha(d.fechaNacimiento));
     n+=_setSiVacio('rc-fi-domcalle',d.domicilioCalle);
     n+=_setSiVacio('rc-fi-domnumero',d.domicilioNumero);
     n+=_setSiVacio('rc-fi-domcolonia',d.domicilioColonia);
@@ -4104,8 +4149,8 @@ function aplicarExtraccionRC(tipo,d){
     n+=_setSiVacio('rc-fi-domentidad',d.domicilioEntidad);
     if($('rc-fi-fecnac').value)rcCalcEdad('fi');
   }else if(tipo==='CERTIFICADO_DEFUNCION'){
-    n+=_setSiVacio('rc-fallec-fecha',d.fechaDefuncion);
-    n+=_setSiVacio('rc-fallec-hora',d.horaDefuncion);
+    n+=_setSiVacio('rc-fallec-fecha',_normFecha(d.fechaDefuncion));
+    n+=_setSiVacio('rc-fallec-hora',_normHora(d.horaDefuncion));
     n+=_setSiVacio('rc-fallec-lugar-detalle',d.lugarDefuncionTexto);
     n+=_setSiVacio('rc-fallec-certificado',d.numeroCertificado);
     n+=_setSiVacio('rc-fi-domcalle',d.domicilioCalle);
@@ -4116,8 +4161,8 @@ function aplicarExtraccionRC(tipo,d){
     n+=_setSiVacio('rc-fi-domentidad',d.domicilioEntidad);
     if($('rc-fallec-fecha').value)rcCalcEdad('fi');
   }else if(tipo==='INE_DECLARANTE'){
-    n+=_setSiVacio('rc-decl-nombre',d.nombreCompleto);
-    n+=_setSiVacio('rc-decl-fecnac',d.fechaNacimiento);
+    n+=_setSiVacio('rc-decl-nombre',_nombreCompletoDesdeINE(d));
+    n+=_setSiVacio('rc-decl-fecnac',_normFecha(d.fechaNacimiento));
     n+=_setSiVacio('rc-decl-domcalle',d.domicilioCalle);
     n+=_setSiVacio('rc-decl-domnumero',d.domicilioNumero);
     n+=_setSiVacio('rc-decl-domcolonia',d.domicilioColonia);
@@ -4127,9 +4172,10 @@ function aplicarExtraccionRC(tipo,d){
     if($('rc-decl-fecnac').value)rcCalcEdad('decl');
   }else if(tipo==='INE_TESTIGO1'||tipo==='INE_TESTIGO2'){
     const p=tipo==='INE_TESTIGO1'?'test1':'test2';
-    n+=_setSiVacio(`rc-${p}-nombre`,d.nombreCompleto);
+    n+=_setSiVacio(`rc-${p}-nombre`,_nombreCompletoDesdeINE(d));
     n+=_setSiVacio(`rc-${p}-curp`,(d.curp||'').toUpperCase());
-    n+=_setSiVacio(`rc-${p}-fecnac`,d.fechaNacimiento);
+    n+=_setSiVacio(`rc-${p}-sexo`,_normSexoINE(d.sexo));
+    n+=_setSiVacio(`rc-${p}-fecnac`,_normFecha(d.fechaNacimiento));
     n+=_setSiVacio(`rc-${p}-domcalle`,d.domicilioCalle);
     n+=_setSiVacio(`rc-${p}-domnumero`,d.domicilioNumero);
     n+=_setSiVacio(`rc-${p}-domcolonia`,d.domicilioColonia);
@@ -4362,7 +4408,7 @@ async function descargarInfoMedicoJPG(){
 const RC_SEXO_HTML='<option value="">—</option><option value="HOMBRE">Hombre</option><option value="MUJER">Mujer</option>';
 const RC_EDOCIVIL_HTML='<option value="">—</option><option value="SOLTERO">Soltero(a)</option><option value="CASADO">Casado(a)</option>';
 const RC_PARENTESCO_HTML=`<option value="NINGUNO">Ninguno (no consanguíneo)</option>
-  <option value="CONYUGE">Cónyuge</option><option value="HIJO">Hijo(a)</option>
+  <option value="CONYUGE">Esposo(a)</option><option value="HIJO">Hijo(a)</option>
   <option value="PADRE">Padre</option><option value="MADRE">Madre</option>
   <option value="HERMANO">Hermano(a)</option><option value="ABUELO">Abuelo(a)</option>
   <option value="NIETO">Nieto(a)</option><option value="TIO">Tío(a)</option>
@@ -4449,7 +4495,7 @@ function rcInit(){
   $('rc-decl-edocivil').innerHTML=RC_EDOCIVIL_HTML;
   $('rc-decl-lugarnac').innerHTML=rcLugarNacHTML('decl');
   $('rc-decl-domicilio').innerHTML=rcDomicilioHTML('decl');
-  $('rc-grupo2-body').innerHTML=rcFamiliarCardHTML('cony','Cónyuge','rc-card-conyuge')
+  $('rc-grupo2-body').innerHTML=rcFamiliarCardHTML('cony','Esposo(a)','rc-card-conyuge')
     +rcFamiliarCardHTML('pa','Padre del Finado')
     +rcFamiliarCardHTML('ma','Madre del Finado');
   $('rc-grupo5-body').innerHTML=rcTestigoCardHTML('test1','Testigo 1')+rcTestigoCardHTML('test2','Testigo 2');
@@ -4875,16 +4921,16 @@ const RC_POS_DEFAULT=[
   {id:'fi_dom_pais',label:'Finado · Domicilio (país)',page:1,x:7.2,y:3.02},
   {id:'fi_edocivil_soltero',label:'Finado · Estado Civil (X si Soltero)',page:1,x:3.05,y:3.26},
   {id:'fi_edocivil_casado',label:'Finado · Estado Civil (X si Casado)',page:1,x:4.1,y:3.26},
-  {id:'cony_nombre',label:'Cónyuge · Nombre',page:1,x:2.9,y:3.60},
-  {id:'cony_nacionalidad',label:'Cónyuge · Nacionalidad',page:1,x:7.0,y:3.60},
-  {id:'cony_fecnac_dia',label:'Cónyuge · Fecha Nac. (día)',page:1,x:2.55,y:3.84},
-  {id:'cony_fecnac_mes',label:'Cónyuge · Fecha Nac. (mes)',page:1,x:2.85,y:3.84},
-  {id:'cony_fecnac_anio',label:'Cónyuge · Fecha Nac. (año)',page:1,x:3.15,y:3.84},
-  {id:'cony_sexo',label:'Cónyuge · Sexo (H/M)',page:1,x:4.9,y:3.84},
-  {id:'cony_localidad',label:'Cónyuge · Lugar Nac. (localidad)',page:1,x:1.5,y:4.11},
-  {id:'cony_municipio',label:'Cónyuge · Lugar Nac. (municipio)',page:1,x:3.4,y:4.11},
-  {id:'cony_entidad',label:'Cónyuge · Lugar Nac. (entidad)',page:1,x:5.1,y:4.11},
-  {id:'cony_pais',label:'Cónyuge · Lugar Nac. (país)',page:1,x:7.2,y:4.11},
+  {id:'cony_nombre',label:'Esposo(a) · Nombre',page:1,x:2.9,y:3.60},
+  {id:'cony_nacionalidad',label:'Esposo(a) · Nacionalidad',page:1,x:7.0,y:3.60},
+  {id:'cony_fecnac_dia',label:'Esposo(a) · Fecha Nac. (día)',page:1,x:2.55,y:3.84},
+  {id:'cony_fecnac_mes',label:'Esposo(a) · Fecha Nac. (mes)',page:1,x:2.85,y:3.84},
+  {id:'cony_fecnac_anio',label:'Esposo(a) · Fecha Nac. (año)',page:1,x:3.15,y:3.84},
+  {id:'cony_sexo',label:'Esposo(a) · Sexo (H/M)',page:1,x:4.9,y:3.84},
+  {id:'cony_localidad',label:'Esposo(a) · Lugar Nac. (localidad)',page:1,x:1.5,y:4.11},
+  {id:'cony_municipio',label:'Esposo(a) · Lugar Nac. (municipio)',page:1,x:3.4,y:4.11},
+  {id:'cony_entidad',label:'Esposo(a) · Lugar Nac. (entidad)',page:1,x:5.1,y:4.11},
+  {id:'cony_pais',label:'Esposo(a) · Lugar Nac. (país)',page:1,x:7.2,y:4.11},
   {id:'pa_nombre',label:'Padre · Nombre',page:1,x:2.9,y:4.40},
   {id:'pa_nacionalidad',label:'Padre · Nacionalidad',page:1,x:7.0,y:4.40},
   {id:'pa_fecnac_dia',label:'Padre · Fecha Nac. (día)',page:1,x:2.55,y:4.64},
@@ -5130,7 +5176,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 function _rcEtiquetaParentesco(v){
-  const map={NINGUNO:'Ninguno',CONYUGE:'Cónyuge',HIJO:'Hijo(a)',PADRE:'Padre',MADRE:'Madre',
+  const map={NINGUNO:'Ninguno',CONYUGE:'Esposo(a)',HIJO:'Hijo(a)',PADRE:'Padre',MADRE:'Madre',
     HERMANO:'Hermano(a)',ABUELO:'Abuelo(a)',NIETO:'Nieto(a)',TIO:'Tío(a)',SOBRINO:'Sobrino(a)',
     PRIMO:'Primo(a)',CUNADO:'Cuñado(a)',SUEGRO:'Suegro(a)',YERNO_NUERA:'Yerno/Nuera'};
   return map[v]||v||'';
