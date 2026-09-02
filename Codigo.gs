@@ -1603,7 +1603,7 @@ function extraerDatosDocumento(payload) {
   const base64Limpio = String(payload.base64 || "").split(",").pop();
   if (!base64Limpio) return { ok:false, error:"Falta la imagen a analizar." };
   const modelo = PropertiesService.getScriptProperties().getProperty("GEMINI_MODEL") || "gemini-2.5-flash";
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent?key=" + encodeURIComponent(apiKey);
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent";
   const cuerpo = {
     contents: [{ parts: [
       { text: cfg.prompt },
@@ -1613,8 +1613,12 @@ function extraerDatosDocumento(payload) {
   };
   let resp;
   try {
+    // La clave va en el encabezado x-goog-api-key (forma oficial recomendada
+    // por Google) en vez de en la URL — funciona igual con claves nuevas
+    // "AQ." y con las viejas "AIza", y no queda expuesta en registros/logs.
     resp = UrlFetchApp.fetch(url, {
       method: "post", contentType: "application/json",
+      headers: { "x-goog-api-key": apiKey },
       payload: JSON.stringify(cuerpo), muteHttpExceptions: true
     });
   } catch (err) {
