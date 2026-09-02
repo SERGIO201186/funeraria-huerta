@@ -3786,6 +3786,19 @@ function sRC(d){localStorage.setItem(RCK,JSON.stringify(d))}
 /* ── CERTIFICAR: 3 pestañas (Info Médico / Solicitud Registro Civil / Mapeo) ── */
 const CERT_PERSONAS=[['decl','declarante'],['test1','testigo1'],['test2','testigo2']];
 function certTab(n){
+  // La Pestaña 2 se precarga desde la Pestaña 1 SOLO la primera vez que se
+  // abre el modal (dentro de rcCargar) — si el usuario llena y guarda la
+  // Pestaña 1 y recién después entra a la Pestaña 2 en la misma sesión, sin
+  // esto se quedaba con la precarga vieja (de antes de guardar), mostrando padres
+  // "Vive" en vez de "Finado", parentesco del declarante en blanco, etc.
+  // Mientras no exista todavía una Solicitud de Registro Civil guardada
+  // (rc), cada vez que se entra a la Pestaña 2 se vuelve a precargar con
+  // lo último de la Pestaña 1 — en cuanto ya hay un "rc" propio guardado,
+  // ese pasa a ser la fuente y ya no se vuelve a pisar con la Pestaña 1.
+  if(n===2){
+    const folio=$('mo-certificar').dataset.folio;
+    if(folio && !lRC().find(x=>x.folio===folio))rcAplicarPrecargaCert(folio);
+  }
   document.querySelectorAll('.cert-tab').forEach(el=>el.style.display='none');
   $('cert-tab-'+n).style.display='block';
   document.querySelectorAll('.cert-tab-btn').forEach(b=>{
@@ -4070,6 +4083,15 @@ function _marcarIA(el){
   const quitar=()=>{el.classList.remove('ia-detectado');el.removeEventListener('input',quitar);el.removeEventListener('change',quitar)};
   el.addEventListener('input',quitar);
   el.addEventListener('change',quitar);
+}
+// Igual que _setSiVacio pero sin marcar "detectado por IA" — la usa la
+// precarga Pestaña 1 → Pestaña 2 (no es una lectura automática de un
+// documento, es tu propio dato ya capturado en la Pestaña 1).
+function _rcFillIfVacio(id,val){
+  const el=$(id);
+  if(!el)return;
+  if(String(el.value||'').trim())return;
+  el.value=val||'';
 }
 // Solo llena si el campo está vacío — nunca pisa algo ya capturado a mano
 // (ni por un documento anterior ni por el usuario). Regresa 1/0 para contar
@@ -4576,10 +4598,87 @@ function rcActualizaSeccionMayor12(edad){
   $('rc-edad-ref').textContent=edad===''?'edad no calculada':`${edad} años`;
   $('rc-blq-mayor12').style.display=(edad===''||edad>=12)?'block':'none';
 }
+// Autollena la Pestaña 2 con lo ya capturado en la Pestaña 1 (Certificaciones)
+// — SOLO en los campos que sigan vacíos: nunca pisa algo ya capturado en esta
+// pestaña, sea a mano o por la lectura automática de documentos (Pestaña 4).
+// Los selects de estado/parentesco sí se reasignan directo, porque su valor
+// "vacío" por defecto (Vive/Ninguno) no se puede distinguir de uno real — y
+// esos campos no los toca la lectura automática, así que no hay riesgo de
+// pisarla. A propósito NO llama a rcInit(): rcInit reconstruye por completo
+// las tarjetas de cónyuge/padre/madre/testigos (innerHTML), lo que borraría
+// cualquier dato ya puesto ahí por IA — por eso certTab la llama a ella
+// directo (no a rcCargar completo) cada vez que se entra a esta pestaña.
+function rcAplicarPrecargaCert(folio){
+  const cert=lCert().find(x=>x.folio===folio)||{};
+  const g=(id,v)=>{if($(id))$(id).value=v||''};
+  const nom=splitNombreCompleto(cert.finadoNombre);
+  _rcFillIfVacio('rc-fi-nombres',nom.nombres);
+  _rcFillIfVacio('rc-fi-ap1',nom.ap1);
+  _rcFillIfVacio('rc-fi-ap2',nom.ap2);
+  _rcFillIfVacio('rc-fi-fecnac',fechaPlano(cert.finadoFechaNacimiento));
+  _rcFillIfVacio('rc-fi-entidad',cert.finadoEntidadNacimiento);
+  if(['SOLTERO','CASADO'].includes(cert.finadoEstadoCivil))g('rc-fi-edocivil',cert.finadoEstadoCivil);
+
+  if(cert.finadoEraCasado==='SI'){
+    _rcFillIfVacio('rc-cony-nombre',cert.conyugeNombre);
+    g('rc-cony-estado',cert.conyugeEstado||'VIVE');
+    _rcFillIfVacio('rc-cony-fecnac',fechaPlano(cert.conyugeFechaNacimiento));
+    _rcFillIfVacio('rc-cony-localidad',cert.conyugeLocalidadNac);
+    _rcFillIfVacio('rc-cony-municipio',cert.conyugeMunicipioNac);
+    _rcFillIfVacio('rc-cony-entidad',cert.conyugeEstadoNac);
+    _rcFillIfVacio('rc-cony-pais',cert.conyugePaisNac||'México');
+  }
+  _rcFillIfVacio('rc-pa-nombre',cert.padreNombre);
+  g('rc-pa-estado',cert.padreEstado==='FINADO'?'FINADO':'VIVE');
+  _rcFillIfVacio('rc-pa-fecnac',fechaPlano(cert.padreFechaNacimiento));
+  g('rc-pa-sexo','HOMBRE');
+  _rcFillIfVacio('rc-pa-localidad',cert.padreLocalidadNac);
+  _rcFillIfVacio('rc-pa-municipio',cert.padreMunicipioNac);
+  _rcFillIfVacio('rc-pa-entidad',cert.padreEstadoNac);
+  _rcFillIfVacio('rc-pa-pais',cert.padrePaisNac||'México');
+
+  _rcFillIfVacio('rc-ma-nombre',cert.madreNombre);
+  g('rc-ma-estado',cert.madreEstado==='FINADO'?'FINADO':'VIVE');
+  _rcFillIfVacio('rc-ma-fecnac',fechaPlano(cert.madreFechaNacimiento));
+  g('rc-ma-sexo','MUJER');
+  _rcFillIfVacio('rc-ma-localidad',cert.madreLocalidadNac);
+  _rcFillIfVacio('rc-ma-municipio',cert.madreMunicipioNac);
+  _rcFillIfVacio('rc-ma-entidad',cert.madreEstadoNac);
+  _rcFillIfVacio('rc-ma-pais',cert.madrePaisNac||'México');
+
+  _rcFillIfVacio('rc-fallec-fecha',fechaPlano(cert.finadoFechaDefuncion));
+  _rcFillIfVacio('rc-fallec-hora',cert.finadoHoraDefuncion);
+  _rcFillIfVacio('rc-fallec-lugar-detalle',cert.finadoLugarDefuncion);
+
+  _rcFillIfVacio('rc-decl-nombre',cert.declaranteNombre);
+  g('rc-decl-parentesco',cert.declaranteParentesco||'NINGUNO');
+  if(['SOLTERO','CASADO'].includes(cert.declaranteEstadoCivil))g('rc-decl-edocivil',cert.declaranteEstadoCivil);
+  _rcFillIfVacio('rc-decl-localidad',cert.declaranteLocalidadNac);
+  _rcFillIfVacio('rc-decl-municipio',cert.declaranteMunicipioNac);
+  _rcFillIfVacio('rc-decl-entidad',cert.declaranteEstadoNac);
+  _rcFillIfVacio('rc-decl-pais',cert.declarantePaisNac||'México');
+  _rcFillIfVacio('rc-decl-telefono',cert.declaranteTelefono);
+
+  ['test1','test2'].forEach(p=>{
+    const campo=p==='test1'?'testigo1':'testigo2';
+    _rcFillIfVacio(`rc-${p}-nombre`,cert[`${campo}Nombre`]);
+    _rcFillIfVacio(`rc-${p}-telefono`,cert[`${campo}Telefono`]);
+    _rcFillIfVacio(`rc-${p}-localidad`,cert[`${campo}LocalidadNac`]);
+    _rcFillIfVacio(`rc-${p}-municipio`,cert[`${campo}MunicipioNac`]);
+    _rcFillIfVacio(`rc-${p}-entidad`,cert[`${campo}EstadoNac`]);
+    _rcFillIfVacio(`rc-${p}-pais`,cert[`${campo}PaisNac`]||'México');
+    if(['SOLTERO','CASADO'].includes(cert[`${campo}EstadoCivil`]))g(`rc-${p}-edocivil`,cert[`${campo}EstadoCivil`]);
+    g(`rc-${p}-parentesco`,cert[`${campo}Parentesco`]||'NINGUNO');
+  });
+
+  rcPoblarFunerarios('');
+  rcToggleConyuge();
+  rcToggleVivoRC('cony');rcToggleVivoRC('pa');rcToggleVivoRC('ma');
+  rcCalcEdad('fi');rcCalcEdad('decl');rcCalcEdad('test1');rcCalcEdad('test2');
+}
 function rcCargar(folio){
   rcInit();
   const rc=lRC().find(x=>x.folio===folio);
-  const cert=lCert().find(x=>x.folio===folio)||{};
   const g=(id,v)=>{if($(id))$(id).value=v||''};
 
   if(rc){
@@ -4697,67 +4796,9 @@ function rcCargar(folio){
     g('rc-posicion-trabajo',rc.rcPosicionTrabajo);
   }else{
     // Sin registro RC todavía: autollenar lo que coincide con la Pestaña 1.
-    const nom=splitNombreCompleto(cert.finadoNombre);
-    g('rc-fi-nombres',nom.nombres);
-    g('rc-fi-ap1',nom.ap1);
-    g('rc-fi-ap2',nom.ap2);
-    g('rc-fi-fecnac',fechaPlano(cert.finadoFechaNacimiento));
-    g('rc-fi-entidad',cert.finadoEntidadNacimiento);
-    if(['SOLTERO','CASADO'].includes(cert.finadoEstadoCivil))g('rc-fi-edocivil',cert.finadoEstadoCivil);
-
-    if(cert.finadoEraCasado==='SI'){
-      g('rc-cony-nombre',cert.conyugeNombre);
-      g('rc-cony-estado',cert.conyugeEstado||'VIVE');
-      g('rc-cony-fecnac',fechaPlano(cert.conyugeFechaNacimiento));
-      g('rc-cony-localidad',cert.conyugeLocalidadNac);
-      g('rc-cony-municipio',cert.conyugeMunicipioNac);
-      g('rc-cony-entidad',cert.conyugeEstadoNac);
-      g('rc-cony-pais',cert.conyugePaisNac||'México');
-    }
-    g('rc-pa-nombre',cert.padreNombre);
-    g('rc-pa-estado',cert.padreEstado==='FINADO'?'FINADO':'VIVE');
-    g('rc-pa-fecnac',fechaPlano(cert.padreFechaNacimiento));
-    g('rc-pa-sexo','HOMBRE');
-    g('rc-pa-localidad',cert.padreLocalidadNac);
-    g('rc-pa-municipio',cert.padreMunicipioNac);
-    g('rc-pa-entidad',cert.padreEstadoNac);
-    g('rc-pa-pais',cert.padrePaisNac||'México');
-
-    g('rc-ma-nombre',cert.madreNombre);
-    g('rc-ma-estado',cert.madreEstado==='FINADO'?'FINADO':'VIVE');
-    g('rc-ma-fecnac',fechaPlano(cert.madreFechaNacimiento));
-    g('rc-ma-sexo','MUJER');
-    g('rc-ma-localidad',cert.madreLocalidadNac);
-    g('rc-ma-municipio',cert.madreMunicipioNac);
-    g('rc-ma-entidad',cert.madreEstadoNac);
-    g('rc-ma-pais',cert.madrePaisNac||'México');
-
-    g('rc-fallec-fecha',fechaPlano(cert.finadoFechaDefuncion));
-    g('rc-fallec-hora',cert.finadoHoraDefuncion);
-    g('rc-fallec-lugar-detalle',cert.finadoLugarDefuncion);
-
-    g('rc-decl-nombre',cert.declaranteNombre);
-    g('rc-decl-parentesco',cert.declaranteParentesco||'NINGUNO');
-    if(['SOLTERO','CASADO'].includes(cert.declaranteEstadoCivil))g('rc-decl-edocivil',cert.declaranteEstadoCivil);
-    g('rc-decl-localidad',cert.declaranteLocalidadNac);
-    g('rc-decl-municipio',cert.declaranteMunicipioNac);
-    g('rc-decl-entidad',cert.declaranteEstadoNac);
-    g('rc-decl-pais',cert.declarantePaisNac||'México');
-    g('rc-decl-telefono',cert.declaranteTelefono);
-
-    ['test1','test2'].forEach(p=>{
-      const campo=p==='test1'?'testigo1':'testigo2';
-      g(`rc-${p}-nombre`,cert[`${campo}Nombre`]);
-      g(`rc-${p}-telefono`,cert[`${campo}Telefono`]);
-      g(`rc-${p}-localidad`,cert[`${campo}LocalidadNac`]);
-      g(`rc-${p}-municipio`,cert[`${campo}MunicipioNac`]);
-      g(`rc-${p}-entidad`,cert[`${campo}EstadoNac`]);
-      g(`rc-${p}-pais`,cert[`${campo}PaisNac`]||'México');
-      if(['SOLTERO','CASADO'].includes(cert[`${campo}EstadoCivil`]))g(`rc-${p}-edocivil`,cert[`${campo}EstadoCivil`]);
-      g(`rc-${p}-parentesco`,cert[`${campo}Parentesco`]||'NINGUNO');
-    });
-
-    rcPoblarFunerarios('');
+    // La lógica vive en rcAplicarPrecargaCert porque también la usa certTab
+    // al entrar a esta pestaña (sin pasar por rcInit — ver ahí el porqué).
+    rcAplicarPrecargaCert(folio);
   }
 
   rcToggleConyuge();
