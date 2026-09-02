@@ -25,6 +25,15 @@
 //    actualizarla en las DOS apps)
 // 3. Usa esa MISMA URL en "Sincronización Nube" de la app de ODS y en
 //    "Enlace de Sincronización en la Nube" de la app de Previsión.
+// 4. Documentos (INE, actas, certificados) — para que la lectura automática
+//    de datos funcione (pestaña "Documentos" → Registro Civil), agrega una
+//    Propiedad del script: Apps Script → ⚙ Configuración del proyecto →
+//    Propiedades del script → agregar GEMINI_API_KEY con una clave de
+//    https://aistudio.google.com/apikey (capa gratuita). Sin esa propiedad,
+//    subir y guardar documentos sigue funcionando normal — solo se
+//    desactiva el llenado automático, y hay que capturar manual como antes.
+//    Los archivos se guardan en una carpeta de Drive propia de esta cuenta
+//    ("Documentos Funeraria Huerta"), nunca públicos.
 // ====================================================
 
 // — NOMBRES DE HOJAS
@@ -43,6 +52,7 @@ const SH_SOLIC = "Solicitudes";    // ← solicitudes de edición de ODS (emplea
 const SH_CERT  = "Certificaciones"; // ← datos para certificado médico / Registro Civil
 const SH_ELIM  = "ODSEliminadas";  // ← folios borrados (evita que resuciten con una sync vieja)
 const SH_RC    = "SolicitudRegistroCivil"; // ← formato oficial de Registro Civil (frente + reverso)
+const SH_DOC   = "Documentos"; // ← índice de documentos de respaldo (INE, actas, certificados) guardados en Drive, uno por folio de ODS o de Previsión
 
 // — CABECERAS ODS ----------------------------------------------
 // IMPORTANTE: el ORDEN de este arreglo ya no determina en qué columna
@@ -194,6 +204,19 @@ const RC_COLS = [
   "creadoPor","fechaCreacion","fechaActualizacion"
 ];
 
+// — CABECERAS DOCUMENTOS (respaldos digitalizados: INE, actas, certificados) —
+// Una fila por archivo (no por folio: un folio puede tener varios documentos).
+// El archivo en sí vive en Drive (driveFileId); esta hoja es solo el índice
+// para poder buscar por folio o por nombre sin recorrer carpetas de Drive.
+// "app" distingue ODS de Previsión porque comparten la misma hoja/carpeta raíz.
+const DOC_COLS = [
+  "id","app","folio","tipoDocumento",
+  "nombreFinado","nombreContratante",
+  "driveFileId","mimeType","nombreArchivo","tamanoBytes",
+  "fechaSubida","subidoPor"
+];
+function getDocSh() { return initSheet(SH_DOC, DOC_COLS); }
+
 // — CABECERAS DE PREVISIÓN (contratos/abonos/certificados/dispositivos/pagos MP) —
 // Antes vivían en un Apps Script COMPLETAMENTE APARTE, incrustado en el propio
 // index.html de la app de Previsión (con su propio libro de Google Sheets). Se
@@ -339,6 +362,13 @@ function doPost(e) {
       case "reiniciarMapeoRC":  result = reiniciarMapeoRC();             break;
       case "obtenerAlertaConfig":result = obtenerAlertaConfig();            break;
       case "enviarAlertaPrueba": result = enviarAlertasPendientes(true);    break;
+      // Documentos (respaldos digitalizados en Drive) — mismo candado de
+      // sesión que el resto de la app; eliminar además exige ser administrador.
+      case "subirDocumento":         result = buscarColaboradorPorAuth(payload.auth) ? subirDocumento(payload) : { ok:false, error:"No autorizado. Vuelve a iniciar sesión." }; break;
+      case "obtenerDocumentos":      result = buscarColaboradorPorAuth(payload.auth) ? obtenerDocumentos(payload.filtros||{}) : { ok:false, error:"No autorizado. Vuelve a iniciar sesión." }; break;
+      case "obtenerDocumentoArchivo":result = buscarColaboradorPorAuth(payload.auth) ? obtenerDocumentoArchivo(payload) : { ok:false, error:"No autorizado. Vuelve a iniciar sesión." }; break;
+      case "eliminarDocumento":      result = verificarAdminColaborador(payload.auth) ? eliminarDocumento(payload) : { ok:false, error:"No autorizado (solo administradores)." }; break;
+      case "extraerDatosDocumento":  result = buscarColaboradorPorAuth(payload.auth) ? extraerDatosDocumento(payload) : { ok:false, error:"No autorizado. Vuelve a iniciar sesión." }; break;
       default: result = { ok:false, mensaje:"Acción desconocida: " + accion };
     }
 
@@ -1336,6 +1366,272 @@ function obtenerMapeoRC() {
 function reiniciarMapeoRC() {
   PropertiesService.getScriptProperties().setProperty(PROP_MAPEO_RC, JSON.stringify({}));
   return { ok:true, mensaje:"Mapeo reiniciado" };
+}
+
+// ============================================================
+//  DOCUMENTOS (respaldos digitalizados en Drive: INE, actas, certificados)
+//  ------------------------------------------------------------------
+//  Reemplaza los expedientes físicos: cada foto/archivo que antes se
+//  guardaba en papel se sube comprimido desde el navegador, se guarda en
+//  una carpeta de Drive propia del folio, y se indexa aquí para poder
+//  buscar por folio o por nombre del finado/contratante sin abrir Drive.
+//  Los archivos NUNCA se hacen públicos: siempre se leen a través de este
+//  script (autenticado con el mismo auth de colaborador que usa el resto
+//  de la app), nunca con un link directo de Drive.
+// ============================================================
+const PROP_DOCS_ROOT_FOLDER_ID = "DOCS_ROOT_FOLDER_ID";
+
+function _carpetaDocumentosRaiz() {
+  const props = PropertiesService.getScriptProperties();
+  const idGuardado = props.getProperty(PROP_DOCS_ROOT_FOLDER_ID);
+  if (idGuardado) {
+    try { return DriveApp.getFolderById(idGuardado); } catch (e) { /* la carpeta ya no existe, se crea otra abajo */ }
+  }
+  const carpeta = DriveApp.createFolder("Documentos Funeraria Huerta");
+  props.setProperty(PROP_DOCS_ROOT_FOLDER_ID, carpeta.getId());
+  return carpeta;
+}
+function _subCarpeta(padre, nombre) {
+  const it = padre.getFoldersByName(nombre);
+  if (it.hasNext()) return it.next();
+  return padre.createFolder(nombre);
+}
+// Estructura: Documentos Funeraria Huerta / ODS|Previsiones / <folio> /
+function _carpetaFolio(app, folio) {
+  const raiz = _carpetaDocumentosRaiz();
+  const carpetaApp = _subCarpeta(raiz, app === "PREVISION" ? "Previsiones" : "ODS");
+  const nombreFolio = String(folio || "SIN_FOLIO").replace(/[\/\\:*?"<>|]/g, "_");
+  return _subCarpeta(carpetaApp, nombreFolio);
+}
+
+// payload: {auth, app, folio, tipoDocumento, nombreFinado, nombreContratante,
+//           base64, mimeType, nombreArchivo}
+// El navegador ya comprimió la imagen antes de mandarla — aquí solo se
+// decodifica y se guarda tal cual, sin reprocesarla.
+function subirDocumento(payload) {
+  const folio = payload && payload.folio;
+  const tipoDocumento = payload && payload.tipoDocumento;
+  const base64 = payload && payload.base64;
+  if (!folio || !tipoDocumento || !base64) {
+    return { ok:false, error:"Faltan datos (folio, tipoDocumento o archivo)." };
+  }
+  const app = payload.app === "PREVISION" ? "PREVISION" : "ODS";
+  const base64Limpio = String(base64).split(",").pop();
+  let bytes;
+  try { bytes = Utilities.base64Decode(base64Limpio); }
+  catch (e) { return { ok:false, error:"El archivo recibido no es válido." }; }
+  const mimeType = payload.mimeType || "image/jpeg";
+  const carpeta = _carpetaFolio(app, folio);
+  const nombreArchivo = (payload.nombreArchivo || tipoDocumento) + "_" + Date.now();
+  const blob = Utilities.newBlob(bytes, mimeType, nombreArchivo);
+  const file = carpeta.createFile(blob);
+  const sh = getDocSh();
+  const headers = headersReales(sh);
+  const id = Utilities.getUuid();
+  sh.appendRow(toRow(headers, {
+    id, app, folio: String(folio), tipoDocumento,
+    nombreFinado: payload.nombreFinado || "", nombreContratante: payload.nombreContratante || "",
+    driveFileId: file.getId(), mimeType, nombreArchivo,
+    tamanoBytes: bytes.length, fechaSubida: new Date().toISOString(), subidoPor: payload.subidoPor || ""
+  }));
+  return { ok:true, id, driveFileId: file.getId() };
+}
+
+// filtros: {app, folio, nombre} — folio hace match exacto; nombre busca como
+// subcadena (sin distinguir mayúsculas/acentos simples) en finado O contratante.
+// No regresa el archivo en sí (para que la lista cargue rápido) — para ver o
+// descargar un documento puntual se usa obtenerDocumentoArchivo.
+function obtenerDocumentos(filtros) {
+  filtros = filtros || {};
+  const sh = getDocSh();
+  const data = sh.getDataRange().getValues();
+  if (data.length <= 1) return { ok:true, documentos:[] };
+  const headers = data[0];
+  let filas = data.slice(1).map(r => toObj(headers, r));
+  if (filtros.app) filas = filas.filter(r => r.app === filtros.app);
+  if (filtros.folio) filas = filas.filter(r => String(r.folio) === String(filtros.folio));
+  if (filtros.nombre) {
+    const buscado = String(filtros.nombre).trim().toLowerCase();
+    filas = filas.filter(r =>
+      String(r.nombreFinado || "").toLowerCase().indexOf(buscado) !== -1 ||
+      String(r.nombreContratante || "").toLowerCase().indexOf(buscado) !== -1
+    );
+  }
+  filas.sort((a, b) => new Date(b.fechaSubida) - new Date(a.fechaSubida));
+  return { ok:true, documentos: filas, total: filas.length };
+}
+
+// Trae el archivo completo en base64 para verlo o descargarlo en la app
+// (nunca se expone un link directo de Drive al cliente).
+function obtenerDocumentoArchivo(payload) {
+  const sh = getDocSh();
+  const idx = findRow(sh, "id", payload && payload.id);
+  if (idx < 0) return { ok:false, error:"Documento no encontrado." };
+  const headers = headersReales(sh);
+  const fila = toObj(headers, sh.getRange(idx, 1, 1, headers.length).getValues()[0]);
+  let file;
+  try { file = DriveApp.getFileById(fila.driveFileId); }
+  catch (e) { return { ok:false, error:"El archivo ya no existe en Drive." }; }
+  const blob = file.getBlob();
+  return {
+    ok:true, mimeType: fila.mimeType, nombreArchivo: fila.nombreArchivo,
+    base64: Utilities.base64Encode(blob.getBytes())
+  };
+}
+
+// Solo administradores (gateado en doPost, igual que el resto de acciones
+// destructivas) — manda el archivo a la papelera de Drive y quita el índice.
+function eliminarDocumento(payload) {
+  const sh = getDocSh();
+  const idx = findRow(sh, "id", payload && payload.id);
+  if (idx < 0) return { ok:false, error:"Documento no encontrado." };
+  const headers = headersReales(sh);
+  const fila = toObj(headers, sh.getRange(idx, 1, 1, headers.length).getValues()[0]);
+  try { DriveApp.getFileById(fila.driveFileId).setTrashed(true); } catch (e) { /* si ya no existe en Drive, igual se limpia el índice */ }
+  sh.deleteRow(idx);
+  return { ok:true };
+}
+
+// ============================================================
+//  EXTRACCIÓN AUTOMÁTICA DE DATOS (IA) — Gemini API
+//  ------------------------------------------------------------------
+//  Lee una foto de INE / acta de nacimiento / certificado de defunción y
+//  regresa los datos ya estructurados en JSON, para precargar la Pestaña 2
+//  (Solicitud Registro Civil). SIEMPRE es un apoyo para capturar más rápido,
+//  nunca un dato definitivo: el cliente solo llena campos que estén vacíos
+//  y el usuario debe revisar/corregir antes de guardar — un documento legal
+//  no se llena a ciegas con lo que "cree" leer una IA.
+//  Requiere la propiedad de script GEMINI_API_KEY (Apps Script → ⚙
+//  Configuración del proyecto → Propiedades del script). Opcionalmente
+//  GEMINI_MODEL para cambiar el modelo sin tocar código (por defecto
+//  gemini-2.5-flash).
+// ============================================================
+const _INE_PROMPT =
+  "Esta imagen es una identificación oficial (INE/IFE) mexicana. Lee únicamente " +
+  "el texto que aparece impreso en la credencial. Responde con el nombre completo " +
+  "tal como aparece, la CURP si es legible, la fecha de nacimiento en formato " +
+  "AAAA-MM-DD si es legible, y el domicilio separado en calle, número, colonia, " +
+  "localidad, municipio y entidad federativa, tal como esté impreso (si el " +
+  "domicilio viene en una sola línea, sepáralo de la forma más razonable). Si un " +
+  "dato no aparece o no es legible, regresa una cadena vacía para ese campo — " +
+  "nunca inventes ni completes información que no esté impresa.";
+const _INE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    nombreCompleto: { type: "STRING" },
+    curp: { type: "STRING" },
+    fechaNacimiento: { type: "STRING" },
+    domicilioCalle: { type: "STRING" },
+    domicilioNumero: { type: "STRING" },
+    domicilioColonia: { type: "STRING" },
+    domicilioLocalidad: { type: "STRING" },
+    domicilioMunicipio: { type: "STRING" },
+    domicilioEntidad: { type: "STRING" }
+  }
+};
+const _ACTA_NACIMIENTO_PROMPT =
+  "Esta imagen es un acta de nacimiento mexicana. Lee únicamente el texto impreso " +
+  "o manuscrito del acta. Responde con: nombre(s), apellido paterno y apellido " +
+  "materno de la persona registrada; su fecha de nacimiento en formato AAAA-MM-DD; " +
+  "su lugar de nacimiento separado en localidad, municipio, entidad federativa y " +
+  "país (si el acta no menciona localidad o municipio por separado, deja esos dos " +
+  "campos vacíos — no adivines); y el nombre completo del padre y de la madre tal " +
+  "como aparecen en el acta (si el acta solo registra a uno de los dos, deja el " +
+  "otro campo vacío; si no registra a ninguno, deja ambos vacíos). No captures aquí " +
+  "si los padres viven o no — eso no aparece en el acta. Si un dato no aparece o no " +
+  "es legible, regresa una cadena vacía — nunca inventes información.";
+const _ACTA_NACIMIENTO_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    nombres: { type: "STRING" },
+    apellidoPaterno: { type: "STRING" },
+    apellidoMaterno: { type: "STRING" },
+    fechaNacimiento: { type: "STRING" },
+    lugarNacimientoLocalidad: { type: "STRING" },
+    lugarNacimientoMunicipio: { type: "STRING" },
+    lugarNacimientoEntidad: { type: "STRING" },
+    lugarNacimientoPais: { type: "STRING" },
+    nombrePadre: { type: "STRING" },
+    nombreMadre: { type: "STRING" }
+  }
+};
+const _CERTIFICADO_DEFUNCION_PROMPT =
+  "Esta imagen es un certificado de defunción mexicano. Lee únicamente el texto " +
+  "impreso o manuscrito del certificado. Responde con: fecha de defunción en " +
+  "formato AAAA-MM-DD; hora de defunción en formato de 24 horas HH:mm; el lugar " +
+  "de la defunción tal como esté descrito (texto libre, ej. hospital, domicilio); " +
+  "el número de certificado; y si el certificado incluye el domicilio del " +
+  "finado, sepáralo en calle, número, colonia, localidad, municipio y entidad " +
+  "federativa. Si un dato no aparece o no es legible, regresa una cadena vacía — " +
+  "nunca inventes información.";
+const _CERTIFICADO_DEFUNCION_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    fechaDefuncion: { type: "STRING" },
+    horaDefuncion: { type: "STRING" },
+    lugarDefuncionTexto: { type: "STRING" },
+    numeroCertificado: { type: "STRING" },
+    domicilioCalle: { type: "STRING" },
+    domicilioNumero: { type: "STRING" },
+    domicilioColonia: { type: "STRING" },
+    domicilioLocalidad: { type: "STRING" },
+    domicilioMunicipio: { type: "STRING" },
+    domicilioEntidad: { type: "STRING" }
+  }
+};
+// Los 6 tipos de INE (finado/contratante/declarante/testigo1/testigo2/
+// beneficiario) comparten el mismo prompt y esquema — solo cambia a qué
+// campos del formulario se aplica el resultado, y eso lo decide el cliente.
+const _ESQUEMA_EXTRACCION = {
+  INE_FINADO: { prompt: _INE_PROMPT, schema: _INE_SCHEMA },
+  INE_CONTRATANTE: { prompt: _INE_PROMPT, schema: _INE_SCHEMA },
+  INE_DECLARANTE: { prompt: _INE_PROMPT, schema: _INE_SCHEMA },
+  INE_TESTIGO1: { prompt: _INE_PROMPT, schema: _INE_SCHEMA },
+  INE_TESTIGO2: { prompt: _INE_PROMPT, schema: _INE_SCHEMA },
+  INE_BENEFICIARIO: { prompt: _INE_PROMPT, schema: _INE_SCHEMA },
+  ACTA_NACIMIENTO_FINADO: { prompt: _ACTA_NACIMIENTO_PROMPT, schema: _ACTA_NACIMIENTO_SCHEMA },
+  CERTIFICADO_DEFUNCION: { prompt: _CERTIFICADO_DEFUNCION_PROMPT, schema: _CERTIFICADO_DEFUNCION_SCHEMA }
+};
+
+// payload: {tipoDocumento, base64, mimeType}
+function extraerDatosDocumento(payload) {
+  const tipoDocumento = payload && payload.tipoDocumento;
+  const cfg = _ESQUEMA_EXTRACCION[tipoDocumento];
+  if (!cfg) return { ok:false, error:"Este tipo de documento no tiene lectura automática." };
+  const apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+  if (!apiKey) return { ok:false, error:"Falta configurar GEMINI_API_KEY en las Propiedades del script." };
+  const base64Limpio = String(payload.base64 || "").split(",").pop();
+  if (!base64Limpio) return { ok:false, error:"Falta la imagen a analizar." };
+  const modelo = PropertiesService.getScriptProperties().getProperty("GEMINI_MODEL") || "gemini-2.5-flash";
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent?key=" + encodeURIComponent(apiKey);
+  const cuerpo = {
+    contents: [{ parts: [
+      { text: cfg.prompt },
+      { inline_data: { mime_type: payload.mimeType || "image/jpeg", data: base64Limpio } }
+    ] }],
+    generationConfig: { responseMimeType: "application/json", responseSchema: cfg.schema }
+  };
+  let resp;
+  try {
+    resp = UrlFetchApp.fetch(url, {
+      method: "post", contentType: "application/json",
+      payload: JSON.stringify(cuerpo), muteHttpExceptions: true
+    });
+  } catch (err) {
+    return { ok:false, error:"No se pudo contactar al servicio de IA: " + err.message };
+  }
+  let json;
+  try { json = JSON.parse(resp.getContentText()); }
+  catch (e) { return { ok:false, error:"Respuesta inválida del servicio de IA." }; }
+  if (resp.getResponseCode() !== 200) {
+    return { ok:false, error: (json.error && json.error.message) || ("Error del servicio de IA (" + resp.getResponseCode() + ").") };
+  }
+  try {
+    const texto = json.candidates[0].content.parts[0].text;
+    return { ok:true, datos: JSON.parse(texto) };
+  } catch (e) {
+    return { ok:false, error:"No se pudo interpretar la respuesta de IA." };
+  }
 }
 
 function getAlertEmail() {

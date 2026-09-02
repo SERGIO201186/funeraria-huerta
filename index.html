@@ -57,6 +57,16 @@ button:active{transform:scale(.97)}
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:15px;margin-bottom:12px}
 .st{font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.07em;margin-bottom:11px;padding-bottom:6px;border-bottom:1px solid var(--border)}
 .div{height:1px;background:var(--border);margin:13px 0}
+/* DOCUMENTOS (respaldos digitalizados) */
+.doc-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rsm);padding:10px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.doc-card .doc-info{flex:1;min-width:140px}
+.doc-card .doc-tipo{font-size:12px;font-weight:700}
+.doc-card .doc-meta{font-size:11px;color:var(--text2)}
+.doc-slot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px;background:var(--bg3);border-radius:var(--rsm);margin-bottom:8px;flex-wrap:wrap}
+.doc-slot .doc-slot-label{font-size:12px;font-weight:600}
+.doc-slot .doc-slot-status{font-size:11px;color:var(--text2)}
+/* Campo autollenado por IA: se marca hasta que el usuario lo revise/edite. */
+.ia-detectado{background:rgba(245,158,11,.14)!important;border-color:var(--amber)!important}
 /* APP */
 #app{display:flex;flex-direction:column;height:100vh}
 /* TOPBAR */
@@ -254,6 +264,7 @@ button:active{transform:scale(.97)}
     <button class="ni" onclick="navTo('equipos')"><span class="ic">📦</span>Equipos Velación<span class="nbdg" id="bdg-eq">0</span></button>
     <button class="ni" onclick="navTo('pagos')"><span class="ic">💰</span>Pagos Pendientes<span class="nbdg" id="bdg-pg">0</span></button>
     <button class="ni" onclick="window.open('https://sergio201186.github.io/tienda_huerta/','_blank')"><span class="ic">🛍</span>Tienda Virtual</button>
+    <button class="ni" onclick="abrirBuscarDocs()"><span class="ic">🔎</span>Buscar Documentos</button>
     <div class="nav-sec">Sistema</div>
     <button class="ni" data-admin-only onclick="navTo('solicitudes')"><span class="ic">✏️</span>Solicitudes de Edición<span class="nbdg" id="bdg-sol">0</span></button>
     <button class="ni" data-admin-only onclick="navTo('colab')"><span class="ic">👥</span>Colaboradores</button>
@@ -908,6 +919,7 @@ button:active{transform:scale(.97)}
       <button class="bg bsm cert-tab-btn" data-tab="1" onclick="certTab(1)">1. Info para Médico</button>
       <button class="bo bsm cert-tab-btn" data-tab="2" onclick="certTab(2)">2. Solicitud Registro Civil</button>
       <button class="bo bsm cert-tab-btn" data-tab="3" onclick="certTab(3)">3. Mapeo de Formato</button>
+      <button class="bo bsm cert-tab-btn" data-tab="4" onclick="certTab(4)">📎 Documentos</button>
     </div>
 
     <!-- PESTAÑA 1: INFO PARA EL MÉDICO -->
@@ -1362,6 +1374,27 @@ button:active{transform:scale(.97)}
         <p style="font-size:13px;color:var(--text2)">Pendientes — se agregan por separado cuando lleguen sus formatos.</p>
       </div>
     </div>
+
+    <!-- PESTAÑA 4: DOCUMENTOS (respaldos digitalizados en la nube) -->
+    <div id="cert-tab-4" class="cert-tab" style="display:none">
+      <div class="card">
+        <div class="st">Documentos del Finado</div>
+        <p style="font-size:11px;color:var(--text3);margin:-4px 0 10px">Sube la foto desde el celular — se comprime sola antes de subirse. El INE, el acta y el certificado alimentan el llenado automático de la Pestaña 2 (revisa siempre lo que se rellenó solo, marcado en amarillo).</p>
+        <div id="doc-slots-finado"></div>
+      </div>
+      <div class="card">
+        <div class="st">Documentos del Contratante</div>
+        <div id="doc-slots-contratante"></div>
+      </div>
+      <div class="card">
+        <div class="st">Documentos del Declarante y Testigos (Registro Civil)</div>
+        <div id="doc-slots-personas"></div>
+      </div>
+      <div class="card">
+        <div class="st">Documentos guardados de este folio</div>
+        <div id="doc-lista-folio"><p style="font-size:12px;color:var(--text3)">Cargando…</p></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1405,6 +1438,19 @@ button:active{transform:scale(.97)}
     <div class="f"><label class="lbl">Motivo del cambio *</label><textarea id="se-motivo" rows="3" placeholder="Ej. El cliente cambió de opinión, ya no quiere velación en Juquila, ahora es en su domicilio"></textarea></div>
     <div class="f"><label class="lbl">Nuevo total propuesto (si cambia el costo)</label><input id="se-nuevo-total" type="number" min="0" placeholder="Déjalo vacío si no cambia el costo"/></div>
     <button class="bg" style="width:100%" onclick="enviarSolicitudEdicion()">📤 Enviar Solicitud</button>
+  </div>
+</div>
+
+<!-- MODAL BUSCAR DOCUMENTOS (ODS + Previsión, por folio o nombre) -->
+<div class="mo" id="mo-buscar-docs">
+  <div class="mb" style="max-width:640px">
+    <button class="mc" onclick="closeMo('mo-buscar-docs')">✕</button>
+    <div class="mt2">🔎 Buscar Documentos</div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Folio</label><input id="bd-folio" type="text" placeholder="Ej. ODS-0001" oninput="buscarDocsGlobal()"/></div>
+      <div class="f"><label class="lbl">Nombre (finado o contratante)</label><input id="bd-nombre" type="text" placeholder="Nombre…" oninput="buscarDocsGlobal()"/></div>
+    </div>
+    <div id="bd-resultados"><p style="font-size:12px;color:var(--text3)">Escribe un folio o un nombre para buscar.</p></div>
   </div>
 </div>
 
@@ -3822,9 +3868,317 @@ function abrirCertificar(folio){
   toggleCertConyuge();toggleCertVivo('cony');toggleCertVivo('pa');toggleCertVivo('ma');
   rcCargar(folio);
   rcSincronizarMapeo();
+  renderDocSlots();
+  cargarDocumentosFolio(folio);
   certTab(1);
   $('mo-certificar').classList.add('show');
 }
+/* ══════════════════════════════════════════════════════════════
+   DOCUMENTOS (respaldos digitalizados en la nube — reemplaza el
+   expediente físico). Se suben comprimidos desde el navegador y se
+   guardan en Drive, indexados por folio. Los tipos marcados con
+   extrae:true además disparan la lectura automática (IA) que
+   precarga la Pestaña 2 — solo en campos que estén vacíos, y siempre
+   marcados para que el usuario los revise antes de guardar.
+   ══════════════════════════════════════════════════════════════ */
+const DOC_TIPOS_FINADO=[
+  {tipo:'INE_FINADO',label:'INE del Finado',extrae:true},
+  {tipo:'ACTA_NACIMIENTO_FINADO',label:'Acta de Nacimiento',extrae:true},
+  {tipo:'CERTIFICADO_DEFUNCION',label:'Certificado de Defunción',extrae:true},
+  {tipo:'ACTA_DEFUNCION',label:'Acta de Defunción',extrae:false}
+];
+const DOC_TIPOS_CONTRATANTE=[
+  {tipo:'INE_CONTRATANTE',label:'INE del Contratante',extrae:false}
+];
+const DOC_TIPOS_PERSONAS=[
+  {tipo:'INE_DECLARANTE',label:'INE del Declarante',extrae:true},
+  {tipo:'INE_TESTIGO1',label:'INE del Testigo 1',extrae:true},
+  {tipo:'INE_TESTIGO2',label:'INE del Testigo 2',extrae:true}
+];
+const DOC_TIPOS_TODOS=[...DOC_TIPOS_FINADO,...DOC_TIPOS_CONTRATANTE,...DOC_TIPOS_PERSONAS];
+function _etiquetaTipoDoc(t){const d=DOC_TIPOS_TODOS.find(x=>x.tipo===t);return d?d.label:t}
+function _tamanoLegible(bytes){
+  bytes=Number(bytes)||0;
+  if(bytes<1024)return bytes+' B';
+  if(bytes<1024*1024)return (bytes/1024).toFixed(0)+' KB';
+  return (bytes/1024/1024).toFixed(1)+' MB';
+}
+function _docSlotHTML(tipo,label){
+  return `<div class="doc-slot" id="doc-slot-${tipo}">
+    <div>
+      <div class="doc-slot-label">${label}</div>
+      <div class="doc-slot-status" id="doc-slot-status-${tipo}">Sin subir</div>
+    </div>
+    <label class="bo bsm" style="cursor:pointer">📤 Subir
+      <input type="file" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="onSeleccionArchivoDoc(event,'${tipo}')"/>
+    </label>
+  </div>`;
+}
+function renderDocSlots(){
+  $('doc-slots-finado').innerHTML=DOC_TIPOS_FINADO.map(d=>_docSlotHTML(d.tipo,d.label)).join('');
+  $('doc-slots-contratante').innerHTML=DOC_TIPOS_CONTRATANTE.map(d=>_docSlotHTML(d.tipo,d.label)).join('');
+  $('doc-slots-personas').innerHTML=DOC_TIPOS_PERSONAS.map(d=>_docSlotHTML(d.tipo,d.label)).join('');
+}
+// Redimensiona a máx. 1600px de lado mayor y recomprime a JPEG ~75% — una
+// foto de celular de varios MB queda normalmente en 150-400KB. Los PDF no
+// se tocan (ya suelen ser ligeros y no se pueden recomprimir con canvas).
+function comprimirImagen(file,maxDim=1600,calidad=0.75){
+  return new Promise((resolve,reject)=>{
+    if(!file.type||!file.type.startsWith('image/')){
+      const reader=new FileReader();
+      reader.onload=()=>resolve({base64:reader.result,mimeType:file.type||'application/pdf'});
+      reader.onerror=()=>reject(new Error('No se pudo leer el archivo'));
+      reader.readAsDataURL(file);
+      return;
+    }
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('No se pudo leer la imagen'));
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('No se pudo procesar la imagen'));
+      img.onload=()=>{
+        let {width,height}=img;
+        if(width>maxDim||height>maxDim){
+          if(width>height){height=Math.round(height*maxDim/width);width=maxDim}
+          else{width=Math.round(width*maxDim/height);height=maxDim}
+        }
+        const canvas=document.createElement('canvas');
+        canvas.width=width;canvas.height=height;
+        canvas.getContext('2d').drawImage(img,0,0,width,height);
+        resolve({base64:canvas.toDataURL('image/jpeg',calidad),mimeType:'image/jpeg'});
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function onSeleccionArchivoDoc(evt,tipo){
+  const file=evt.target.files[0];
+  evt.target.value='';
+  if(!file)return;
+  const folio=$('mo-certificar').dataset.folio;
+  const o=lDB().find(x=>x.folio===folio)||{};
+  const statusEl=$('doc-slot-status-'+tipo);
+  if(statusEl)statusEl.textContent='Subiendo…';
+  let base64,mimeType;
+  try{
+    ({base64,mimeType}=await comprimirImagen(file));
+  }catch(e){
+    toast('⚠ No se pudo procesar el archivo: '+e.message);
+    if(statusEl)statusEl.textContent='Sin subir';
+    return;
+  }
+  try{
+    const r=await api({
+      accion:'subirDocumento',auth:ST.authCred,
+      app:'ODS',folio,tipoDocumento:tipo,
+      nombreFinado:o.fallecido||'',nombreContratante:o.contratante||'',
+      base64,mimeType,nombreArchivo:file.name,
+      subidoPor:(ST.user&&ST.user.nombreCompleto)||''
+    });
+    if(!r.ok){toast('⚠ '+(r.error||'No se pudo subir el documento'));if(statusEl)statusEl.textContent='Sin subir';return}
+    toast('✅ Documento subido');
+    await cargarDocumentosFolio(folio);
+    const meta=DOC_TIPOS_TODOS.find(d=>d.tipo===tipo);
+    if(meta&&meta.extrae)extraerYAplicar(tipo,base64,mimeType);
+  }catch(e){
+    toast('⚠ Error al subir: '+e.message);
+    if(statusEl)statusEl.textContent='Sin subir';
+  }
+}
+let _docsFolioActual=[];
+async function cargarDocumentosFolio(folio){
+  try{
+    const r=await api({accion:'obtenerDocumentos',auth:ST.authCred,filtros:{app:'ODS',folio}});
+    _docsFolioActual=(r.ok&&r.documentos)||[];
+  }catch(e){_docsFolioActual=[]}
+  document.querySelectorAll('[id^="doc-slot-status-"]').forEach(el=>{
+    const tipo=el.id.replace('doc-slot-status-','');
+    const docs=_docsFolioActual.filter(d=>d.tipoDocumento===tipo);
+    el.textContent=docs.length?('✅ Subido — '+new Date(docs[0].fechaSubida).toLocaleString('es-MX')):'Sin subir';
+  });
+  renderListaDocsFolio();
+}
+function renderListaDocsFolio(){
+  const host=$('doc-lista-folio');
+  if(!host)return;
+  if(!_docsFolioActual.length){host.innerHTML='<p style="font-size:12px;color:var(--text3)">Todavía no hay documentos guardados en este folio.</p>';return}
+  host.innerHTML=_docsFolioActual.map(d=>`
+    <div class="doc-card">
+      <div class="doc-info">
+        <div class="doc-tipo">${_etiquetaTipoDoc(d.tipoDocumento)}</div>
+        <div class="doc-meta">${new Date(d.fechaSubida).toLocaleString('es-MX')} · ${_tamanoLegible(d.tamanoBytes)}</div>
+      </div>
+      <button class="bo bsm" onclick="verDocumento('${d.id}')">👁 Ver</button>
+      <button class="bo bsm" onclick="descargarDocumento('${d.id}')">⬇ Descargar</button>
+      ${esAdmin()?`<button class="br bsm" onclick="eliminarDocumentoUI('${d.id}')">🗑</button>`:''}
+    </div>
+  `).join('');
+}
+async function verDocumento(id){
+  toast('Cargando documento…');
+  try{
+    const r=await api({accion:'obtenerDocumentoArchivo',auth:ST.authCred,id});
+    if(!r.ok){toast('⚠ '+(r.error||'No se pudo abrir el documento'));return}
+    const w=window.open('');
+    if(!w){toast('⚠ El navegador bloqueó la ventana — permite ventanas emergentes para ver documentos');return}
+    if(r.mimeType==='application/pdf'){
+      w.document.write(`<iframe src="data:application/pdf;base64,${r.base64}" style="width:100%;height:100vh;border:0"></iframe>`);
+    }else{
+      w.document.write(`<body style="margin:0;background:#111"><img src="data:${r.mimeType};base64,${r.base64}" style="max-width:100%;display:block;margin:0 auto"/></body>`);
+    }
+  }catch(e){toast('⚠ Error: '+e.message)}
+}
+async function descargarDocumento(id){
+  try{
+    const r=await api({accion:'obtenerDocumentoArchivo',auth:ST.authCred,id});
+    if(!r.ok){toast('⚠ '+(r.error||'No se pudo descargar'));return}
+    const a=document.createElement('a');
+    a.href=`data:${r.mimeType};base64,${r.base64}`;
+    a.download=r.nombreArchivo||'documento';
+    document.body.appendChild(a);a.click();a.remove();
+  }catch(e){toast('⚠ Error: '+e.message)}
+}
+async function eliminarDocumentoUI(id){
+  if(!requiereAdmin())return;
+  if(!confirm('¿Eliminar este documento? No se puede deshacer.'))return;
+  try{
+    const r=await api({accion:'eliminarDocumento',auth:ST.authCred,id});
+    if(!r.ok){toast('⚠ '+(r.error||'No se pudo eliminar'));return}
+    toast('🗑 Documento eliminado');
+    const folio=$('mo-certificar').dataset.folio;
+    if(folio)cargarDocumentosFolio(folio);
+    if($('mo-buscar-docs').classList.contains('show'))buscarDocsGlobal();
+  }catch(e){toast('⚠ Error: '+e.message)}
+}
+
+/* ── Lectura automática (IA) — precarga la Pestaña 2, solo campos vacíos ── */
+async function extraerYAplicar(tipo,base64,mimeType){
+  toast('🤖 Leyendo datos del documento…');
+  try{
+    const r=await api({accion:'extraerDatosDocumento',auth:ST.authCred,tipoDocumento:tipo,base64,mimeType});
+    if(!r.ok){toast('ℹ No se pudo leer automáticamente: '+(r.error||'inténtalo de nuevo más tarde'));return}
+    aplicarExtraccionRC(tipo,r.datos||{});
+  }catch(e){ /* la lectura automática es un plus — si falla, no interrumpe la subida */ }
+}
+function _marcarIA(el){
+  el.classList.add('ia-detectado');
+  const quitar=()=>{el.classList.remove('ia-detectado');el.removeEventListener('input',quitar);el.removeEventListener('change',quitar)};
+  el.addEventListener('input',quitar);
+  el.addEventListener('change',quitar);
+}
+// Solo llena si el campo está vacío — nunca pisa algo ya capturado a mano
+// (ni por un documento anterior ni por el usuario). Regresa 1/0 para contar
+// cuántos campos se aplicaron y avisar con un solo toast al final.
+function _setSiVacio(id,val){
+  const el=$(id);
+  val=(val==null?'':String(val)).trim();
+  if(!el||!val)return 0;
+  if(String(el.value||'').trim())return 0;
+  el.value=val;
+  _marcarIA(el);
+  return 1;
+}
+function aplicarExtraccionRC(tipo,d){
+  let n=0;
+  if(tipo==='ACTA_NACIMIENTO_FINADO'){
+    n+=_setSiVacio('rc-fi-nombres',d.nombres);
+    n+=_setSiVacio('rc-fi-ap1',d.apellidoPaterno);
+    n+=_setSiVacio('rc-fi-ap2',d.apellidoMaterno);
+    n+=_setSiVacio('rc-fi-fecnac',d.fechaNacimiento);
+    n+=_setSiVacio('rc-fi-localidad',d.lugarNacimientoLocalidad);
+    n+=_setSiVacio('rc-fi-municipio',d.lugarNacimientoMunicipio);
+    n+=_setSiVacio('rc-fi-entidad',d.lugarNacimientoEntidad);
+    n+=_setSiVacio('rc-fi-pais',d.lugarNacimientoPais);
+    n+=_setSiVacio('rc-pa-nombre',d.nombrePadre);
+    n+=_setSiVacio('rc-ma-nombre',d.nombreMadre);
+    if($('rc-fi-fecnac').value)rcCalcEdad('fi');
+  }else if(tipo==='INE_FINADO'){
+    n+=_setSiVacio('rc-fi-curp',(d.curp||'').toUpperCase());
+    n+=_setSiVacio('rc-fi-fecnac',d.fechaNacimiento);
+    n+=_setSiVacio('rc-fi-domcalle',d.domicilioCalle);
+    n+=_setSiVacio('rc-fi-domnumero',d.domicilioNumero);
+    n+=_setSiVacio('rc-fi-domcolonia',d.domicilioColonia);
+    n+=_setSiVacio('rc-fi-domlocalidad',d.domicilioLocalidad);
+    n+=_setSiVacio('rc-fi-dommunicipio',d.domicilioMunicipio);
+    n+=_setSiVacio('rc-fi-domentidad',d.domicilioEntidad);
+    if($('rc-fi-fecnac').value)rcCalcEdad('fi');
+  }else if(tipo==='CERTIFICADO_DEFUNCION'){
+    n+=_setSiVacio('rc-fallec-fecha',d.fechaDefuncion);
+    n+=_setSiVacio('rc-fallec-hora',d.horaDefuncion);
+    n+=_setSiVacio('rc-fallec-lugar-detalle',d.lugarDefuncionTexto);
+    n+=_setSiVacio('rc-fallec-certificado',d.numeroCertificado);
+    n+=_setSiVacio('rc-fi-domcalle',d.domicilioCalle);
+    n+=_setSiVacio('rc-fi-domnumero',d.domicilioNumero);
+    n+=_setSiVacio('rc-fi-domcolonia',d.domicilioColonia);
+    n+=_setSiVacio('rc-fi-domlocalidad',d.domicilioLocalidad);
+    n+=_setSiVacio('rc-fi-dommunicipio',d.domicilioMunicipio);
+    n+=_setSiVacio('rc-fi-domentidad',d.domicilioEntidad);
+    if($('rc-fallec-fecha').value)rcCalcEdad('fi');
+  }else if(tipo==='INE_DECLARANTE'){
+    n+=_setSiVacio('rc-decl-nombre',d.nombreCompleto);
+    n+=_setSiVacio('rc-decl-fecnac',d.fechaNacimiento);
+    n+=_setSiVacio('rc-decl-domcalle',d.domicilioCalle);
+    n+=_setSiVacio('rc-decl-domnumero',d.domicilioNumero);
+    n+=_setSiVacio('rc-decl-domcolonia',d.domicilioColonia);
+    n+=_setSiVacio('rc-decl-domlocalidad',d.domicilioLocalidad);
+    n+=_setSiVacio('rc-decl-dommunicipio',d.domicilioMunicipio);
+    n+=_setSiVacio('rc-decl-domentidad',d.domicilioEntidad);
+    if($('rc-decl-fecnac').value)rcCalcEdad('decl');
+  }else if(tipo==='INE_TESTIGO1'||tipo==='INE_TESTIGO2'){
+    const p=tipo==='INE_TESTIGO1'?'test1':'test2';
+    n+=_setSiVacio(`rc-${p}-nombre`,d.nombreCompleto);
+    n+=_setSiVacio(`rc-${p}-curp`,(d.curp||'').toUpperCase());
+    n+=_setSiVacio(`rc-${p}-fecnac`,d.fechaNacimiento);
+    n+=_setSiVacio(`rc-${p}-domcalle`,d.domicilioCalle);
+    n+=_setSiVacio(`rc-${p}-domnumero`,d.domicilioNumero);
+    n+=_setSiVacio(`rc-${p}-domcolonia`,d.domicilioColonia);
+    n+=_setSiVacio(`rc-${p}-domlocalidad`,d.domicilioLocalidad);
+    n+=_setSiVacio(`rc-${p}-dommunicipio`,d.domicilioMunicipio);
+    n+=_setSiVacio(`rc-${p}-domentidad`,d.domicilioEntidad);
+    if($(`rc-${p}-fecnac`).value)rcCalcEdad(p);
+  }
+  toast(n>0?`🤖 ${n} dato(s) detectados en la Pestaña 2 — revísalos antes de guardar`:'ℹ La IA no encontró datos nuevos para agregar');
+}
+
+/* ── Buscador global de documentos (por folio o nombre, ODS + Previsión) ── */
+let _bdTimer=null;
+function buscarDocsGlobal(){
+  clearTimeout(_bdTimer);
+  _bdTimer=setTimeout(_buscarDocsGlobalAhora,300);
+}
+async function _buscarDocsGlobalAhora(){
+  const folio=$('bd-folio').value.trim();
+  const nombre=$('bd-nombre').value.trim();
+  const host=$('bd-resultados');
+  if(!folio&&!nombre){host.innerHTML='<p style="font-size:12px;color:var(--text3)">Escribe un folio o un nombre para buscar.</p>';return}
+  host.innerHTML='<p style="font-size:12px;color:var(--text3)">Buscando…</p>';
+  try{
+    const filtros={};
+    if(folio)filtros.folio=folio;
+    if(nombre)filtros.nombre=nombre;
+    const r=await api({accion:'obtenerDocumentos',auth:ST.authCred,filtros});
+    const docs=(r.ok&&r.documentos)||[];
+    if(!docs.length){host.innerHTML='<p style="font-size:12px;color:var(--text3)">Sin resultados.</p>';return}
+    host.innerHTML=docs.map(d=>`
+      <div class="doc-card">
+        <div class="doc-info">
+          <div class="doc-tipo">${_etiquetaTipoDoc(d.tipoDocumento)} <span class="badge bg-b">${d.app==='PREVISION'?'Previsión':'ODS'} ${d.folio}</span></div>
+          <div class="doc-meta">${d.nombreFinado||d.nombreContratante||'—'} · ${new Date(d.fechaSubida).toLocaleString('es-MX')} · ${_tamanoLegible(d.tamanoBytes)}</div>
+        </div>
+        <button class="bo bsm" onclick="verDocumento('${d.id}')">👁 Ver</button>
+        <button class="bo bsm" onclick="descargarDocumento('${d.id}')">⬇ Descargar</button>
+        ${esAdmin()?`<button class="br bsm" onclick="eliminarDocumentoUI('${d.id}')">🗑</button>`:''}
+      </div>
+    `).join('');
+  }catch(e){host.innerHTML='<p style="font-size:12px;color:var(--red)">Error al buscar: '+e.message+'</p>'}
+}
+function abrirBuscarDocs(){
+  $('bd-folio').value='';$('bd-nombre').value='';
+  $('bd-resultados').innerHTML='<p style="font-size:12px;color:var(--text3)">Escribe un folio o un nombre para buscar.</p>';
+  $('mo-buscar-docs').classList.add('show');
+}
+
 async function guardarCertificacion(){
   const folio=$('mo-certificar').dataset.folio;
   if(!folio){toast('⚠ Folio no encontrado');return}
@@ -3942,6 +4296,7 @@ function _buildInfoMedicoHTML(datos,folio){
       ${fila('¿Falleció en embarazo, parto o puerperio?',datos.fallecioEmbarazoPartoPuerperio==='NO_APLICA'?'No aplica':etiquetaSiNo(datos.fallecioEmbarazoPartoPuerperio))}
       ${subtitulo('DECLARANTE')}
       ${fila('Declarante',datos.declaranteNombre)}
+      ${fila('Parentesco del Declarante',_rcEtiquetaParentesco(datos.declaranteParentesco))}
     </table>
   </div>`;
 }
