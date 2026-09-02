@@ -3968,6 +3968,11 @@ async function onSeleccionArchivoDoc(evt,tipo){
     if(statusEl)statusEl.textContent='Sin subir';
     return;
   }
+  // La subida a Drive y la lectura con IA son independientes (la IA no
+  // necesita que el archivo ya exista en Drive) — se lanzan las dos a la vez
+  // en vez de una tras otra, para no duplicar el tiempo de espera.
+  const meta=DOC_TIPOS_TODOS.find(d=>d.tipo===tipo);
+  const extraccionPromise=(meta&&meta.extrae)?extraerYAplicar(tipo,base64,mimeType):null;
   try{
     const r=await api({
       accion:'subirDocumento',auth:ST.authCred,
@@ -3979,12 +3984,11 @@ async function onSeleccionArchivoDoc(evt,tipo){
     if(!r.ok){toast('⚠ '+(r.error||'No se pudo subir el documento'));if(statusEl)statusEl.textContent='Sin subir';return}
     toast('✅ Documento subido');
     await cargarDocumentosFolio(folio);
-    const meta=DOC_TIPOS_TODOS.find(d=>d.tipo===tipo);
-    if(meta&&meta.extrae)extraerYAplicar(tipo,base64,mimeType);
   }catch(e){
     toast('⚠ Error al subir: '+e.message);
     if(statusEl)statusEl.textContent='Sin subir';
   }
+  if(extraccionPromise)await extraccionPromise;
 }
 let _docsFolioActual=[];
 async function cargarDocumentosFolio(folio){
