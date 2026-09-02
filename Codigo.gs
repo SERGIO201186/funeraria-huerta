@@ -1508,18 +1508,25 @@ function eliminarDocumento(payload) {
 // ============================================================
 const _INE_PROMPT =
   "Esta imagen es una identificación oficial (INE/IFE) mexicana. Lee únicamente " +
-  "el texto que aparece impreso en la credencial. Responde con el nombre completo " +
-  "tal como aparece, la CURP si es legible, la fecha de nacimiento en formato " +
-  "AAAA-MM-DD si es legible, y el domicilio separado en calle, número, colonia, " +
-  "localidad, municipio y entidad federativa, tal como esté impreso (si el " +
-  "domicilio viene en una sola línea, sepáralo de la forma más razonable). Si un " +
-  "dato no aparece o no es legible, regresa una cadena vacía para ese campo — " +
-  "nunca inventes ni completes información que no esté impresa.";
+  "el texto que aparece impreso en la credencial. La credencial imprime primero " +
+  "los apellidos y después el/los nombre(s) — NO los devuelvas concatenados ni en " +
+  "ese orden de impresión: sepáralos en tres campos distintos: nombres, " +
+  "apellidoPaterno y apellidoMaterno. Además responde con: curp tal como esté " +
+  "impresa; sexo como una sola letra 'H' o 'M', exactamente como aparece impresa " +
+  "junto a la palabra SEXO; fechaNacimiento en formato AAAA-MM-DD si es legible; y " +
+  "el domicilio separado en calle, número, colonia, localidad, municipio y entidad " +
+  "federativa, tal como esté impreso (si el domicilio viene en una sola línea, " +
+  "sepáralo de la forma más razonable). Si un dato no aparece o no es legible, " +
+  "regresa una cadena vacía para ese campo — nunca inventes ni completes " +
+  "información que no esté impresa.";
 const _INE_SCHEMA = {
   type: "OBJECT",
   properties: {
-    nombreCompleto: { type: "STRING" },
+    nombres: { type: "STRING" },
+    apellidoPaterno: { type: "STRING" },
+    apellidoMaterno: { type: "STRING" },
     curp: { type: "STRING" },
+    sexo: { type: "STRING" },
     fechaNacimiento: { type: "STRING" },
     domicilioCalle: { type: "STRING" },
     domicilioNumero: { type: "STRING" },
@@ -1557,13 +1564,16 @@ const _ACTA_NACIMIENTO_SCHEMA = {
 };
 const _CERTIFICADO_DEFUNCION_PROMPT =
   "Esta imagen es un certificado de defunción mexicano. Lee únicamente el texto " +
-  "impreso o manuscrito del certificado. Responde con: fecha de defunción en " +
-  "formato AAAA-MM-DD; hora de defunción en formato de 24 horas HH:mm; el lugar " +
-  "de la defunción tal como esté descrito (texto libre, ej. hospital, domicilio); " +
-  "el número de certificado; y si el certificado incluye el domicilio del " +
-  "finado, sepáralo en calle, número, colonia, localidad, municipio y entidad " +
-  "federativa. Si un dato no aparece o no es legible, regresa una cadena vacía — " +
-  "nunca inventes información.";
+  "impreso o manuscrito del certificado — revisa TODA la imagen con cuidado, " +
+  "incluyendo folios, sellos y recuadros pequeños, antes de dar un campo por " +
+  "vacío. Responde con: fecha de defunción en formato AAAA-MM-DD; hora de " +
+  "defunción en formato de 24 horas HH:mm; el lugar de la defunción tal como " +
+  "esté descrito (texto libre, ej. hospital, domicilio); el número/folio del " +
+  "certificado (puede aparecer como 'No.', 'Folio' o similar); y el domicilio " +
+  "habitual del finado que aparezca en el certificado, separado en calle, " +
+  "número, colonia, localidad, municipio y entidad federativa. Si un dato " +
+  "realmente no aparece o no es legible, regresa una cadena vacía — nunca " +
+  "inventes información.";
 const _CERTIFICADO_DEFUNCION_SCHEMA = {
   type: "OBJECT",
   properties: {
