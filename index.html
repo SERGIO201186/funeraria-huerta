@@ -3973,9 +3973,13 @@ async function onSeleccionArchivoDoc(evt,tipo){
   const o=lDB().find(x=>x.folio===folio)||{};
   const statusEl=$('doc-slot-status-'+tipo);
   if(statusEl)statusEl.textContent='Subiendo…';
+  // Los documentos que sí se leen con IA (INE/acta/certificado) llevan más
+  // resolución y calidad — un folio o CURP en letra chica queda ilegible con
+  // la compresión "ligera" que basta para los que solo se guardan.
+  const meta=DOC_TIPOS_TODOS.find(d=>d.tipo===tipo);
   let base64,mimeType;
   try{
-    ({base64,mimeType}=await comprimirImagen(file));
+    ({base64,mimeType}=meta&&meta.extrae?await comprimirImagen(file,2200,0.85):await comprimirImagen(file));
   }catch(e){
     toast('⚠ No se pudo procesar el archivo: '+e.message);
     if(statusEl)statusEl.textContent='Sin subir';
@@ -3984,7 +3988,6 @@ async function onSeleccionArchivoDoc(evt,tipo){
   // La subida a Drive y la lectura con IA son independientes (la IA no
   // necesita que el archivo ya exista en Drive) — se lanzan las dos a la vez
   // en vez de una tras otra, para no duplicar el tiempo de espera.
-  const meta=DOC_TIPOS_TODOS.find(d=>d.tipo===tipo);
   const extraccionPromise=(meta&&meta.extrae)?extraerYAplicar(tipo,base64,mimeType):null;
   try{
     const r=await api({
