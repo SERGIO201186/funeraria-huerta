@@ -5114,7 +5114,13 @@ async function rcSincronizarMapeo(){
   if(!ST.url||!ST.online)return;
   try{
     const r=await api({accion:'obtenerMapeoRC'});
-    if(r.ok&&r.mapeo)sRCMap(Object.assign({},r.mapeo,lRCMap()));
+    // La nube es la fuente de verdad de la calibración compartida — antes
+    // ganaba lo que ya hubiera guardado ESTE celular, así que un punto
+    // viejo/local nunca se enteraba de una corrección hecha desde otro
+    // dispositivo. Ahora gana lo de la nube; lo local solo rellena algún
+    // campo que la nube todavía no tenga (p. ej. una calibración a medias
+    // que aún no se ha guardado).
+    if(r.ok&&r.mapeo)sRCMap(Object.assign({},lRCMap(),r.mapeo));
   }catch(e){}
 }
 async function rcGuardarMapeoEnNube(){
