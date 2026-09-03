@@ -1573,7 +1573,10 @@ const _CERTIFICADO_DEFUNCION_PROMPT =
   "vacío. Responde con: fecha de defunción en formato AAAA-MM-DD; hora de " +
   "defunción en formato de 24 horas HH:mm; el lugar de la defunción tal como " +
   "esté descrito (texto libre, ej. hospital, domicilio); el número/folio del " +
-  "certificado (puede aparecer como 'No.', 'Folio' o similar); y el domicilio " +
+  "certificado (puede estar rotulado como 'No.', 'Folio' o similar) — casi " +
+  "siempre está impreso en la esquina superior derecha del documento, como un " +
+  "número o código corto, a veces junto a un sello: revisa esa zona con " +
+  "cuidado antes de dar este campo por vacío; y el domicilio " +
   "habitual del finado que aparezca en el certificado, separado en calle, " +
   "número, colonia, localidad, municipio y entidad federativa (esta última " +
   "siempre completa, nunca abreviada, ej. 'Veracruz' y no 'VER' o 'Ver.'). Si " +
