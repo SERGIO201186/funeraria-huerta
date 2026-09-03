@@ -4155,7 +4155,7 @@ function aplicarExtraccionRC(tipo,d){
     n+=_setSiVacio('rc-fi-fecnac',_normFecha(d.fechaNacimiento));
     n+=_setSiVacio('rc-fi-localidad',d.lugarNacimientoLocalidad);
     n+=_setSiVacio('rc-fi-municipio',d.lugarNacimientoMunicipio);
-    n+=_setSiVacio('rc-fi-entidad',d.lugarNacimientoEntidad);
+    n+=_setSiVacio('rc-fi-entidad',_expandirEntidad(d.lugarNacimientoEntidad));
     n+=_setSiVacio('rc-fi-pais',d.lugarNacimientoPais);
     n+=_setSiVacio('rc-pa-nombre',d.nombrePadre);
     n+=_setSiVacio('rc-ma-nombre',d.nombreMadre);
@@ -4172,7 +4172,7 @@ function aplicarExtraccionRC(tipo,d){
     n+=_setSiVacio('rc-fi-domcolonia',d.domicilioColonia);
     n+=_setSiVacio('rc-fi-domlocalidad',d.domicilioLocalidad);
     n+=_setSiVacio('rc-fi-dommunicipio',d.domicilioMunicipio);
-    n+=_setSiVacio('rc-fi-domentidad',d.domicilioEntidad);
+    n+=_setSiVacio('rc-fi-domentidad',_expandirEntidad(d.domicilioEntidad));
     if($('rc-fi-fecnac').value)rcCalcEdad('fi');
   }else if(tipo==='CERTIFICADO_DEFUNCION'){
     n+=_setSiVacio('rc-fallec-fecha',_normFecha(d.fechaDefuncion));
@@ -4184,7 +4184,7 @@ function aplicarExtraccionRC(tipo,d){
     n+=_setSiVacio('rc-fi-domcolonia',d.domicilioColonia);
     n+=_setSiVacio('rc-fi-domlocalidad',d.domicilioLocalidad);
     n+=_setSiVacio('rc-fi-dommunicipio',d.domicilioMunicipio);
-    n+=_setSiVacio('rc-fi-domentidad',d.domicilioEntidad);
+    n+=_setSiVacio('rc-fi-domentidad',_expandirEntidad(d.domicilioEntidad));
     if($('rc-fallec-fecha').value)rcCalcEdad('fi');
   }else if(tipo==='INE_DECLARANTE'){
     n+=_setSiVacio('rc-decl-nombre',_nombreCompletoDesdeINE(d));
@@ -4194,7 +4194,7 @@ function aplicarExtraccionRC(tipo,d){
     n+=_setSiVacio('rc-decl-domcolonia',d.domicilioColonia);
     n+=_setSiVacio('rc-decl-domlocalidad',d.domicilioLocalidad);
     n+=_setSiVacio('rc-decl-dommunicipio',d.domicilioMunicipio);
-    n+=_setSiVacio('rc-decl-domentidad',d.domicilioEntidad);
+    n+=_setSiVacio('rc-decl-domentidad',_expandirEntidad(d.domicilioEntidad));
     if($('rc-decl-fecnac').value)rcCalcEdad('decl');
   }else if(tipo==='INE_TESTIGO1'||tipo==='INE_TESTIGO2'){
     const p=tipo==='INE_TESTIGO1'?'test1':'test2';
@@ -4207,7 +4207,7 @@ function aplicarExtraccionRC(tipo,d){
     n+=_setSiVacio(`rc-${p}-domcolonia`,d.domicilioColonia);
     n+=_setSiVacio(`rc-${p}-domlocalidad`,d.domicilioLocalidad);
     n+=_setSiVacio(`rc-${p}-dommunicipio`,d.domicilioMunicipio);
-    n+=_setSiVacio(`rc-${p}-domentidad`,d.domicilioEntidad);
+    n+=_setSiVacio(`rc-${p}-domentidad`,_expandirEntidad(d.domicilioEntidad));
     if($(`rc-${p}-fecnac`).value)rcCalcEdad(p);
   }
   toast(n>0?`🤖 ${n} dato(s) detectados en la Pestaña 2 — revísalos antes de guardar`:'ℹ La IA no encontró datos nuevos para agregar');
@@ -4347,7 +4347,7 @@ function _buildInfoMedicoHTML(datos,folio){
       ${fila('Nombre completo',datos.finadoNombre)}
       ${fila('Estado Civil',etiquetaEdoCivil(datos.finadoEstadoCivil))}
       ${fila('Fecha de Nacimiento',fp(datos.finadoFechaNacimiento))}
-      ${fila('Entidad de Nacimiento',datos.finadoEntidadNacimiento)}
+      ${fila('Entidad de Nacimiento',_expandirEntidad(datos.finadoEntidadNacimiento))}
       ${fila('Grado de Estudios',datos.finadoGradoEstudios)}
       ${fila('Domicilio Habitual',datos.finadoDomicilio)}
       ${fila('Afiliación a Servicios de Salud',datos.finadoAfiliacionSalud)}
@@ -5229,6 +5229,53 @@ function _rcEtiquetaParentesco(v){
 function _rcEtiquetaEdoCivil(v){
   return {SOLTERO:'Soltero(a)',CASADO:'Casado(a)'}[v]||v||'';
 }
+// El formato de Registro Civil exige el nombre completo de la entidad
+// federativa — nunca abreviado. Documentos oficiales (INE, actas) a veces
+// imprimen la entidad abreviada ("VER", "Ver.", "Gro."...); esto expande esa
+// abreviatura al nombre completo, tanto al leer un documento con IA como al
+// imprimir el formato (por si quedó abreviada de antes, a mano o por otra
+// vía). Si no coincide con ninguna abreviatura conocida, regresa el texto
+// tal cual — nunca inventa ni "corrige" un nombre de estado que no reconoce.
+const _ENTIDADES_MX_ABREV={
+  AGS:'Aguascalientes',AGU:'Aguascalientes',
+  BC:'Baja California',BCN:'Baja California',
+  BCS:'Baja California Sur',
+  CAMP:'Campeche',CAM:'Campeche',
+  COAH:'Coahuila',COA:'Coahuila',
+  COL:'Colima',
+  CHIS:'Chiapas',CHP:'Chiapas',
+  CHIH:'Chihuahua',CHH:'Chihuahua',
+  CDMX:'Ciudad de México',DF:'Ciudad de México',DDF:'Ciudad de México',
+  DGO:'Durango',DUR:'Durango',
+  GTO:'Guanajuato',GUA:'Guanajuato',
+  GRO:'Guerrero',
+  HGO:'Hidalgo',HID:'Hidalgo',
+  JAL:'Jalisco',
+  MEX:'México',EDOMEX:'México',
+  MICH:'Michoacán',MIC:'Michoacán',
+  MOR:'Morelos',
+  NAY:'Nayarit',
+  NL:'Nuevo León',NLE:'Nuevo León',
+  OAX:'Oaxaca',
+  PUE:'Puebla',
+  QRO:'Querétaro',QUE:'Querétaro',
+  QROO:'Quintana Roo',QR:'Quintana Roo',ROO:'Quintana Roo',
+  SLP:'San Luis Potosí',
+  SIN:'Sinaloa',
+  SON:'Sonora',
+  TAB:'Tabasco',
+  TAMPS:'Tamaulipas',TAM:'Tamaulipas',
+  TLAX:'Tlaxcala',TLA:'Tlaxcala',
+  VER:'Veracruz',
+  YUC:'Yucatán',
+  ZAC:'Zacatecas'
+};
+function _expandirEntidad(v){
+  v=(v==null?'':String(v)).trim();
+  if(!v)return v;
+  const clave=v.toUpperCase().replace(/\./g,'').replace(/\s+/g,'');
+  return _ENTIDADES_MX_ABREV[clave]||v;
+}
 function _rcFecha(v){
   const s=fechaPlano(v);
   const m=s?String(s).match(/^(\d{4})-(\d{2})-(\d{2})/):null;
@@ -5260,9 +5307,9 @@ function _rcArmarMarcas(rc){
   t('fi_nombres',rc.rcFinadoNombres);t('fi_ap1',rc.rcFinadoApellidoPaterno);t('fi_ap2',rc.rcFinadoApellidoMaterno);
   t('fi_fecnac_dia',fnac.dia);t('fi_fecnac_mes',fnac.mes);t('fi_fecnac_anio',fnac.anio);
   t('fi_edad',rc.rcFinadoEdad);t('fi_nacionalidad',rc.rcFinadoNacionalidad);
-  t('fi_localidad',rc.rcFinadoLocalidadNac);t('fi_municipio',rc.rcFinadoMunicipioNac);t('fi_entidad',rc.rcFinadoEntidadNac);t('fi_pais',rc.rcFinadoPaisNac);
+  t('fi_localidad',rc.rcFinadoLocalidadNac);t('fi_municipio',rc.rcFinadoMunicipioNac);t('fi_entidad',_expandirEntidad(rc.rcFinadoEntidadNac));t('fi_pais',rc.rcFinadoPaisNac);
   t('fi_domicilio',[rc.rcFinadoDomCalle,rc.rcFinadoDomNumero,rc.rcFinadoDomColonia].filter(Boolean).join(', '));
-  t('fi_dom_localidad',rc.rcFinadoDomLocalidad);t('fi_dom_municipio',rc.rcFinadoDomMunicipio);t('fi_dom_entidad',rc.rcFinadoDomEntidad);t('fi_dom_pais',rc.rcFinadoDomPais);
+  t('fi_dom_localidad',rc.rcFinadoDomLocalidad);t('fi_dom_municipio',rc.rcFinadoDomMunicipio);t('fi_dom_entidad',_expandirEntidad(rc.rcFinadoDomEntidad));t('fi_dom_pais',rc.rcFinadoDomPais);
   if(rc.rcFinadoEstadoCivil==='SOLTERO')x('fi_edocivil_soltero');
   if(rc.rcFinadoEstadoCivil==='CASADO')x('fi_edocivil_casado');
 
@@ -5272,7 +5319,7 @@ function _rcArmarMarcas(rc){
     t('cony_nacionalidad',rc.rcConyugeNacionalidad);
     t('cony_fecnac_dia',cnac.dia);t('cony_fecnac_mes',cnac.mes);t('cony_fecnac_anio',cnac.anio);
     t('cony_sexo',rc.rcConyugeSexo);
-    t('cony_localidad',rc.rcConyugeLocalidadNac);t('cony_municipio',rc.rcConyugeMunicipioNac);t('cony_entidad',rc.rcConyugeEntidadNac);t('cony_pais',rc.rcConyugePaisNac);
+    t('cony_localidad',rc.rcConyugeLocalidadNac);t('cony_municipio',rc.rcConyugeMunicipioNac);t('cony_entidad',_expandirEntidad(rc.rcConyugeEntidadNac));t('cony_pais',rc.rcConyugePaisNac);
   }
 
   const panac=_rcFecha(rc.rcPadreFechaNacimiento);
@@ -5280,23 +5327,23 @@ function _rcArmarMarcas(rc){
   t('pa_nacionalidad',rc.rcPadreNacionalidad);
   t('pa_fecnac_dia',panac.dia);t('pa_fecnac_mes',panac.mes);t('pa_fecnac_anio',panac.anio);
   t('pa_sexo',rc.rcPadreSexo);
-  t('pa_localidad',rc.rcPadreLocalidadNac);t('pa_municipio',rc.rcPadreMunicipioNac);t('pa_entidad',rc.rcPadreEntidadNac);t('pa_pais',rc.rcPadrePaisNac);
+  t('pa_localidad',rc.rcPadreLocalidadNac);t('pa_municipio',rc.rcPadreMunicipioNac);t('pa_entidad',_expandirEntidad(rc.rcPadreEntidadNac));t('pa_pais',rc.rcPadrePaisNac);
 
   const manac=_rcFecha(rc.rcMadreFechaNacimiento);
   t('ma_nombre',rc.rcMadreEstado==='FINADO'?`${rc.rcMadreNombre||''} (finada)`.trim():rc.rcMadreNombre);
   t('ma_nacionalidad',rc.rcMadreNacionalidad);
   t('ma_fecnac_dia',manac.dia);t('ma_fecnac_mes',manac.mes);t('ma_fecnac_anio',manac.anio);
   t('ma_sexo',rc.rcMadreSexo);
-  t('ma_localidad',rc.rcMadreLocalidadNac);t('ma_municipio',rc.rcMadreMunicipioNac);t('ma_entidad',rc.rcMadreEntidadNac);t('ma_pais',rc.rcMadrePaisNac);
+  t('ma_localidad',rc.rcMadreLocalidadNac);t('ma_municipio',rc.rcMadreMunicipioNac);t('ma_entidad',_expandirEntidad(rc.rcMadreEntidadNac));t('ma_pais',rc.rcMadrePaisNac);
 
   const declnac=_rcFecha(rc.rcDeclaranteFechaNacimiento);
   t('decl_nombre',rc.rcDeclaranteNombre);t('decl_edad',rc.rcDeclaranteEdad);
   t('decl_parentesco',_rcEtiquetaParentesco(rc.rcDeclaranteParentesco));
   t('decl_nacionalidad',rc.rcDeclaranteNacionalidad);
   t('decl_edocivil',_rcEtiquetaEdoCivil(rc.rcDeclaranteEstadoCivil));
-  t('decl_localidad',rc.rcDeclaranteLocalidadNac);t('decl_municipio',rc.rcDeclaranteMunicipioNac);t('decl_entidad',rc.rcDeclaranteEntidadNac);t('decl_pais',rc.rcDeclarantePaisNac);
+  t('decl_localidad',rc.rcDeclaranteLocalidadNac);t('decl_municipio',rc.rcDeclaranteMunicipioNac);t('decl_entidad',_expandirEntidad(rc.rcDeclaranteEntidadNac));t('decl_pais',rc.rcDeclarantePaisNac);
   t('decl_calle',rc.rcDeclaranteDomCalle);t('decl_numero',rc.rcDeclaranteDomNumero);t('decl_colonia',rc.rcDeclaranteDomColonia);
-  t('decl_dom_localidad',rc.rcDeclaranteDomLocalidad);t('decl_dom_municipio',rc.rcDeclaranteDomMunicipio);t('decl_dom_entidad',rc.rcDeclaranteDomEntidad);t('decl_dom_pais',rc.rcDeclaranteDomPais);
+  t('decl_dom_localidad',rc.rcDeclaranteDomLocalidad);t('decl_dom_municipio',rc.rcDeclaranteDomMunicipio);t('decl_dom_entidad',_expandirEntidad(rc.rcDeclaranteDomEntidad));t('decl_dom_pais',rc.rcDeclaranteDomPais);
   t('decl_fecnac_dia',declnac.dia);t('decl_fecnac_mes',declnac.mes);t('decl_fecnac_anio',declnac.anio);
   t('decl_telefono',rc.rcDeclaranteTelefono);
 
@@ -5324,12 +5371,12 @@ function _rcArmarMarcas(rc){
     t(`${pre}_nombre`,rc[`rc${p}Nombre`]);
     t(`${pre}_fecnac_dia`,tnac.dia);t(`${pre}_fecnac_mes`,tnac.mes);t(`${pre}_fecnac_anio`,tnac.anio);
     t(`${pre}_edad`,rc[`rc${p}Edad`]);t(`${pre}_sexo`,rc[`rc${p}Sexo`]);
-    t(`${pre}_localidad`,rc[`rc${p}LocalidadNac`]);t(`${pre}_municipio`,rc[`rc${p}MunicipioNac`]);t(`${pre}_entidad`,rc[`rc${p}EntidadNac`]);t(`${pre}_pais`,rc[`rc${p}PaisNac`]);
+    t(`${pre}_localidad`,rc[`rc${p}LocalidadNac`]);t(`${pre}_municipio`,rc[`rc${p}MunicipioNac`]);t(`${pre}_entidad`,_expandirEntidad(rc[`rc${p}EntidadNac`]));t(`${pre}_pais`,rc[`rc${p}PaisNac`]);
     t(`${pre}_edocivil`,_rcEtiquetaEdoCivil(rc[`rc${p}EstadoCivil`]));
     t(`${pre}_parentesco`,_rcEtiquetaParentesco(rc[`rc${p}Parentesco`]));
     t(`${pre}_nacionalidad`,rc[`rc${p}Nacionalidad`]);
     t(`${pre}_domicilio`,[rc[`rc${p}DomCalle`],rc[`rc${p}DomNumero`],rc[`rc${p}DomColonia`]].filter(Boolean).join(', '));
-    t(`${pre}_dom_localidad`,rc[`rc${p}DomLocalidad`]);t(`${pre}_dom_municipio`,rc[`rc${p}DomMunicipio`]);t(`${pre}_dom_entidad`,rc[`rc${p}DomEntidad`]);t(`${pre}_dom_pais`,rc[`rc${p}DomPais`]);
+    t(`${pre}_dom_localidad`,rc[`rc${p}DomLocalidad`]);t(`${pre}_dom_municipio`,rc[`rc${p}DomMunicipio`]);t(`${pre}_dom_entidad`,_expandirEntidad(rc[`rc${p}DomEntidad`]));t(`${pre}_dom_pais`,rc[`rc${p}DomPais`]);
   });
 
   t('fun_nombre',rc.rcFunerariaNombre);t('fun_telefono',rc.rcFunerariaTelefono);

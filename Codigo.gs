@@ -1516,9 +1516,11 @@ const _INE_PROMPT =
   "junto a la palabra SEXO; fechaNacimiento en formato AAAA-MM-DD si es legible; y " +
   "el domicilio separado en calle, número, colonia, localidad, municipio y entidad " +
   "federativa, tal como esté impreso (si el domicilio viene en una sola línea, " +
-  "sepáralo de la forma más razonable). Si un dato no aparece o no es legible, " +
-  "regresa una cadena vacía para ese campo — nunca inventes ni completes " +
-  "información que no esté impresa.";
+  "sepáralo de la forma más razonable). La entidad federativa siempre escríbela " +
+  "completa, nunca abreviada — si en la credencial aparece abreviada (ej. 'VER', " +
+  "'Ver.', 'Gro.'), escribe el nombre completo del estado (ej. 'Veracruz', " +
+  "'Guerrero'). Si un dato no aparece o no es legible, regresa una cadena vacía " +
+  "para ese campo — nunca inventes ni completes información que no esté impresa.";
 const _INE_SCHEMA = {
   type: "OBJECT",
   properties: {
@@ -1542,7 +1544,9 @@ const _ACTA_NACIMIENTO_PROMPT =
   "materno de la persona registrada; su fecha de nacimiento en formato AAAA-MM-DD; " +
   "su lugar de nacimiento separado en localidad, municipio, entidad federativa y " +
   "país (si el acta no menciona localidad o municipio por separado, deja esos dos " +
-  "campos vacíos — no adivines); y el nombre completo del padre y de la madre tal " +
+  "campos vacíos — no adivines; la entidad federativa siempre escríbela completa, " +
+  "nunca abreviada, ej. 'Veracruz' y no 'VER' o 'Ver.'); y el nombre completo del " +
+  "padre y de la madre tal " +
   "como aparecen en el acta (si el acta solo registra a uno de los dos, deja el " +
   "otro campo vacío; si no registra a ninguno, deja ambos vacíos). No captures aquí " +
   "si los padres viven o no — eso no aparece en el acta. Si un dato no aparece o no " +
@@ -1571,9 +1575,10 @@ const _CERTIFICADO_DEFUNCION_PROMPT =
   "esté descrito (texto libre, ej. hospital, domicilio); el número/folio del " +
   "certificado (puede aparecer como 'No.', 'Folio' o similar); y el domicilio " +
   "habitual del finado que aparezca en el certificado, separado en calle, " +
-  "número, colonia, localidad, municipio y entidad federativa. Si un dato " +
-  "realmente no aparece o no es legible, regresa una cadena vacía — nunca " +
-  "inventes información.";
+  "número, colonia, localidad, municipio y entidad federativa (esta última " +
+  "siempre completa, nunca abreviada, ej. 'Veracruz' y no 'VER' o 'Ver.'). Si " +
+  "un dato realmente no aparece o no es legible, regresa una cadena vacía — " +
+  "nunca inventes información.";
 const _CERTIFICADO_DEFUNCION_SCHEMA = {
   type: "OBJECT",
   properties: {
