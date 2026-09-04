@@ -622,7 +622,11 @@ button:active{transform:scale(.97)}
         <div class="st">Contrato de Adhesión y Firma del Contratante</div>
         <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Solicita la firma en pantalla y toca "Confirmar Firma" <b>antes</b> de guardar la orden — al guardar, el formulario se limpia para la siguiente orden y una firma capturada después ya no queda ligada a este folio.</p>
         <button class="bo" style="width:100%;margin-bottom:10px" onclick="verExpediente()">📄 Ver / Imprimir Expediente (Hoja, Contrato y Pagaré)</button>
-        <div class="f">
+        <div id="firma-bloqueo" style="text-align:center;padding:16px 12px;border:1px dashed var(--border2);border-radius:var(--rsm);color:var(--text3);font-size:12px">
+          🔒 Cuando termine de capturar los datos, toque este botón para mostrarle el aviso al contratante y habilitar su firma.
+          <button class="bg" style="width:100%;margin-top:10px" onclick="abrirAvisoFirma()">🖊 Habilitar Firma del Cliente</button>
+        </div>
+        <div class="f" id="firma-area" style="display:none">
           <label class="lbl">Firma del Contratante (dibuje con el dedo o stylus)</label>
           <div id="firma-wrap" style="background:#fff;border:1px solid var(--border2);border-radius:var(--rsm);overflow:hidden;touch-action:none">
             <canvas id="firma-canvas" style="width:100%;height:160px;display:block;touch-action:none"></canvas>
@@ -854,6 +858,24 @@ button:active{transform:scale(.97)}
       <button class="bo" onclick="closeMo('mo-post-guardado');enviarODSPorWhatsapp(window._folioPostGuardado)">📤 Enviar ODS por WhatsApp</button>
       <button class="bo" style="opacity:.7" onclick="closeMo('mo-post-guardado')">Cerrar</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL: AVISO PREVIO A LA FIRMA (se muestra al contratante antes de firmar) -->
+<div class="mo" id="mo-aviso-firma">
+  <div class="mb" style="text-align:center">
+    <div style="font-size:36px;margin-bottom:6px">✍️</div>
+    <div class="mt2">Antes de firmar</div>
+    <p style="font-size:13px;color:var(--text2);text-align:left;line-height:1.5;margin:12px 0">
+      A continuación se le pedirá su <b>firma</b>. Con esa misma firma usted acepta el <b>Contrato de Adhesión</b> del servicio contratado y, al mismo tiempo, el <b>Aviso de Privacidad</b> sobre el uso de sus datos personales — una sola firma es válida para ambos documentos.
+    </p>
+    <p style="font-size:13px;color:var(--text2);text-align:left;line-height:1.5;margin:12px 0">
+      Presione <b>"Continuar"</b> para habilitar el recuadro de firma y firme enseguida con su dedo o stylus.
+    </p>
+    <p style="font-size:12px;color:var(--text3);text-align:left;line-height:1.5;margin:12px 0">
+      Recibirá una copia en PDF de estos documentos por WhatsApp, por correo electrónico o de forma física, como usted prefiera.
+    </p>
+    <button class="bg" style="width:100%;margin-top:6px" onclick="continuarAvisoFirma()">Continuar</button>
   </div>
 </div>
 
@@ -2645,6 +2667,7 @@ function limpiarODS(){
   $('km-info').style.display='none';
   toggleMod();toggleDest();
   limpiarFirma();
+  resetGateFirma();
   calcTotal();
   // Si estaba en modo edición, limpiar el formulario también sale de ese modo.
   _folioEnEdicion=null;_solicitudEnUso=null;
@@ -3246,6 +3269,13 @@ function initFirmaCanvas(){
   const wrap=$('firma-wrap');
   const ratio=window.devicePixelRatio||1;
   const w=wrap.clientWidth, h=window.innerWidth>=700?200:160;
+  // Antes de redimensionar (p.ej. al girar la pantalla), rescatamos el trazo ya
+  // dibujado: cambiar width/height del canvas borra su contenido, y eso hacía
+  // que la firma desapareciera al voltear el dispositivo para que firme el cliente.
+  let _firmaRescate=null;
+  if(_firmaTieneTrazo&&canvas.width>0&&canvas.height>0){
+    try{_firmaRescate=canvas.toDataURL('image/png');}catch(e){}
+  }
   canvas.style.height=h+'px';
   canvas.width=w*ratio; canvas.height=h*ratio;
   canvas.style.width=w+'px';
@@ -3253,7 +3283,14 @@ function initFirmaCanvas(){
   ctx.scale(ratio,ratio);
   ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#0f172a';
   _firmaCtx=ctx;
-  _firmaTieneTrazo=false;
+  if(_firmaRescate){
+    const img=new Image();
+    img.onload=()=>{ ctx.drawImage(img,0,0,w,h); };
+    img.src=_firmaRescate;
+    // _firmaTieneTrazo se conserva en true: la firma sigue siendo válida
+  }else{
+    _firmaTieneTrazo=false;
+  }
 
   function pos(e){
     const r=canvas.getBoundingClientRect();
@@ -3271,6 +3308,28 @@ function limpiarFirma(){
   if(_firmaCtx){const c=$('firma-canvas');_firmaCtx.clearRect(0,0,c.width,c.height);}
   _firmaTieneTrazo=false;
   const est=$('firma-estado');if(est){est.textContent='Sin firmar';est.style.color='var(--text3)'}
+}
+
+// El empleado presiona este botón (no el cliente) cuando ya terminó de
+// capturar los datos y va a pedirle al contratante que firme.
+function abrirAvisoFirma(){
+  $('mo-aviso-firma').classList.add('show');
+}
+// El cliente presiona "Continuar" en el aviso: recién ahí se habilita el
+// recuadro de firma. Sin esto no había forma de dejar constancia de que se
+// le mostró el aviso antes de firmar.
+function continuarAvisoFirma(){
+  closeMo('mo-aviso-firma');
+  $('firma-bloqueo').style.display='none';
+  $('firma-area').style.display='';
+  initFirmaCanvas();
+}
+// Vuelve a bloquear el recuadro de firma para la siguiente orden/edición —
+// cada firma debe pasar de nuevo por el aviso, aunque sea el mismo folio.
+function resetGateFirma(){
+  const b=$('firma-bloqueo'),a=$('firma-area');
+  if(b)b.style.display='';
+  if(a)a.style.display='none';
 }
 function guardarFirmaLocal(){
   if(!_firmaTieneTrazo){toast('⚠ Solicite al contratante que firme primero');return}
