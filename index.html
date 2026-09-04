@@ -164,37 +164,43 @@ button:active{transform:scale(.97)}
 .km-info{background:rgba(201,168,76,.1);border:1px solid var(--golddim);border-radius:var(--rsm);padding:9px 12px;font-size:12px;color:var(--gold2);margin-top:6px}
 @media print{#topbar,#sb,#toast,#login,#loader,.bg,.bo,.br,.bgr,.mc{display:none!important}body{background:#fff;color:#000}}
 
-/* ── DOCUMENTOS IMPRIMIBLES (hoja carta, 1 doc = 1 página, sin saltos internos) ── */
+/* ── DOCUMENTOS IMPRIMIBLES (hoja carta, 1 doc = 1 página, sin saltos internos) ──
+   --k es el factor de autoajuste: _ajustarEscalaDocs() lo reduce por JS cuando
+   el contenido de un documento no cabe en una sola hoja (p.ej. una ODS con
+   muchos conceptos), encogiendo fuente/paddings/márgenes de forma proporcional
+   en todo el documento. Así el pie con la firma del cliente y el sello de la
+   funeraria NUNCA se recorta por el overflow:hidden ni se brinca a otra hoja. */
 @page{size:letter;margin:0.45in 0.5in}
 .doc-print{
+  --k:1;
   font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;
   width:7.5in;height:10.1in;margin:0 auto;padding:0;overflow:hidden;
   box-sizing:border-box;page-break-after:always;break-after:page;page-break-inside:avoid;
-  display:flex;flex-direction:column;font-size:10pt;line-height:1.32;
+  display:flex;flex-direction:column;font-size:calc(var(--k)*10pt);line-height:calc(var(--k)*1.32);
 }
 .doc-print:last-child{page-break-after:auto;break-after:auto}
 .doc-print *{box-sizing:border-box}
 .doc-print table{width:100%;border-collapse:collapse}
-.doc-print td,.doc-print th{border:1px solid #c9b87a;padding:4px 6px;font-size:9.5pt;vertical-align:top}
+.doc-print td,.doc-print th{border:1px solid #c9b87a;padding:calc(var(--k)*4px) calc(var(--k)*6px);font-size:calc(var(--k)*9.5pt);vertical-align:top}
 .doc-print thead th{background:#0f172a;color:#fff;font-weight:700}
 .doc-print tbody tr:nth-child(even){background:#f7f3e8}
 .doc-print tfoot td,.doc-print tr.doc-total-row td{background:#0f172a;color:#fff;font-weight:700}
-.doc-hd{text-align:center;border-bottom:3px solid #c9a84c;padding-bottom:6px;margin-bottom:8px;background:linear-gradient(to bottom,#fbf8ef,#fff)}
-.doc-hd h1{font-size:14pt;margin:0;letter-spacing:.04em;color:#0f172a}
-.doc-hd .sub{font-size:9pt;color:#5a5a5a;margin-top:2px}
-.doc-hd .tag{display:inline-block;margin-top:6px;font-size:9pt;font-weight:700;background:#0f172a;color:#e6c96a;padding:3px 12px;border-radius:3px;letter-spacing:.05em;border:1px solid #c9a84c}
-.doc-sec-title{font-size:10pt;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:#0f172a;color:#e6c96a;padding:3px 8px;margin:7px 0 3px;border-left:4px solid #c9a84c}
-.doc-row2{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;font-size:9.5pt;margin-bottom:3px}
+.doc-hd{text-align:center;border-bottom:3px solid #c9a84c;padding-bottom:calc(var(--k)*6px);margin-bottom:calc(var(--k)*8px);background:linear-gradient(to bottom,#fbf8ef,#fff)}
+.doc-hd h1{font-size:calc(var(--k)*14pt);margin:0;letter-spacing:.04em;color:#0f172a}
+.doc-hd .sub{font-size:calc(var(--k)*9pt);color:#5a5a5a;margin-top:calc(var(--k)*2px)}
+.doc-hd .tag{display:inline-block;margin-top:calc(var(--k)*6px);font-size:calc(var(--k)*9pt);font-weight:700;background:#0f172a;color:#e6c96a;padding:calc(var(--k)*3px) calc(var(--k)*12px);border-radius:3px;letter-spacing:.05em;border:1px solid #c9a84c}
+.doc-sec-title{font-size:calc(var(--k)*10pt);font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:#0f172a;color:#e6c96a;padding:calc(var(--k)*3px) calc(var(--k)*8px);margin:calc(var(--k)*7px) 0 calc(var(--k)*3px);border-left:4px solid #c9a84c}
+.doc-row2{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--k)*4px) calc(var(--k)*14px);font-size:calc(var(--k)*9.5pt);margin-bottom:calc(var(--k)*3px)}
 /* Antes usaba margin-top:auto para pegar el pie (firma+sello) hasta abajo
    de la hoja — con una orden de muchos conceptos, el contenido de arriba ya
    ocupaba toda la altura y el auto-margin empujaba el pie MÁS ALLÁ del
    área de 10.1in, apareciendo fuera del margen impreso. Ahora el pie sigue
    el flujo normal justo debajo del contenido: siempre queda pegado a lo
    último capturado, nunca flotando fuera de la hoja. */
-.doc-foot{flex-shrink:0;margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:18px;text-align:center;font-size:8.5pt;padding-top:14px;border-top:1px solid #e6dcb8}
-.doc-foot .ln{border-top:1.5px solid #0f172a;margin-bottom:3px;height:1px}
-.doc-foot img.firma-print{max-height:50px;display:block;margin:0 auto 2px}
-.doc-clause{font-size:8.8pt;text-align:justify;margin-bottom:5px;line-height:1.28}
+.doc-foot{flex-shrink:0;margin-top:calc(var(--k)*14px);display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--k)*18px);text-align:center;font-size:calc(var(--k)*8.5pt);padding-top:calc(var(--k)*14px);border-top:1px solid #e6dcb8}
+.doc-foot .ln{border-top:1.5px solid #0f172a;margin-bottom:calc(var(--k)*3px);height:1px}
+.doc-foot img.firma-print{max-height:calc(var(--k)*50px);display:block;margin:0 auto calc(var(--k)*2px)}
+.doc-clause{font-size:calc(var(--k)*8.8pt);text-align:justify;margin-bottom:calc(var(--k)*5px);line-height:calc(var(--k)*1.28)}
 .doc-clause b{color:#0f172a}
 @media print{
   body *{visibility:hidden}
@@ -3630,6 +3636,29 @@ function _construirExpedienteHTML(o){
   return _docHojaServicio(o) + _docContrato(o) + _docPagare(o) + _docAvisoPrivacidad(o);
 }
 
+// Reduce proporcionalmente el tamaño de fuente y los espaciados de cada
+// .doc-print (vía la variable CSS --k, ver estilos arriba) cuando su
+// contenido no cabe en una sola hoja carta — por ejemplo una ODS con muchos
+// conceptos capturados. Sin esto, el overflow:hidden de .doc-print recortaba
+// en silencio lo que sobraba, incluyendo el pie con la firma del contratante
+// y el sello de la funeraria. Itera pocas veces porque el ajuste de fuente
+// no reduce la altura de forma perfectamente lineal.
+function _ajustarEscalaDocs(root){
+  root.querySelectorAll('.doc-print').forEach(el=>{
+    el.style.setProperty('--k','1');
+    const maxAlto=el.clientHeight;
+    if(!maxAlto)return;
+    for(let i=0;i<4;i++){
+      const alto=el.scrollHeight;
+      if(alto<=maxAlto)break;
+      const kActual=parseFloat(el.style.getPropertyValue('--k'))||1;
+      const kNuevo=Math.max(kActual*(maxAlto/alto)*0.985, 0.7);
+      el.style.setProperty('--k',String(kNuevo));
+      if(kNuevo>=kActual)break; // ya no mejora (llegó al mínimo legible permitido)
+    }
+  });
+}
+
 function verExpediente(){ verExpedienteDeFolio(_folioActual); }
 function verExpedienteDeFolio(folio){
   const db=lDB();
@@ -3641,17 +3670,20 @@ function verExpedienteDeFolio(folio){
 
   // print-area: HTML real, tal cual se imprimirá
   $('print-area').innerHTML = html;
+  _ajustarEscalaDocs($('print-area'));
 
-  // Vista previa a escala dentro del modal: se parsea el DOM real (más robusto que regex)
-  // y cada .doc-print se envuelve en un contenedor ya dimensionado al tamaño escalado,
-  // para que el scale no provoque overflow horizontal ni traslapes verticales.
+  // Vista previa a escala dentro del modal: se clonan los nodos YA AJUSTADOS
+  // de #print-area (no se re-parsea el string) para que la vista previa
+  // refleje el mismo autoajuste que se va a imprimir/descargar. Cada
+  // .doc-print se envuelve en un contenedor ya dimensionado al tamaño
+  // escalado, para que el scale no provoque overflow horizontal ni
+  // traslapes verticales.
   const SCALE=0.42; // 7.5in*0.42≈3.15in de ancho, cabe en pantallas desde ~340px
-  const tmp=document.createElement('div');
-  tmp.innerHTML=html;
-  const docs=tmp.querySelectorAll('.doc-print');
+  const docs=$('print-area').querySelectorAll('.doc-print');
   const wrapDiv=document.createElement('div');
   wrapDiv.style.display='flex';wrapDiv.style.flexDirection='column';wrapDiv.style.gap='14px';wrapDiv.style.alignItems='center';
-  docs.forEach(d=>{
+  docs.forEach(orig=>{
+    const d=orig.cloneNode(true);
     const box=document.createElement('div');
     box.style.width=(7.5*SCALE)+'in';
     box.style.height=(10.1*SCALE)+'in';
