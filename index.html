@@ -3536,8 +3536,39 @@ function _docPagare(o){
   </div>`;
 }
 
+// ── DOCUMENTO 4: AVISO DE PRIVACIDAD (simplificado) ──
+// Se anexa siempre al expediente — impreso físicamente o mandado junto con
+// el PDF por WhatsApp — para que quede entregado en el momento, tal como lo
+// exige la LFPDPPP, y no dependa de que alguien vea el cartel de la oficina.
+function _docAvisoPrivacidad(o){
+  return `
+  <div class="doc-print">
+    <div class="doc-hd">
+      <h1>AVISO DE PRIVACIDAD SIMPLIFICADO</h1>
+      <div class="sub">${FUNERARIA_ADDR}</div>
+      <div class="tag">FOLIO — ${o.folio||_folioActual}</div>
+    </div>
+    <p class="doc-clause"><b>SERVICIOS FUNERARIOS HUERTA S.A. DE C.V.</b>, con domicilio arriba indicado, es responsable
+    del tratamiento de sus datos personales.</p>
+    <p class="doc-clause">Recabamos sus datos personales —nombre, domicilio, teléfono, identificación oficial y, en su
+    caso, una fotografía para verificar su identidad al firmar— con las siguientes finalidades: (a) elaborar y ejecutar
+    el contrato de servicios funerarios o de previsión funeraria que usted solicita; (b) realizar los trámites
+    necesarios ante el Registro Civil y otras autoridades relacionadas con el servicio; y (c) dar seguimiento a pagos,
+    abonos y garantías derivados de su contrato.</p>
+    <p class="doc-clause">No transferimos sus datos a terceros, salvo cuando una autoridad competente lo requiera
+    conforme a la ley (por ejemplo, el Registro Civil).</p>
+    <p class="doc-clause">Usted puede conocer el Aviso de Privacidad Integral, así como ejercer sus derechos de
+    Acceso, Rectificación, Cancelación u Oposición (derechos ARCO), o revocar su consentimiento, solicitándolo
+    directamente con nuestro personal en cualquiera de nuestras oficinas, o llamando al 2281845114.</p>
+    <div style="font-size:9.5pt;margin-top:14px">
+    <div><b>CLIENTE CONTRATANTE:</b> ${(o.contratante||'—').toUpperCase()}</div>
+    <div><b>FECHA:</b> ${(o.fechaCreacion||'').slice(0,10)||hoy()}</div>
+    </div>
+  </div>`;
+}
+
 function _construirExpedienteHTML(o){
-  return _docHojaServicio(o) + _docContrato(o) + _docPagare(o);
+  return _docHojaServicio(o) + _docContrato(o) + _docPagare(o) + _docAvisoPrivacidad(o);
 }
 
 function verExpediente(){ verExpedienteDeFolio(_folioActual); }
