@@ -1720,6 +1720,23 @@ document.addEventListener('keydown', function(e){
   else if(e.key==='Enter'){e.preventDefault();doLogin();}
 });
 
+// El servidor guarda PIN/contraseña hasheados ("h1:<salt>:<hash>", ver
+// Codigo.gs) — la copia local de Colaboradores (usada para el login sin
+// conexión) recibe esos mismos valores hasheados, así que la comparación de
+// respaldo local también tiene que saber verificarlos, no solo comparar
+// texto plano.
+async function _sha256Hex(str){
+  const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function _coincideCredencialLocal(valorPlano, valorGuardado){
+  if(!valorPlano||!valorGuardado) return false;
+  if(typeof valorGuardado==='string' && valorGuardado.indexOf('h1:')===0 && valorGuardado.split(':').length===3){
+    const partes=valorGuardado.split(':');
+    return ('h1:'+partes[1]+':'+await _sha256Hex(String(valorPlano)+':'+partes[1]))===valorGuardado;
+  }
+  return String(valorGuardado)===String(valorPlano); // cuenta vieja aún sin migrar
+}
 async function doLogin(){
   const pin=ST.pin,user=($('l-user')||{value:''}).value.trim(),pass=($('l-pass')||{value:''}).value;
   if(!pin&&!user){toast('Ingresa PIN o usuario');return}
@@ -1727,12 +1744,12 @@ async function doLogin(){
 
   // Local first
   const emps=lEmp();
-  const local=emps.find(e=>{
-    if(String(e.estatus)!=='ACTIVO') return false;
-    if(pin&&String(e.pin)===String(pin)) return true;
-    if(user&&pass&&String(e.usuario)===user&&String(e.contrasena)===pass) return true;
-    return false;
-  });
+  let local=null;
+  for(const e of emps){
+    if(String(e.estatus)!=='ACTIVO') continue;
+    if(pin && await _coincideCredencialLocal(pin,e.pin)){local=e;break}
+    if(user&&pass&&String(e.usuario)===user && await _coincideCredencialLocal(pass,e.contrasena)){local=e;break}
+  }
   if(local){startSession(local, pin?{pin}:{usuario:user,contrasena:pass});return}
 
   // El PIN maestro fijo "0000" se quitó por seguridad: un valor fijo dentro
@@ -2889,7 +2906,7 @@ function elimODS(folio){
   // lDB(), así que sincronizarTodo() nunca se enteraría de que se borró
   // (solo manda lo que SÍ tiene localmente). Por eso aquí se avisa al
   // servidor directamente, sin esperar a la siguiente sincronización.
-  if(ST.url&&ST.online) api({accion:'eliminarODS',folio}).catch(()=>{});
+  if(ST.url&&ST.online) api({accion:'eliminarODS',folio,auth:ST.authCred}).catch(()=>{});
   closeMo('mo-ods');cargarODS();updDash();toast('ODS eliminada')
 }
 
@@ -3041,7 +3058,7 @@ async function cargarAlertaConfig(){
   if(!ST.url){el.textContent='Configura el enlace de Apps Script primero.';return}
   if(!ST.online){el.textContent='Sin conexión: no se puede consultar el estado de alertas.';return}
   try{
-    const r=await api({accion:'obtenerAlertaConfig'});
+    const r=await api({accion:'obtenerAlertaConfig',auth:ST.authCred});
     if(r.ok){
       $('al-email').value=r.email||'';
       el.textContent=r.activo?`🟢 Alertas diarias activas${r.email?' · '+r.email:''}`:'🔘 Alertas diarias desactivadas';
@@ -3063,7 +3080,7 @@ async function guardarAlertaEmail(activar){
   if(!email){toast('⚠ Ingresa un correo');return}
   toast('⏳ Guardando…',1500);
   try{
-    const r=await api({accion:'guardarAlertaConfig',datos:{email,activo:activar}});
+    const r=await api({accion:'guardarAlertaConfig',datos:{email,activo:activar},auth:ST.authCred});
     if(r.ok){toast('✅ '+r.mensaje);cargarAlertaConfig();}
     else mostrarErrorAlerta(r);
   }catch(e){mostrarErrorAlerta(null,e)}
@@ -3075,9 +3092,9 @@ async function probarAlertaPendientes(){
   toast('⏳ Enviando correo de prueba…',2500);
   try{
     // Guarda el correo (sin activar/desactivar el disparador diario) antes de mandar la prueba.
-    const rc=await api({accion:'guardarAlertaConfig',datos:{email}});
+    const rc=await api({accion:'guardarAlertaConfig',datos:{email},auth:ST.authCred});
     if(!rc.ok){mostrarErrorAlerta(rc);return}
-    const r=await api({accion:'enviarAlertaPrueba'});
+    const r=await api({accion:'enviarAlertaPrueba',auth:ST.authCred});
     if(r.ok)toast(`✅ ${r.mensaje} (${r.total} pendientes)`);
     else mostrarErrorAlerta(r);
   }catch(e){mostrarErrorAlerta(null,e)}
@@ -5235,7 +5252,7 @@ function rcPos(id){
 async function rcSincronizarMapeo(){
   if(!ST.url||!ST.online)return;
   try{
-    const r=await api({accion:'obtenerMapeoRC'});
+    const r=await api({accion:'obtenerMapeoRC',auth:ST.authCred});
     // La nube es la fuente de verdad de la calibración compartida — antes
     // ganaba lo que ya hubiera guardado ESTE celular, así que un punto
     // viejo/local nunca se enteraba de una corrección hecha desde otro
@@ -5248,7 +5265,7 @@ async function rcSincronizarMapeo(){
 async function rcGuardarMapeoEnNube(){
   if(!ST.url||!ST.online)return false;
   try{
-    const r=await api({accion:'guardarMapeoRC',mapeo:lRCMap()});
+    const r=await api({accion:'guardarMapeoRC',mapeo:lRCMap(),auth:ST.authCred});
     // El servidor fusiona (nunca sobreescribe) y regresa el resultado ya
     // combinado con lo que hayan calibrado otros dispositivos — se adopta
     // aquí para que este mismo dispositivo también quede al día.
@@ -5304,7 +5321,7 @@ async function mapRestablecerTodo(){
   // de verdad en el servidor — por eso usa su propia acción en vez de
   // guardarMapeoRC con un objeto vacío (fusionar un {} no borra nada).
   if(ST.url&&ST.online){
-    try{await api({accion:'reiniciarMapeoRC'})}catch(e){}
+    try{await api({accion:'reiniciarMapeoRC',auth:ST.authCred})}catch(e){}
   }
   toast('✅ Calibración restablecida en todos los dispositivos');
 }
