@@ -296,11 +296,31 @@ function doPost(e) {
 
     // ── NOTIFICACIONES AL ADMINISTRADOR (portado de Previsión) ── usa payload.action,
     // no payload.accion — así se manda desde la app de Previsión desde siempre.
+    // Exige sesión real: antes cualquiera con la URL podía mandar un correo con
+    // GmailApp.sendEmail a cualquier dirección con solo POSTear {action:'notify'}.
     if (payload.action === 'notify' && payload.adminEmail && payload.tipo) {
+      if (!buscarColaboradorPorAuth(payload.auth)) {
+        return jsonOut({ ok:false, mensaje:"No autorizado. Vuelve a iniciar sesión." });
+      }
       return jsonOut(_notificarAdminPrevision(payload));
     }
 
     let result;
+
+    // ── CANDADO GENERAL (deny-by-default) ──────────────────────────────────
+    // El despliegue de este Web App es "Acceso: Cualquier persona (incluso
+    // anónima)" — antes, la mayoría de las acciones (guardarODS, eliminarODS,
+    // obtenerCertificaciones con datos de Registro Civil, guardarPrevision,
+    // etc.) NO revisaban ninguna credencial: bastaba con conocer esta URL
+    // para leer o borrar cualquier orden/contrato/certificación de cualquier
+    // cliente. Ahora TODA acción exige una credencial real de un colaborador
+    // activo (PIN o usuario+contraseña, en payload.auth o payload.adminAuth —
+    // varias acciones ya mandaban esta última), salvo las 4 que por diseño
+    // deben poder llamarse antes de haber iniciado sesión.
+    const ACCIONES_PUBLICAS = ["ping", "validarAcceso", "solicitarAccesoDispositivo", "obtenerConfigPagos"];
+    if (ACCIONES_PUBLICAS.indexOf(accion) === -1 && !buscarColaboradorPorAuth(payload.auth || payload.adminAuth)) {
+      return jsonOut({ ok:false, mensaje:"No autorizado. Vuelve a iniciar sesión." });
+    }
 
     switch (accion) {
       case "ping":                          result = { ok:true, mensaje:"Servidor Huerta v2 activo ✓" }; break;
@@ -696,10 +716,82 @@ function logActividad(accion, usuario, detalle) {
 }
 
 // ============================================================
+//  HASHING DE CREDENCIALES (PIN / CONTRASEÑA)
+//  Antes se guardaban y comparaban en texto plano en la hoja Colaboradores
+//  (cualquiera con acceso a la hoja veía el PIN/contraseña de todo el
+//  personal). Formato de almacenamiento: "h1:<saltHex>:<hashHex>" — nunca
+//  colisiona con un PIN/contraseña en texto plano real. Las credenciales
+//  viejas (de antes de este cambio) se siguen aceptando UNA vez más: si
+//  coinciden en texto plano, se re-guardan ya hasheadas en ese mismo
+//  instante (ver _migrarCredencialSiHaceFalta) — nadie se queda fuera ni
+//  hace falta resetear PIN/contraseña a nadie.
+// ============================================================
+const _HASH_PREFIX = "h1:";
+
+function _esCredencialHasheada(v) {
+  return typeof v === 'string' && v.indexOf(_HASH_PREFIX) === 0 && v.split(':').length === 3;
+}
+function _bytesAHex(bytes) {
+  return bytes.map(function(b) { return ((b & 0xFF) + 0x100).toString(16).substring(1); }).join('');
+}
+function _hashCredencial(valorPlano, saltHex) {
+  const salt = saltHex || Utilities.getUuid().replace(/-/g, ''); // 32 chars hex, suficiente como sal
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(valorPlano) + ':' + salt, Utilities.Charset.UTF_8);
+  return _HASH_PREFIX + salt + ':' + _bytesAHex(digest);
+}
+// true si valorPlano coincide con lo guardado, venga ya hasheado o (cuentas
+// viejas aún no migradas) todavía en texto plano.
+function _coincideCredencial(valorPlano, valorGuardado) {
+  if (!valorPlano || !valorGuardado) return false;
+  if (_esCredencialHasheada(valorGuardado)) {
+    const partes = valorGuardado.split(':');
+    return _hashCredencial(valorPlano, partes[1]) === valorGuardado;
+  }
+  return String(valorGuardado) === String(valorPlano);
+}
+// Reescribe en la hoja el campo (pin/contrasena) de la fila indicada con su
+// forma hasheada, solo si todavía estaba en texto plano. rowIdx es el índice
+// dentro de data[] (fila real de la hoja = rowIdx+1).
+function _migrarCredencialSiHaceFalta(sh, headers, rowIdx, campo, valorPlano, valorGuardado) {
+  if (_esCredencialHasheada(valorGuardado)) return;
+  const col = headers.indexOf(campo);
+  if (col < 0) return;
+  sh.getRange(rowIdx + 1, col + 1).setValue(_hashCredencial(valorPlano));
+}
+
+// ============================================================
+//  LÍMITE DE INTENTOS DE LOGIN (fuerza bruta de PIN/contraseña)
+//  Apps Script no expone la IP de quien llama, así que no se puede limitar
+//  por origen — se limita por credencial intentada (protege una cuenta
+//  puntual de ataque dirigido) y de forma global (frena barrer todo el
+//  espacio de PINs de 4 dígitos a fuerza bruta).
+// ============================================================
+function _loginBloqueado(payload) {
+  const cache = CacheService.getScriptCache();
+  const credKey = 'loginFail_' + String(payload.pin || payload.usuario || 'anon');
+  const intentosCred = Number(cache.get(credKey) || 0);
+  const intentosGlobal = Number(cache.get('loginFailGlobal') || 0);
+  return (intentosCred >= 8 || intentosGlobal >= 40) ? credKey : null;
+}
+function _registrarLoginFallido(credKey) {
+  const cache = CacheService.getScriptCache();
+  cache.put(credKey, String(Number(cache.get(credKey) || 0) + 1), 300); // 5 min
+  cache.put('loginFailGlobal', String(Number(cache.get('loginFailGlobal') || 0) + 1), 300);
+}
+function _limpiarLoginFallido(credKey) {
+  CacheService.getScriptCache().remove(credKey);
+}
+
+// ============================================================
 //  VALIDAR ACCESO – PIN o usuario+contraseña
 //  Funciona para AMBAS aplicaciones
 // ============================================================
 function validarAcceso(payload) {
+  const credKey = 'loginFail_' + String(payload.pin || payload.usuario || 'anon');
+  if (_loginBloqueado(payload)) {
+    return { ok:false, mensaje:"Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo." };
+  }
+
   const sh   = getEmpSh();
   const data = sh.getDataRange().getValues();
   if (data.length <= 1) return { ok:false, mensaje:"Sin colaboradores registrados" };
@@ -710,16 +802,21 @@ function validarAcceso(payload) {
     if (!_esActivo(e.estatus)) continue;
 
     // Por PIN
-    if (payload.pin && String(e.pin) === String(payload.pin)) {
+    if (payload.pin && _coincideCredencial(payload.pin, e.pin)) {
+      _migrarCredencialSiHaceFalta(sh, headers, i, 'pin', payload.pin, e.pin);
+      _limpiarLoginFallido(credKey);
       return { ok:true, colaborador: _empPublic(e) };
     }
     // Por usuario + contraseña
     if (payload.usuario && payload.contrasena &&
         String(e.usuario) === String(payload.usuario) &&
-        String(e.contrasena) === String(payload.contrasena)) {
+        _coincideCredencial(payload.contrasena, e.contrasena)) {
+      _migrarCredencialSiHaceFalta(sh, headers, i, 'contrasena', payload.contrasena, e.contrasena);
+      _limpiarLoginFallido(credKey);
       return { ok:true, colaborador: _empPublic(e) };
     }
   }
+  _registrarLoginFallido(credKey);
   return { ok:false, mensaje:"Credenciales incorrectas o colaborador inactivo" };
 }
 function _empPublic(e) {
@@ -766,10 +863,10 @@ function buscarColaboradorPorAuth(auth) {
   for (let i = 1; i < data.length; i++) {
     const e = toObj(headers, data[i]);
     if (!_esActivo(e.estatus)) continue;
-    if (auth.pin && String(e.pin) === String(auth.pin)) return e;
+    if (auth.pin && _coincideCredencial(auth.pin, e.pin)) return e;
     if (auth.usuario && auth.contrasena &&
         String(e.usuario) === String(auth.usuario) &&
-        String(e.contrasena) === String(auth.contrasena)) return e;
+        _coincideCredencial(auth.contrasena, e.contrasena)) return e;
   }
   return null;
 }
@@ -963,6 +1060,11 @@ function guardarColaborador(datos, quienGuardaEsAdmin) {
   if (!quienGuardaEsAdmin && _esPuestoAdmin(datos.puesto)) {
     return { ok:false, mensaje:"No autorizado: solo un Administrador puede asignar ese puesto." };
   }
+  // Nunca se guarda PIN/contraseña en texto plano. Si ya vienen hasheados
+  // (p.ej. porque el cliente solo está reenviando de vuelta lo mismo que el
+  // servidor le entregó en una sincronización) se dejan tal cual.
+  if (datos.pin && !_esCredencialHasheada(datos.pin)) datos.pin = _hashCredencial(datos.pin);
+  if (datos.contrasena && !_esCredencialHasheada(datos.contrasena)) datos.contrasena = _hashCredencial(datos.contrasena);
   const sh = getEmpSh();
   const headers = headersReales(sh);
   const idx = findRow(sh, "idColaborador", datos.idColaborador);
