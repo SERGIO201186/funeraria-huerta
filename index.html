@@ -2581,7 +2581,17 @@ async function guardarODS(){
     }
     reservarPiezasDeOrden(d).then(()=>cargarCatalogoTienda()); // aparta la pieza y refresca el inventario visible
     toast(`✅ ${d.folio} guardada`);
-    if(ST.online&&ST.url)sincronizarTodo(true);
+    // Aviso NO bloqueante si la sincronización falla: sin esto, una orden que
+    // no logra subir a la nube por una falla de red/servidor se queda solo en
+    // este dispositivo (encolada, sí, pero invisible) hasta el próximo sync
+    // automático — y quien la capturó no tiene forma de saber que otros
+    // dispositivos todavía no la ven, porque el toast de "guardada" de arriba
+    // solo confirma el guardado LOCAL.
+    if(ST.online&&ST.url){
+      sincronizarTodo(true).then(ok=>{
+        if(!ok)toast(`⚠ ${d.folio} se guardó en este dispositivo, pero no se pudo confirmar en la nube — revisa tu conexión, se reintentará solo`,4500);
+      });
+    }
     const folioGuardado=d.folio;
     _firmaPendiente=null;
     _folioActual=genFolio();
@@ -4218,7 +4228,13 @@ async function extraerYAplicar(tipo,base64,mimeType){
     const r=await api({accion:'extraerDatosDocumento',auth:ST.authCred,tipoDocumento:tipo,base64,mimeType});
     if(!r.ok){toast('ℹ No se pudo leer automáticamente: '+(r.error||'inténtalo de nuevo más tarde'));return}
     aplicarExtraccionRC(tipo,r.datos||{});
-  }catch(e){ /* la lectura automática es un plus — si falla, no interrumpe la subida */ }
+  }catch(e){
+    // La lectura automática es un plus — si falla, no interrumpe la subida del
+    // documento (que ya corrió aparte), pero SÍ hay que avisar: un catch
+    // silencioso aquí deja a quien capturó sin saber que debe llenar la
+    // Pestaña 2 a mano porque la IA nunca llegó a intentarlo.
+    toast('ℹ No se pudo leer automáticamente (sin conexión con el servicio) — llena la Pestaña 2 a mano');
+  }
 }
 function _marcarIA(el){
   el.classList.add('ia-detectado');
