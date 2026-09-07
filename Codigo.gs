@@ -85,7 +85,14 @@ const ODS_COLS = [
   // para no perder los datos ya guardados en órdenes viejas).
   "lugSepelio","crematorio","fechaCeremonia","salidaTraslado","horaMisa","horaCeremonia",
   "fechaSepelio","horaSepelio","fechaCremacion","salidaCremacion","horaMisaCrem","horaCremacion",
-  "foraneoLugarSalida","foraneoHoraSalida",
+  "foraneoLugarSalida","foraneoHoraSalida","foraneoFechaSalida",
+  // Traslado foráneo: dónde se realizará la velación (en destino, al
+  // terminar trámites, o localmente en funeraria/domicilio) y si habrá
+  // sepelio en el destino — de ser así, su propia logística (fecha, horas,
+  // iglesia), independiente de "Logística de Sepelio/Cremación" de arriba
+  // (esa es para cuando el sepelio/cremación es local).
+  "trasladoVelacionLugar","trasladoVelacionNombre",
+  "trasladoRealizaSepelio","trasladoSepelioFecha","trasladoSepelioHoraSalida","trasladoSepelioHoraMisa","trasladoIglesia","trasladoSepelioHora",
   "anotaciones","estatusEquipo","estatus",
   "firmaContratanteB64","firmaFecha",
   "creadoPor","fechaCreacion","fechaActualizacion"
@@ -2258,7 +2265,9 @@ const GRUPOS_ODS = {
   "Costos del Servicio": ["costoAtaud","costoAdicionalCremacion","costoUrna","costoUrnaCambio","costoEmbalsamado","costoTramites"],
   "Velación y Equipo": ["modalidadVelacion","equipoVelacion","estatusEquipo","fechaInstalacion","fechaRecoleccion","salaVelacion","costoSala","insumos"],
   "Logística de Sepelio/Cremación": ["lugSepelio","crematorio","fechaCeremonia","salidaTraslado","horaMisa","horaCeremonia"],
-  "Traslado": ["destinoTipo","destinoNombre","kmTraslado","costoTraslado","excesoPeso","costoExcesoPeso","objetoCuerpo","costoObjetoCuerpo","foraneoLugarSalida","foraneoHoraSalida"],
+  "Traslado": ["destinoTipo","destinoNombre","kmTraslado","costoTraslado","excesoPeso","costoExcesoPeso","objetoCuerpo","costoObjetoCuerpo",
+    "foraneoLugarSalida","foraneoFechaSalida","foraneoHoraSalida","trasladoVelacionLugar","trasladoVelacionNombre",
+    "trasladoRealizaSepelio","trasladoSepelioFecha","trasladoSepelioHoraSalida","trasladoSepelioHoraMisa","trasladoIglesia","trasladoSepelioHora"],
   "Financiero": ["subtotal","descuento","iva","otrosCargos","totalGeneral","porcentajeAnticipo","anticipo","restante"],
   "Pagaré": ["tienePagare","montoPagare","nombreDeudor","telefonoDeudor","ineDeudor","vencimientoPagare","domicilioDeudor","cantidadLetras"],
   "Firma y Notas": ["anotaciones","firmaContratanteB64","firmaFecha"]
@@ -2317,8 +2326,9 @@ function previsualizarReorganizacionODS() {
             "costoTramites","costoSala","costoTraslado","costoExcesoPeso","costoObjetoCuerpo","otrosCargos",
             "subtotal","descuento","iva","totalGeneral","anticipo","restante","montoPagare"],
     date: ["fechaInstalacion","fechaRecoleccion","fechaCreacion","fechaActualizacion","fechaCeremonia",
-           "vencimientoPagare","firmaFecha"],
-    time: ["salidaTraslado","horaMisa","horaCeremonia","foraneoHoraSalida"]
+           "vencimientoPagare","firmaFecha","foraneoFechaSalida","trasladoSepelioFecha"],
+    time: ["salidaTraslado","horaMisa","horaCeremonia","foraneoHoraSalida",
+           "trasladoSepelioHoraSalida","trasladoSepelioHoraMisa","trasladoSepelioHora"]
   });
 
   // Un color de encabezado distinto por grupo, para que se note la
