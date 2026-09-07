@@ -156,6 +156,7 @@ button:active{transform:scale(.97)}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 /* OFFLINE */
 #offbar{background:var(--red2);color:#fff;text-align:center;font-size:12px;padding:5px;display:none}
+#pendbar{background:#92650c;color:#fff;text-align:center;font-size:12px;padding:5px;display:none}
 /* LOADER */
 #loader{position:fixed;inset:0;background:var(--bg);z-index:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px}
 .spin{width:38px;height:38px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:sp .7s linear infinite}
@@ -214,6 +215,7 @@ button:active{transform:scale(.97)}
 
 <div id="loader"><div class="spin"></div><div style="color:var(--text2);font-size:13px">Cargando sistema Huerta…</div></div>
 <div id="offbar">Sin conexión — Modo offline activo</div>
+<div id="pendbar">⏳ Este dispositivo está pendiente de autorización — puedes consultar información, pero tus cambios NO se guardan en la nube hasta que un administrador lo autorice</div>
 
 <!-- ═══ LOGIN ═══ -->
 <div id="login">
@@ -803,6 +805,12 @@ button:active{transform:scale(.97)}
           <li>La primera vez que corra, migra solo los colaboradores que ya tenías en la hoja "EMPLEADOS" hacia la nueva hoja compartida "Colaboradores" — no hay que capturarlos de nuevo</li>
         </ol>
         <button class="bo" style="width:100%;margin-top:12px" onclick="copiarInstrucciones()">📋 Copiar ruta del archivo Code.gs</button>
+      </div>
+      <div class="card">
+        <div class="st">📱 Dispositivos autorizados</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Cada celular/computadora que inicia sesión aquí queda registrado. Uno nuevo entra como <b>Pendiente</b> — puede consultar información, pero no puede guardar nada hasta que lo autorices aquí. Renómbralos para reconocer cuál es cuál (ej. "Celular Sergio", "PC mostrador").</p>
+        <button class="bo" style="width:100%;margin-bottom:10px" onclick="cargarDispositivosApp()">🔄 Actualizar lista</button>
+        <div id="disp-app-lista" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
       <div class="card" style="border-color:var(--red)">
         <div class="st" style="color:var(--red)">🛡 Cerrar todas las sesiones</div>
@@ -1559,6 +1567,45 @@ const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync',
 // Admin en CUALQUIER dispositivo sin pedir nada) — aquí cada quien solo
 // recupera SU PROPIA sesión, en el mismo equipo donde ya inició sesión una vez.
 const SESK='huerta_session_v1', AUTHK='huerta_authcred_v1', EPK='huerta_session_epoch';
+// Identifica a ESTE dispositivo ante el backend para el control de acceso
+// por equipo (ver "CONTROL DE ACCESO POR DISPOSITIVO" en Codigo.gs) — se
+// genera una sola vez por navegador/instalación y viaja en cada llamada a
+// la API vía api(). Es un valor aleatorio sin relación con hardware/IP
+// (Apps Script no expone ninguna de las dos): identifica "este navegador
+// en este equipo", no a la persona que lo usa (eso ya lo hace la
+// credencial de login).
+const DIDK='huerta_device_id_v1', DNK='huerta_device_nombre_v1';
+function obtenerDeviceIdApp(){
+  let id=localStorage.getItem(DIDK);
+  if(!id){
+    id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():('dev-'+Date.now()+'-'+Math.random().toString(16).slice(2));
+    localStorage.setItem(DIDK,id);
+  }
+  return id;
+}
+// Nombre sugerido la primera vez que este equipo se conecta — una pista
+// razonable de qué dispositivo es (nunca perfecta); el administrador puede
+// renombrarlo desde Configuración → Dispositivos autorizados una vez que
+// reconozca cuál es cuál.
+function nombreDispositivoSugerido(){
+  const guardado=localStorage.getItem(DNK);
+  if(guardado)return guardado;
+  const ua=navigator.userAgent||'';
+  let so='Equipo';
+  if(/Android/i.test(ua))so='Android';
+  else if(/iPhone|iPad|iPod/i.test(ua))so='iPhone/iPad';
+  else if(/Windows/i.test(ua))so='Windows';
+  else if(/Macintosh/i.test(ua))so='Mac';
+  else if(/Linux/i.test(ua))so='Linux';
+  let nav='';
+  if(/Edg\//i.test(ua))nav='Edge';
+  else if(/Chrome\//i.test(ua))nav='Chrome';
+  else if(/Firefox\//i.test(ua))nav='Firefox';
+  else if(/Safari\//i.test(ua))nav='Safari';
+  const nombre=`${so}${nav?' · '+nav:''}`;
+  localStorage.setItem(DNK,nombre);
+  return nombre;
+}
 // Cierre de sesión por inactividad: si no hay clics/teclas/toques durante
 // SESSION_IDLE_MS, o si la app estuvo cerrada más tiempo que eso, se pide el PIN
 // de nuevo en vez de dejar la sesión abierta indefinidamente en el dispositivo.
@@ -1691,7 +1738,15 @@ window.addEventListener('offline',()=>setOnline(false));
 /* ── API ── */
 async function api(body){
   if(!ST.url) throw new Error('URL no configurada');
-  const r=await fetch(ST.url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(body)});
+  // miDispositivoId/miDispositivoNombre van SIEMPRE, en toda llamada — es lo
+  // que el backend usa para el control de acceso por equipo (ver Codigo.gs).
+  // Nombres distintos de "deviceId" a propósito: esa clave ya la usan varias
+  // acciones para OTRA cosa (el equipo autorizado a /verificar/, o la
+  // terminal de Mercado Pago) y hubiera chocado. Van primero en el objeto
+  // para que cualquier valor que el propio "body" ya trajera (no debería
+  // pasar) sea el que gane.
+  const conDevice=Object.assign({miDispositivoId:obtenerDeviceIdApp(),miDispositivoNombre:nombreDispositivoSugerido()},body);
+  const r=await fetch(ST.url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(conDevice)});
   return r.json();
 }
 
@@ -1764,7 +1819,19 @@ async function doLogin(){
     try{
       const authCred=pin?{pin}:{usuario:user,contrasena:pass};
       const r=await api(Object.assign({accion:'validarAcceso'},authCred));
-      if(r.ok){startSession(r.colaborador, authCred);return}
+      if(r.ok){
+        // Dispositivo revocado: la credencial es correcta, pero este equipo
+        // en particular no puede entrar — se avisa aquí en vez de dejar que
+        // startSession() abra la app y recién en el primer sync se entere.
+        if(r.estadoDispositivo==='revocado'){
+          $('l-status').textContent='Este dispositivo fue revocado por un administrador.';
+          ST.pin='';updDots();
+          return;
+        }
+        startSession(r.colaborador, authCred);
+        _actualizarBannerDispositivo(r.estadoDispositivo==='pendiente');
+        return;
+      }
     }catch(e){}
   }
 
@@ -1827,7 +1894,11 @@ async function autoLoginDesdeURL(){
   if (!authCred || (!authCred.pin && !(authCred.usuario && authCred.contrasena))) return false;
   try {
     const r = await api(Object.assign({accion:'validarAcceso'}, authCred));
-    if (r && r.ok) { startSession(r.colaborador, authCred); return true; }
+    if (r && r.ok && r.estadoDispositivo !== 'revocado') {
+      startSession(r.colaborador, authCred);
+      _actualizarBannerDispositivo(r.estadoDispositivo==='pendiente');
+      return true;
+    }
   } catch(e) {}
   return false;
 }
@@ -3026,6 +3097,11 @@ function initNube(){
   $('lbl-sync').textContent=(()=>{const ls=localStorage.getItem(SK);return ls?new Date(ls).toLocaleString('es-MX'):'Nunca.'})();
   cargarAlertaConfig();
   cargarConfigTerminalODS();
+  // La lista de dispositivos pide PIN de administrador cada vez (ver
+  // pedirAuthAdmin) — no se carga sola al entrar a la página para no pedirlo
+  // de más; el botón "🔄 Actualizar lista" la trae bajo demanda.
+  const hostDisp=$('disp-app-lista');
+  if(hostDisp)hostDisp.innerHTML='<p style="font-size:12px;color:var(--text3)">Presiona "Actualizar lista" para ver los dispositivos.</p>';
 }
 
 /* ── TERMINAL MERCADO PAGO POINT (compartida con Prevision-app) ── */
@@ -3223,6 +3299,20 @@ async function sincronizarTodo(silencioso=false){
         r.solicitudesRC.forEach(rr=>{porFolioRC[rr.folio]=rr});
         sRC(Object.values(porFolioRC));
       }
+      _actualizarBannerDispositivo(!!r.dispositivoPendiente);
+      // Dispositivo pendiente de autorización: la nube SÍ se descargó (ya
+      // aplicada arriba), pero el servidor ignoró a propósito lo que este
+      // equipo mandó (ver sincronizarTodo() en Codigo.gs) — no hay que
+      // vaciar la cola ni el contador de pendientes, o se perdería de vista
+      // que sigue habiendo cambios locales sin subir.
+      if(r.dispositivoPendiente){
+        const lbl=new Date().toLocaleString('es-MX');
+        $('lbl-sync').textContent=lbl;$('est-sync').textContent=lbl;
+        $('sync-log').textContent='⏳ '+r.mensaje;
+        updDash();
+        if(!silencioso)toast('⏳ Dispositivo pendiente de autorización — se descargó lo último, pero tus cambios locales todavía no se subieron',4500);
+        return false;
+      }
       ST.q=[];localStorage.setItem(QK,'[]');
       const now=new Date().toISOString();localStorage.setItem(SK,now);
       const lbl=new Date(now).toLocaleString('es-MX');
@@ -3241,6 +3331,15 @@ async function sincronizarTodo(silencioso=false){
       if(!silencioso)toast('✅ Sincronización completa');
       return true;
     }else{
+      // Dispositivo revocado: hay que cerrar la sesión de este equipo SIEMPRE
+      // (incluso en modo silencioso), igual que ya se hacía cuando el
+      // servidor rechazaba la credencial — si no, se queda "atorado" viendo
+      // el último toast de error para siempre sin volver a pedir nada.
+      if(r.dispositivoRevocado){
+        toast('🚫 '+r.mensaje);
+        _cerrarSesionLocal();
+        return false;
+      }
       if(!silencioso)toast('❌ '+(r.mensaje||r.error||'Error'));
       // El servidor rechazó la credencial guardada en este dispositivo (PIN
       // cambiado, colaborador dado de baja, etc.) — se desloguea para que
@@ -3249,6 +3348,15 @@ async function sincronizarTodo(silencioso=false){
       return false;
     }
   }catch(e){if(!silencioso)toast('❌ Error: '+e.message);return false}
+}
+// Muestra/oculta la franja de "dispositivo pendiente de autorización" —
+// igual que #offbar para sin conexión, pero para este otro motivo. Se
+// actualiza en cada sincronización, así que en cuanto el administrador
+// autoriza el equipo desaparece solo, sin tener que recargar la app.
+function _actualizarBannerDispositivo(pendiente){
+  ST.dispositivoPendiente=pendiente;
+  const b=$('pendbar');
+  if(b)b.style.display=pendiente?'block':'none';
 }
 // El botón "↻ Actualizar" de cada página debe traer lo último de la nube
 // (no solo releer lo que ya hay guardado en este dispositivo), para que los
@@ -3289,6 +3397,79 @@ async function cerrarTodasLasSesiones(){
     if(!r.ok)throw new Error(r.mensaje||'Error desconocido');
     toast('✅ Listo. Todos los equipos se desloguearán en su próxima sincronización.');
   }catch(e){toast('❌ No se pudo cerrar las sesiones: '+e.message)}
+}
+
+/* ── DISPOSITIVOS AUTORIZADOS (control de acceso a la app principal) ── */
+async function cargarDispositivosApp(){
+  const host=$('disp-app-lista');if(!host)return;
+  if(!ST.url){host.innerHTML='<p style="font-size:12px;color:var(--text3)">Configura URL primero.</p>';return}
+  const adminAuth=pedirAuthAdmin();
+  if(!adminAuth)return;
+  host.innerHTML='<p style="font-size:12px;color:var(--text3)">Cargando…</p>';
+  try{
+    const r=await api({accion:'obtenerDispositivosApp',adminAuth});
+    if(!r.ok)throw new Error(r.mensaje||'Error desconocido');
+    _renderDispositivosApp(r.datos||[]);
+  }catch(e){host.innerHTML='<p style="font-size:12px;color:var(--red)">Error: '+e.message+'</p>'}
+}
+function _renderDispositivosApp(lista){
+  const host=$('disp-app-lista');if(!host)return;
+  if(!lista.length){host.innerHTML='<p style="font-size:12px;color:var(--text3)">Todavía no se ha conectado ningún dispositivo.</p>';return}
+  const esteId=obtenerDeviceIdApp();
+  const orden={pendiente:0,autorizado:1,revocado:2};
+  lista.sort((a,b)=>(orden[a.ESTADO]??9)-(orden[b.ESTADO]??9));
+  host.innerHTML=lista.map(d=>{
+    const estado=d.ESTADO||'pendiente';
+    const colorEstado=estado==='autorizado'?'var(--green)':(estado==='revocado'?'var(--red)':'#d99a1f');
+    const etiqueta=estado==='autorizado'?'✅ Autorizado':(estado==='revocado'?'🚫 Revocado':'⏳ Pendiente');
+    const idEsc=String(d.DEVICE_ID).replace(/'/g,"\\'");
+    const nombreEsc=String(d.NOMBRE||'').replace(/'/g,"\\'");
+    const botones=[];
+    if(estado!=='autorizado')botones.push(`<button class="bg bsm" onclick="autorizarDispApp('${idEsc}')">Autorizar</button>`);
+    if(estado!=='revocado')botones.push(`<button class="br bsm" onclick="revocarDispApp('${idEsc}')">Revocar</button>`);
+    botones.push(`<button class="bo bsm" onclick="renombrarDispApp('${idEsc}','${nombreEsc}')">✏ Renombrar</button>`);
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between">
+      <div style="min-width:180px">
+        <div style="font-weight:600">${d.NOMBRE||'(sin nombre)'} ${d.DEVICE_ID===esteId?'<span style="font-size:10px;color:var(--text3)">· este equipo</span>':''}</div>
+        <div style="font-size:11px;color:${colorEstado}">${etiqueta}</div>
+        <div style="font-size:10px;color:var(--text3)">Último uso: ${d.ULTIMO_USO||'—'} · Último en usarlo: ${d.ULTIMO_COLABORADOR||'—'}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${botones.join('')}</div>
+    </div>`;
+  }).join('');
+}
+async function autorizarDispApp(deviceId){
+  const adminAuth=pedirAuthAdmin();
+  if(!adminAuth)return;
+  try{
+    const r=await api({accion:'actualizarDispositivoApp',deviceId,estado:'autorizado',adminAuth});
+    if(!r.ok)throw new Error(r.mensaje||'Error desconocido');
+    toast('✅ Dispositivo autorizado');
+    cargarDispositivosApp();
+  }catch(e){toast('❌ '+e.message)}
+}
+async function revocarDispApp(deviceId){
+  if(!confirm('¿Revocar el acceso de este dispositivo? No podrá ni siquiera iniciar sesión hasta que lo autorices de nuevo.'))return;
+  const adminAuth=pedirAuthAdmin();
+  if(!adminAuth)return;
+  try{
+    const r=await api({accion:'actualizarDispositivoApp',deviceId,estado:'revocado',adminAuth});
+    if(!r.ok)throw new Error(r.mensaje||'Error desconocido');
+    toast('🚫 Dispositivo revocado');
+    cargarDispositivosApp();
+  }catch(e){toast('❌ '+e.message)}
+}
+async function renombrarDispApp(deviceId,nombreActual){
+  const nuevo=prompt('Nombre para este dispositivo (ej. "Celular Sergio", "PC mostrador"):',nombreActual||'');
+  if(nuevo==null)return;
+  const adminAuth=pedirAuthAdmin();
+  if(!adminAuth)return;
+  try{
+    const r=await api({accion:'actualizarDispositivoApp',deviceId,nombre:nuevo,adminAuth});
+    if(!r.ok)throw new Error(r.mensaje||'Error desconocido');
+    toast('✅ Dispositivo renombrado');
+    cargarDispositivosApp();
+  }catch(e){toast('❌ '+e.message)}
 }
 
 /* ── MODAL ── */

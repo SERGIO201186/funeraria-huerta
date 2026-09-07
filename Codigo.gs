@@ -229,6 +229,11 @@ const SH_PA    = "ABONOS";       // Abonos de Previsión — no confundir con SH
 const SH_PCERT = "CERTIFICADOS"; // Histórico de certificados de liquidación — no confundir con SH_CERT ("Certificaciones").
 const SH_DISP  = "DISPOSITIVOS";
 const SH_PMP   = "PAGOS_MP";
+// Distinta de SH_DISP (esa autoriza equipos a la página pública /verificar/,
+// de solo lectura) — esta autoriza equipos a ENTRAR y CAPTURAR datos en las
+// apps principales (ODS y Previsión). Ver el bloque "CONTROL DE ACCESO POR
+// DISPOSITIVO" más abajo.
+const SH_DISP_APP = "DispositivosApp";
 
 const PC_COLS = ["FOLIO","TITULAR","IDENTIFICACION","CELULAR","CORREO","REGISTRO","PAQUETE",
   "PRECIO_TOTAL","ENGANCHE","PAGADO_A_LA_FECHA","CUOTAS","FRECUENCIA","FIRMA_BASE64","OBSERVACIONES",
@@ -238,12 +243,14 @@ const PA_COLS = ["ID_PAGO","FOLIO_CLIENTE","MONTO","METODO","REFERENCIA","FECHA"
 const PCERT_COLS = ["NUM_CERT","FOLIO","TITULAR","PAQUETE","PRECIO_TOTAL","HASH","FECHA_EMISION","HORA_EMISION","EMITIDO_POR"];
 const DISP_COLS = ["DEVICE_ID","NOMBRE","ESTADO","FECHA_SOLICITUD","FECHA_RESPUESTA"];
 const PMP_COLS = ["ID","FOLIO","MONTO","MP_PAYMENT_ID","FECHA_PAGO","ESTADO","FECHA_REVISION","TIPO"];
+const DISP_APP_COLS = ["DEVICE_ID","NOMBRE","ESTADO","FECHA_SOLICITUD","FECHA_RESPUESTA","ULTIMO_COLABORADOR","ULTIMO_USO"];
 
 function getPCSh()    { return initSheet(SH_PC,    PC_COLS);    }
 function getPASh()    { return initSheet(SH_PA,    PA_COLS);    }
 function getPCertSh() { return initSheet(SH_PCERT, PCERT_COLS); }
 function getDispSh()  { return initSheet(SH_DISP,  DISP_COLS);  }
 function getPMPSh()   { return initSheet(SH_PMP,   PMP_COLS);   }
+function getDispAppSh(){ return initSheet(SH_DISP_APP, DISP_APP_COLS); }
 
 //
 //  SALIDA JSON
@@ -318,8 +325,54 @@ function doPost(e) {
     // varias acciones ya mandaban esta última), salvo las 4 que por diseño
     // deben poder llamarse antes de haber iniciado sesión.
     const ACCIONES_PUBLICAS = ["ping", "validarAcceso", "solicitarAccesoDispositivo", "obtenerConfigPagos"];
-    if (ACCIONES_PUBLICAS.indexOf(accion) === -1 && !buscarColaboradorPorAuth(payload.auth || payload.adminAuth)) {
-      return jsonOut({ ok:false, mensaje:"No autorizado. Vuelve a iniciar sesión." });
+    let _colabDeSesion = null;
+    if (ACCIONES_PUBLICAS.indexOf(accion) === -1) {
+      _colabDeSesion = buscarColaboradorPorAuth(payload.auth || payload.adminAuth);
+      if (!_colabDeSesion) {
+        return jsonOut({ ok:false, mensaje:"No autorizado. Vuelve a iniciar sesión." });
+      }
+    }
+
+    // ── CONTROL DE ACCESO POR DISPOSITIVO ───────────────────────────────────
+    // Además de la credencial de arriba, cada acción (salvo las públicas)
+    // manda miDispositivoId — identifica al EQUIPO que llama, sin chocar con
+    // el "deviceId" que varias acciones ya usaban para otra cosa (el equipo
+    // autorizado a /verificar/ en actualizarDispositivo/solicitarAccesoDispositivo,
+    // o la terminal de Mercado Pago en guardarConfigPagos). Un dispositivo "revocado" no
+    // puede hacer NADA (ni siquiera leer); uno "pendiente" puede seguir
+    // consultando información, pero cualquier acción de la lista
+    // ACCIONES_ESCRITURA le queda bloqueada hasta que un administrador lo
+    // autorice desde Configuración. sincronizarTodo es un caso especial: no
+    // está en esa lista porque también sirve para DESCARGAR lo último de la
+    // nube — internamente decide si aplica o no lo que ese equipo suba.
+    const ACCIONES_ESCRITURA = [
+      "guardarODS","actualizarODS","eliminarODS","guardarColaborador",
+      "sincronizarPrevision","guardarPrevision","guardarAbono","guardarFirma",
+      "guardarProducto","eliminarProducto","guardarSolicitud","guardarCertificacion",
+      "guardarSolicitudRC","guardarAlertaConfig","guardarMapeoRC","reiniciarMapeoRC",
+      "enviarAlertaPrueba","subirDocumento","eliminarDocumento","extraerDatosDocumento",
+      "cerrarTodasLasSesiones","actualizarDispositivo","actualizarDispositivoApp",
+      "guardarConfigPagos","crearIntentoPagoMP","confirmarPagoMP","descartarPagoMP"
+    ];
+    let _estadoDispositivo = "autorizado"; // acciones públicas: no se evalúa dispositivo
+    if (_colabDeSesion) {
+      _estadoDispositivo = _estadoDispositivoApp(
+        payload.miDispositivoId, payload.miDispositivoNombre,
+        _esPuestoAdmin(_colabDeSesion.puesto), _colabDeSesion.nombreCompleto
+      );
+      if (_estadoDispositivo === "revocado") {
+        return jsonOut({ ok:false, mensaje:"Este dispositivo fue revocado por un administrador. Contacta al administrador si crees que es un error.", dispositivoRevocado:true });
+      }
+      if (_estadoDispositivo !== "autorizado" && ACCIONES_ESCRITURA.indexOf(accion) !== -1) {
+        const msgPendiente = "Este dispositivo todavía no ha sido autorizado por un administrador — puedes consultar información, pero no guardar cambios hasta que lo autoricen desde Configuración.";
+        // sincronizarPrevision usa {result,message} en vez de {ok,mensaje} —
+        // mismo criterio que el resto de esa acción, para que el cliente de
+        // Previsión (que solo revisa esas claves) muestre el motivo real.
+        result = (accion === "sincronizarPrevision")
+          ? { result:"error", message: msgPendiente, dispositivoPendiente:true }
+          : { ok:false, mensaje: msgPendiente, dispositivoPendiente:true };
+        return jsonOut(result);
+      }
     }
 
     switch (accion) {
@@ -327,6 +380,9 @@ function doPost(e) {
       // ── Previsión: dispositivos autorizados a /verificar/ y pagos de Mercado Pago ──
       case "solicitarAccesoDispositivo":    result = solicitarAccesoDispositivo(payload); break;
       case "actualizarDispositivo":         result = verificarAdminColaborador(payload.adminAuth) ? actualizarDispositivo(payload) : { ok:false, error:"No autorizado." }; break;
+      // ── Dispositivos autorizados a LAS APPS PRINCIPALES (ODS/Previsión) ──
+      case "obtenerDispositivosApp":        result = verificarAdminColaborador(payload.adminAuth) ? obtenerDispositivosApp() : { ok:false, mensaje:"No autorizado." }; break;
+      case "actualizarDispositivoApp":      result = verificarAdminColaborador(payload.adminAuth) ? actualizarDispositivoApp(payload) : { ok:false, mensaje:"No autorizado." }; break;
       case "confirmarPagoMP":               result = verificarAdminColaborador(payload.adminAuth) ? confirmarPagoMP(payload) : { ok:false, error:"No autorizado." }; break;
       case "descartarPagoMP":               result = verificarAdminColaborador(payload.adminAuth) ? descartarPagoMP(payload) : { ok:false, error:"No autorizado." }; break;
       case "buscarPagoMP":                  result = verificarAdminColaborador(payload.adminAuth) ? buscarPagoMP(payload) : { ok:false, error:"No autorizado." }; break;
@@ -353,7 +409,7 @@ function doPost(e) {
       // de un colaborador ACTIVO) para poder pedirlos.
       case "obtenerColaboradores":          result = buscarColaboradorPorAuth(payload.auth) ? obtenerColaboradores() : { ok:false, mensaje:"No autorizado." }; break;
       case "validarAcceso":                 result = validarAcceso(payload);          break;
-      case "sincronizarTodo":               result = buscarColaboradorPorAuth(payload.auth) ? sincronizarTodo(payload) : { ok:false, mensaje:"No autorizado. Vuelve a iniciar sesión." }; break;
+      case "sincronizarTodo":               result = buscarColaboradorPorAuth(payload.auth) ? sincronizarTodo(payload, _estadoDispositivo) : { ok:false, mensaje:"No autorizado. Vuelve a iniciar sesión." }; break;
       case "cerrarTodasLasSesiones":         result = cerrarTodasLasSesiones(payload); break;
       // Previsiones (compatibilidad con app hermana)
       case "guardarPrevision":   result = guardarPrevision(payload.datos);  break;
@@ -805,7 +861,7 @@ function validarAcceso(payload) {
     if (payload.pin && _coincideCredencial(payload.pin, e.pin)) {
       _migrarCredencialSiHaceFalta(sh, headers, i, 'pin', payload.pin, e.pin);
       _limpiarLoginFallido(credKey);
-      return { ok:true, colaborador: _empPublic(e) };
+      return { ok:true, colaborador: _empPublic(e), estadoDispositivo: _estadoLoginDispositivo(payload, e) };
     }
     // Por usuario + contraseña
     if (payload.usuario && payload.contrasena &&
@@ -813,11 +869,18 @@ function validarAcceso(payload) {
         _coincideCredencial(payload.contrasena, e.contrasena)) {
       _migrarCredencialSiHaceFalta(sh, headers, i, 'contrasena', payload.contrasena, e.contrasena);
       _limpiarLoginFallido(credKey);
-      return { ok:true, colaborador: _empPublic(e) };
+      return { ok:true, colaborador: _empPublic(e), estadoDispositivo: _estadoLoginDispositivo(payload, e) };
     }
   }
   _registrarLoginFallido(credKey);
   return { ok:false, mensaje:"Credenciales incorrectas o colaborador inactivo" };
+}
+// Registra/consulta el dispositivo desde el que se está iniciando sesión —
+// se hace aquí (no en el candado general de doPost, que para "validarAcceso"
+// todavía no sabe quién es el colaborador) para que la respuesta del login
+// ya traiga el estado y la app pueda avisar de inmediato si quedó pendiente.
+function _estadoLoginDispositivo(payload, colaborador) {
+  return _estadoDispositivoApp(payload.miDispositivoId, payload.miDispositivoNombre, _esPuestoAdmin(colaborador.puesto), colaborador.nombreCompleto);
 }
 function _empPublic(e) {
   return { id:e.idColaborador, nombre:e.nombreCompleto, puesto:e.puesto, telefono:e.telefono };
@@ -1310,7 +1373,7 @@ function _procesarLista(lista, fn, etiqueta, errores) {
     catch (e) { errores.push(`${etiqueta} (folio/id ${item && (item.folio||item.id)}): ${e.message}`); }
   });
 }
-function sincronizarTodo(payload) {
+function sincronizarTodo(payload, estadoDispositivo) {
   const ods            = payload.ods    || [];
   const emps           = payload.colaboradores || [];
   const prevs          = payload.previsiones   || [];
@@ -1319,27 +1382,37 @@ function sincronizarTodo(payload) {
   const certificaciones= payload.certificaciones || [];
   const solicitudesRC  = payload.solicitudesRC || [];
 
-  // Si quien sincroniza no es Administrador, guardarColaborador() rechaza cualquier
-  // colaborador de la lista que traiga puesto de Administrador (ver ahí mismo) — así
-  // un colaborador normal no puede auto-otorgarse (ni otorgarle a nadie) ese rol
-  // coleándose en una sincronización.
-  const quienSincronizaEsAdmin = verificarAdminColaborador(payload.auth);
+  // Dispositivo pendiente de autorización: sigue recibiendo lo último de la
+  // nube (para poder consultar), pero NADA de lo que traiga se aplica a las
+  // hojas hasta que un administrador lo autorice — así no se pierde ni se
+  // mezcla información capturada desde un equipo todavía sin aprobar.
+  const soloLectura = estadoDispositivo != null && estadoDispositivo !== "autorizado";
   const errores = [];
-  _procesarLista(ods,             guardarODS,            "ODS",             errores);
-  _procesarLista(emps,            e => guardarColaborador(e, quienSincronizaEsAdmin), "Colaborador", errores);
-  _procesarLista(prevs,           guardarPrevision,      "Previsión",       errores);
-  _procesarLista(abonos,          guardarAbono,          "Abono",           errores);
-  _procesarLista(solicitudes,     guardarSolicitud,      "Solicitud",       errores);
-  _procesarLista(certificaciones, guardarCertificacion,  "Certificación",   errores);
-  _procesarLista(solicitudesRC,   guardarSolicitudRC,    "Solicitud RC",    errores);
+  if (!soloLectura) {
+    // Si quien sincroniza no es Administrador, guardarColaborador() rechaza cualquier
+    // colaborador de la lista que traiga puesto de Administrador (ver ahí mismo) — así
+    // un colaborador normal no puede auto-otorgarse (ni otorgarle a nadie) ese rol
+    // coleándose en una sincronización.
+    const quienSincronizaEsAdmin = verificarAdminColaborador(payload.auth);
+    _procesarLista(ods,             guardarODS,            "ODS",             errores);
+    _procesarLista(emps,            e => guardarColaborador(e, quienSincronizaEsAdmin), "Colaborador", errores);
+    _procesarLista(prevs,           guardarPrevision,      "Previsión",       errores);
+    _procesarLista(abonos,          guardarAbono,          "Abono",           errores);
+    _procesarLista(solicitudes,     guardarSolicitud,      "Solicitud",       errores);
+    _procesarLista(certificaciones, guardarCertificacion,  "Certificación",   errores);
+    _procesarLista(solicitudesRC,   guardarSolicitudRC,    "Solicitud RC",    errores);
+  }
 
   if (errores.length) logActividad("sincronizarTodo:errores", "", errores.join(" | "));
 
   return {
     ok:true,
     erroresSync: errores,
-    mensaje:`Sync OK: ${ods.length} ODS, ${emps.length} colaboradores, ${prevs.length} previsiones`
-      + (errores.length ? ` — ⚠ ${errores.length} elemento(s) NO se pudieron guardar` : ""),
+    dispositivoPendiente: soloLectura,
+    mensaje: soloLectura
+      ? "Dispositivo pendiente de autorización — se descargó lo último de la nube, pero tus cambios locales todavía NO se han subido."
+      : `Sync OK: ${ods.length} ODS, ${emps.length} colaboradores, ${prevs.length} previsiones`
+        + (errores.length ? ` — ⚠ ${errores.length} elemento(s) NO se pudieron guardar` : ""),
     ods:            obtenerODS({}).datos,
     colaboradores: obtenerColaboradores().datos,
     // "Previsiones" es solo para la app hermana: esta app nunca manda datos
@@ -2341,6 +2414,85 @@ function actualizarDispositivo(payload) {
   } catch (d2Err) {
     return { ok:false, error: d2Err.message };
   }
+}
+
+// ============================================================
+//  CONTROL DE ACCESO POR DISPOSITIVO (apps principales ODS/Previsión)
+//  ------------------------------------------------------------------
+//  Distinto del bloque de arriba (hoja DISPOSITIVOS): ese autoriza equipos
+//  a la página pública /verificar/, de solo lectura. Este autoriza equipos
+//  a ENTRAR y CAPTURAR datos en las apps principales — para que un
+//  administrador controle desde qué celulares/computadoras se puede
+//  operar, sin depender de la IP (Apps Script no la expone) ni de nada más
+//  que el propio deviceId que cada navegador genera una sola vez y guarda
+//  en su localStorage.
+//
+//  Cada dispositivo queda en uno de 3 estados:
+//   - "pendiente":  puede iniciar sesión y CONSULTAR datos, pero el gate de
+//     doPost (ver ACCIONES_ESCRITURA) le rechaza cualquier acción que
+//     guarde/borre algo, y sincronizarTodo() le sirve los datos más
+//     recientes sin aplicar lo que ese equipo suba.
+//   - "autorizado":  acceso normal, sin restricciones.
+//   - "revocado":    no puede ni siquiera iniciar sesión (se rechaza toda
+//     acción, incluidas las de solo lectura).
+//
+//  Bootstrap: el PRIMER dispositivo que se vea en esta hoja, si quien
+//  inicia sesión ahí es Administrador, queda autorizado automáticamente
+//  (si no, nadie podría entrar nunca a autorizar a los demás). Todos los
+//  siguientes — incluidos otros equipos del mismo administrador — quedan
+//  "pendiente" hasta que se aprueben a mano desde Configuración.
+// ============================================================
+function _estadoDispositivoApp(deviceId, nombre, esAdmin, colaboradorNombre) {
+  if (!deviceId) return "no_registrado";
+  const sh = getDispAppSh();
+  const headers = headersReales(sh);
+  const data = sh.getDataRange().getValues();
+  const ahora = new Date().toLocaleString('es-MX');
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(deviceId)) {
+      const fila = toObj(headers, data[i]);
+      // Nunca se pisa un NOMBRE que ya tenga algo (lo haya puesto el propio
+      // equipo al registrarse o el admin al renombrarlo desde el panel).
+      if (nombre && !String(fila.NOMBRE || '').trim()) sh.getRange(i + 1, headers.indexOf("NOMBRE") + 1).setValue(nombre);
+      if (colaboradorNombre) sh.getRange(i + 1, headers.indexOf("ULTIMO_COLABORADOR") + 1).setValue(colaboradorNombre);
+      sh.getRange(i + 1, headers.indexOf("ULTIMO_USO") + 1).setValue(ahora);
+      return String(fila.ESTADO || "pendiente");
+    }
+  }
+  const esPrimero = data.length <= 1;
+  const estadoInicial = (esPrimero && esAdmin) ? "autorizado" : "pendiente";
+  sh.appendRow(toRow(headers, {
+    DEVICE_ID: deviceId, NOMBRE: nombre || "", ESTADO: estadoInicial,
+    FECHA_SOLICITUD: ahora, FECHA_RESPUESTA: estadoInicial === "autorizado" ? ahora : "",
+    ULTIMO_COLABORADOR: colaboradorNombre || "", ULTIMO_USO: ahora
+  }));
+  return estadoInicial;
+}
+// Ya viene gateado con verificarAdminColaborador desde el switch de doPost.
+function obtenerDispositivosApp() {
+  const sh = getDispAppSh();
+  const data = sh.getDataRange().getValues();
+  if (data.length <= 1) return { ok:true, datos: [] };
+  const headers = data[0];
+  return { ok:true, datos: data.slice(1).map(r => toObj(headers, r)) };
+}
+// Autorizar/revocar/renombrar un dispositivo — ya viene gateado con
+// verificarAdminColaborador desde el switch de doPost, esta función solo
+// aplica el cambio.
+function actualizarDispositivoApp(payload) {
+  if (!payload.deviceId) return { ok:false, error:"Falta deviceId" };
+  const sh = getDispAppSh();
+  const headers = headersReales(sh);
+  const idx = findRow(sh, "DEVICE_ID", payload.deviceId);
+  if (idx === -1) return { ok:false, error:"Dispositivo no encontrado" };
+  if (payload.estado) {
+    sh.getRange(idx, headers.indexOf("ESTADO") + 1).setValue(payload.estado);
+    sh.getRange(idx, headers.indexOf("FECHA_RESPUESTA") + 1).setValue(new Date().toLocaleString('es-MX'));
+  }
+  if (payload.nombre != null) {
+    sh.getRange(idx, headers.indexOf("NOMBRE") + 1).setValue(payload.nombre);
+  }
+  return { ok:true };
 }
 
 // ── PAGOS DE MERCADO PAGO ──
