@@ -1277,15 +1277,13 @@ button:active{transform:scale(.97)}
           <div class="f"><label class="lbl">Fecha de Defunción</label><input id="rc-fallec-fecha" type="date" oninput="rcCalcEdad('fi')"/></div>
           <div class="f"><label class="lbl">Hora de Defunción</label><input id="rc-fallec-hora" type="time"/></div>
         </div>
-        <div class="f"><label class="lbl">Lugar del Fallecimiento (categoría interna)</label>
-          <select id="rc-fallec-lugar">
-            <option value="">—</option>
-            <option value="HOGAR">Hogar</option>
-            <option value="HOSPITAL">Hospital</option>
-            <option value="OTRO">Otro lugar</option>
-          </select>
+        <div class="f"><label class="lbl">Lugar del Fallecimiento</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
+            <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="rc-fallec-lugar-radio" id="rc-fallec-lugar-hospital" value="HOSPITAL"/> Hospital</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="rc-fallec-lugar-radio" id="rc-fallec-lugar-hogar" value="HOGAR"/> Hogar</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="rc-fallec-lugar-radio" id="rc-fallec-lugar-otro" value="OTRO"/> Otro lugar</label>
+          </div>
         </div>
-        <div class="f"><label class="lbl">Lugar del Fallecimiento (texto para el formato)</label><input id="rc-fallec-lugar-detalle" type="text" placeholder="Ej. Hospital Civil de Xalapa, domicilio particular…"/></div>
         <div class="f"><label class="lbl">Número de Certificado</label><input id="rc-fallec-certificado" type="text"/></div>
         <div class="f"><label class="lbl">Destino del Cadáver</label>
           <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
@@ -1295,6 +1293,7 @@ button:active{transform:scale(.97)}
           </div>
         </div>
         <div class="f" id="rc-blq-traslado-destino" style="display:none"><label class="lbl">Traslado a:</label><input id="rc-traslado-destino" type="text" placeholder="Ciudad/lugar de destino"/></div>
+        <div class="f" id="rc-blq-traslado-municipio" style="display:none"><label class="lbl">Municipio de destino:</label><input id="rc-traslado-municipio" type="text" placeholder="Municipio"/></div>
         <div class="g2">
           <div class="f"><label class="lbl">Nombre del Panteón</label><input id="rc-fallec-panteon" type="text"/></div>
           <div class="f"><label class="lbl">Ubicación del Panteón</label><input id="rc-fallec-panteon-ubicacion" type="text"/></div>
@@ -4516,7 +4515,7 @@ function aplicarExtraccionRC(tipo,d){
   }else if(tipo==='CERTIFICADO_DEFUNCION'){
     n+=_setSiVacio('rc-fallec-fecha',_normFecha(d.fechaDefuncion));
     n+=_setSiVacio('rc-fallec-hora',_normHora(d.horaDefuncion));
-    n+=_setSiVacio('rc-fallec-lugar-detalle',d.lugarDefuncionTexto);
+    n+=_setRadioLugarSiVacio(_rcInferirLugarFallecimiento(d.lugarDefuncionTexto));
     n+=_setSiVacio('rc-fallec-certificado',d.numeroCertificado);
     n+=_setSiVacio('rc-fi-domcalle',d.domicilioCalle);
     n+=_setSiVacio('rc-fi-domnumero',d.domicilioNumero);
@@ -4878,7 +4877,56 @@ function rcToggleDestino(cual){
   }else if((cual==='cremacion'||cual==='traslado')&&$('rc-destino-'+cual).checked){
     $('rc-destino-inhumacion').checked=false;
   }
-  $('rc-blq-traslado-destino').style.display=$('rc-destino-traslado').checked?'block':'none';
+  const muestraTraslado=$('rc-destino-traslado').checked?'block':'none';
+  $('rc-blq-traslado-destino').style.display=muestraTraslado;
+  $('rc-blq-traslado-municipio').style.display=muestraTraslado;
+}
+// ── Lugar del Fallecimiento: Hospital/Hogar/Otro lugar (opción múltiple) ──
+// Antes eran 2 campos (una categoría interna + un texto libre para el
+// formato) — se unificaron en un solo control: lo que se seleccione aquí
+// ES el texto que se imprime (rcFallecLugarDetalle se sigue guardando,
+// pero ahora siempre se deriva de esta selección, nunca se captura aparte).
+function _rcLugarFallecimientoGet(){
+  if($('rc-fallec-lugar-hospital')&&$('rc-fallec-lugar-hospital').checked)return 'HOSPITAL';
+  if($('rc-fallec-lugar-hogar')&&$('rc-fallec-lugar-hogar').checked)return 'HOGAR';
+  if($('rc-fallec-lugar-otro')&&$('rc-fallec-lugar-otro').checked)return 'OTRO';
+  return '';
+}
+function _rcLugarFallecimientoSet(valor){
+  ['hospital','hogar','otro'].forEach(k=>{
+    const el=$('rc-fallec-lugar-'+k);
+    if(el)el.checked=(valor===k.toUpperCase());
+  });
+}
+function _rcLugarFallecimientoEtiqueta(valor){
+  return valor==='HOSPITAL'?'Hospital':(valor==='HOGAR'?'Hogar':(valor==='OTRO'?'Otro lugar':''));
+}
+// Heurística para precargar la opción correcta a partir de un texto libre
+// (lectura por IA del certificado de defunción, o el dato ya capturado en
+// la Pestaña 1) — nunca inventa: si no reconoce nada, cae en "Otro lugar"
+// solo cuando SÍ hay texto (si no hay texto, no propone nada).
+function _rcInferirLugarFallecimiento(texto){
+  const t=String(texto||'').toUpperCase();
+  if(!t.trim())return '';
+  if(/HOSPITAL|CL[IÍ]NICA|SANATORIO|IMSS|ISSSTE|NOSOCOMIO/.test(t))return 'HOSPITAL';
+  if(/DOMICILIO|HOGAR|CASA/.test(t))return 'HOGAR';
+  return 'OTRO';
+}
+// Igual que _setSiVacio (solo llena si no había nada, marca "detectado por
+// IA" y cuenta para el aviso final), pero para el grupo de radios de Lugar
+// del Fallecimiento en vez de un input de texto.
+function _setRadioLugarSiVacio(valorInferido){
+  if(!valorInferido||_rcLugarFallecimientoGet())return 0;
+  _rcLugarFallecimientoSet(valorInferido);
+  const el=$('rc-fallec-lugar-'+valorInferido.toLowerCase());
+  if(el)_marcarIA(el);
+  return 1;
+}
+// Igual que _rcFillIfVacio (solo llena si estaba vacío, sin marcar
+// "detectado por IA") pero para el grupo de radios de Lugar del Fallecimiento.
+function _rcFillRadioLugarIfVacio(valorInferido){
+  if(!valorInferido||_rcLugarFallecimientoGet())return;
+  _rcLugarFallecimientoSet(valorInferido);
 }
 function rcToggleEscolaridad(){
   $('rc-blq-ultimogrado').style.display=$('rc-escolaridad').value==='PRIMARIA_INCOMPLETA'?'block':'none';
@@ -4987,7 +5035,7 @@ function rcAplicarPrecargaCert(folio){
 
   _rcFillIfVacio('rc-fallec-fecha',fechaPlano(cert.finadoFechaDefuncion));
   _rcFillIfVacio('rc-fallec-hora',cert.finadoHoraDefuncion);
-  _rcFillIfVacio('rc-fallec-lugar-detalle',cert.finadoLugarDefuncion);
+  _rcFillRadioLugarIfVacio(_rcInferirLugarFallecimiento(cert.finadoLugarDefuncion));
 
   _rcFillIfVacio('rc-decl-nombre',cert.declaranteNombre);
   g('rc-decl-parentesco',cert.declaranteParentesco||'NINGUNO');
@@ -5073,13 +5121,13 @@ function rcCargar(folio){
 
     g('rc-fallec-fecha',fechaPlano(rc.rcFechaDefuncion));
     g('rc-fallec-hora',rc.rcHoraDefuncion);
-    g('rc-fallec-lugar',rc.rcLugarFallecimiento);
-    g('rc-fallec-lugar-detalle',rc.rcFallecLugarDetalle);
+    _rcLugarFallecimientoSet(rc.rcLugarFallecimiento);
     g('rc-fallec-certificado',rc.rcNumeroCertificado);
     $('rc-destino-inhumacion').checked=rc.rcDestinoInhumacion==='SI';
     $('rc-destino-cremacion').checked=rc.rcDestinoCremacion==='SI';
     $('rc-destino-traslado').checked=rc.rcDestinoTraslado==='SI';
     g('rc-traslado-destino',rc.rcTrasladoDestino);
+    g('rc-traslado-municipio',rc.rcTrasladoMunicipio);
     g('rc-fallec-panteon',rc.rcNombrePanteon);
     g('rc-fallec-panteon-ubicacion',rc.rcPanteonUbicacion);
     g('rc-fallec-fecinhum',fechaPlano(rc.rcFechaInhumacion));
@@ -5143,7 +5191,9 @@ function rcCargar(folio){
   rcToggleConyuge();
   rcToggleVivoRC('cony');rcToggleVivoRC('pa');rcToggleVivoRC('ma');
   rcToggleEscolaridad();rcToggleSituacionOtro();
-  $('rc-blq-traslado-destino').style.display=$('rc-destino-traslado').checked?'block':'none';
+  const muestraTraslado=$('rc-destino-traslado').checked?'block':'none';
+  $('rc-blq-traslado-destino').style.display=muestraTraslado;
+  $('rc-blq-traslado-municipio').style.display=muestraTraslado;
   rcCalcEdad('fi');rcCalcEdad('decl');rcCalcEdad('test1');rcCalcEdad('test2');
 }
 async function guardarSolicitudRC(){
@@ -5198,12 +5248,13 @@ async function guardarSolicitudRC(){
     rcMadrePaisNac:madreVive?g('rc-ma-pais'):'',
 
     rcFechaDefuncion:g('rc-fallec-fecha'),rcHoraDefuncion:g('rc-fallec-hora'),
-    rcLugarFallecimiento:g('rc-fallec-lugar'),rcFallecLugarDetalle:g('rc-fallec-lugar-detalle'),
+    rcLugarFallecimiento:_rcLugarFallecimientoGet(),rcFallecLugarDetalle:_rcLugarFallecimientoEtiqueta(_rcLugarFallecimientoGet()),
     rcNumeroCertificado:g('rc-fallec-certificado'),
     rcDestinoInhumacion:chk('rc-destino-inhumacion')?'SI':'NO',
     rcDestinoCremacion:chk('rc-destino-cremacion')?'SI':'NO',
     rcDestinoTraslado:chk('rc-destino-traslado')?'SI':'NO',
     rcTrasladoDestino:chk('rc-destino-traslado')?g('rc-traslado-destino'):'',
+    rcTrasladoMunicipio:chk('rc-destino-traslado')?g('rc-traslado-municipio'):'',
     rcNombrePanteon:g('rc-fallec-panteon'),rcPanteonUbicacion:g('rc-fallec-panteon-ubicacion'),
     rcFechaInhumacion:g('rc-fallec-fecinhum'),rcHoraInhumacion:g('rc-fallec-horinhum'),
 
@@ -5364,7 +5415,8 @@ const RC_POS_DEFAULT=[
   {id:'fallec_inhumacion',label:'Destino · X Inhumación',page:1,x:2.3,y:8.24},
   {id:'fallec_cremacion',label:'Destino · X Cremación',page:1,x:3.4,y:8.24},
   {id:'fallec_traslado',label:'Destino · X Traslado',page:1,x:4.55,y:8.24},
-  {id:'fallec_traslado_a',label:'Destino · Traslado a (texto)',page:1,x:4.9,y:8.24},
+  {id:'fallec_traslado_a',label:'Destino · Traslado a, localidad (texto)',page:1,x:4.9,y:8.24},
+  {id:'fallec_traslado_municipio',label:'Destino · Traslado a, municipio (texto, renglón de abajo)',page:1,x:2.5,y:8.35},
   {id:'fallec_panteon',label:'Fallecimiento · Nombre del Panteón',page:1,x:2.0,y:8.45},
   {id:'fallec_fecha_inhum',label:'Fallecimiento · Fecha de Inhumación (agregado, no está en el formato)',page:1,x:5.3,y:8.45},
   {id:'fallec_hora_inhum',label:'Fallecimiento · Hora de Inhumación (agregado, no está en el formato)',page:1,x:6.9,y:8.45},
@@ -5698,7 +5750,7 @@ function _rcArmarMarcas(rc){
   t('fallec_lugar',rc.rcFallecLugarDetalle);t('fallec_certificado',rc.rcNumeroCertificado);
   if(rc.rcDestinoInhumacion==='SI')x('fallec_inhumacion');
   if(rc.rcDestinoCremacion==='SI')x('fallec_cremacion');
-  if(rc.rcDestinoTraslado==='SI'){x('fallec_traslado');t('fallec_traslado_a',rc.rcTrasladoDestino);}
+  if(rc.rcDestinoTraslado==='SI'){x('fallec_traslado');t('fallec_traslado_a',rc.rcTrasladoDestino);t('fallec_traslado_municipio',rc.rcTrasladoMunicipio);}
   t('fallec_panteon',rc.rcNombrePanteon);t('fallec_ubicacion',rc.rcPanteonUbicacion);
   // Fecha/hora de inhumación no existen como blanco impreso en el formato
   // oficial — se agregan aparte, después del nombre del panteón, y solo si
