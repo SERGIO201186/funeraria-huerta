@@ -177,7 +177,7 @@ const RC_COLS = [
   "rcMadreLocalidadNac","rcMadreMunicipioNac","rcMadreEntidadNac","rcMadrePaisNac",
   // Grupo 3 — Datos del fallecimiento
   "rcFechaDefuncion","rcHoraDefuncion","rcLugarFallecimiento","rcFallecLugarDetalle","rcNumeroCertificado",
-  "rcDestinoInhumacion","rcDestinoCremacion","rcDestinoTraslado","rcTrasladoDestino",
+  "rcDestinoInhumacion","rcDestinoCremacion","rcDestinoTraslado","rcTrasladoDestino","rcTrasladoMunicipio",
   "rcNombrePanteon","rcPanteonUbicacion","rcFechaInhumacion","rcHoraInhumacion",
   // Grupo 4 — Datos del declarante
   "rcDeclaranteNombre","rcDeclaranteParentesco","rcDeclaranteNacionalidad","rcDeclaranteEstadoCivil",
