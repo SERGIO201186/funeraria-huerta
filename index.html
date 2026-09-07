@@ -548,7 +548,38 @@ button:active{transform:scale(.97)}
               <option value="FUNERARIA">Funeraria</option>
             </select>
           </div>
-          <div class="f"><label class="lbl">Hora de Salida hacia Destino</label><input id="o-foraneo-hora-salida" type="time"/></div>
+          <div class="g2">
+            <div class="f"><label class="lbl">Fecha de Salida hacia Destino</label><input id="o-foraneo-fecha-salida" type="date"/></div>
+            <div class="f"><label class="lbl">Hora de Salida hacia Destino</label><input id="o-foraneo-hora-salida" type="time"/></div>
+          </div>
+
+          <div class="f"><label class="lbl">¿Dónde se realizará la velación?</label>
+            <select id="o-traslado-velacion-lugar" onchange="toggleTrasladoVelacion()">
+              <option value="">-- SELECCIONE --</option>
+              <option value="DESTINO">En el lugar de destino (al terminar trámites)</option>
+              <option value="LOCAL">En funeraria o domicilio local</option>
+            </select>
+          </div>
+          <div class="f" id="blq-traslado-velacion-nombre" style="display:none">
+            <label class="lbl">Nombre del Velatorio / Domicilio</label>
+            <input id="o-traslado-velacion-nombre" type="text" placeholder="Ej: Velatorio Guadalupe, domicilio particular…"/>
+          </div>
+
+          <div class="f"><label class="lbl">¿Se realizará Sepelio?</label>
+            <select id="o-traslado-sepelio" onchange="toggleTrasladoSepelio()">
+              <option value="NO">No</option>
+              <option value="SI">Sí</option>
+            </select>
+          </div>
+          <div id="blq-traslado-sepelio" style="display:none">
+            <div class="f"><label class="lbl">Fecha de Sepelio</label><input id="o-traslado-sepelio-fecha" type="date"/></div>
+            <div class="g2">
+              <div class="f"><label class="lbl">Hora de Salida de Domicilio</label><input id="o-traslado-sepelio-salida" type="time"/></div>
+              <div class="f"><label class="lbl">Hora de Misa</label><input id="o-traslado-sepelio-misa" type="time"/></div>
+            </div>
+            <div class="f"><label class="lbl">Iglesia</label><input id="o-traslado-iglesia" type="text"/></div>
+            <div class="f"><label class="lbl">Hora de Sepelio</label><input id="o-traslado-sepelio-hora" type="time"/></div>
+          </div>
         </div>
 
         <div class="f"><label class="lbl">Otros Cargos / Extras ($)</label><input id="o-otros" type="number" min="0" value="0" oninput="calcTotal()"/></div>
@@ -916,7 +947,38 @@ button:active{transform:scale(.97)}
           <option value="FUNERARIA">Funeraria</option>
         </select>
       </div>
-      <div class="f"><label class="lbl">Hora de Salida hacia Destino</label><input id="log-foraneo-hora-salida" type="time"/></div>
+      <div class="g2">
+        <div class="f"><label class="lbl">Fecha de Salida hacia Destino</label><input id="log-foraneo-fecha-salida" type="date"/></div>
+        <div class="f"><label class="lbl">Hora de Salida hacia Destino</label><input id="log-foraneo-hora-salida" type="time"/></div>
+      </div>
+
+      <div class="f"><label class="lbl">¿Dónde se realizará la velación?</label>
+        <select id="log-traslado-velacion-lugar" onchange="toggleLogTrasladoVelacion()">
+          <option value="">-- SELECCIONE --</option>
+          <option value="DESTINO">En el lugar de destino (al terminar trámites)</option>
+          <option value="LOCAL">En funeraria o domicilio local</option>
+        </select>
+      </div>
+      <div class="f" id="log-blq-traslado-velacion-nombre" style="display:none">
+        <label class="lbl">Nombre del Velatorio / Domicilio</label>
+        <input id="log-traslado-velacion-nombre" type="text" placeholder="Ej: Velatorio Guadalupe, domicilio particular…"/>
+      </div>
+
+      <div class="f"><label class="lbl">¿Se realizará Sepelio?</label>
+        <select id="log-traslado-sepelio" onchange="toggleLogTrasladoSepelio()">
+          <option value="NO">No</option>
+          <option value="SI">Sí</option>
+        </select>
+      </div>
+      <div id="log-blq-traslado-sepelio" style="display:none">
+        <div class="f"><label class="lbl">Fecha de Sepelio</label><input id="log-traslado-sepelio-fecha" type="date"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Hora de Salida de Domicilio</label><input id="log-traslado-sepelio-salida" type="time"/></div>
+          <div class="f"><label class="lbl">Hora de Misa</label><input id="log-traslado-sepelio-misa" type="time"/></div>
+        </div>
+        <div class="f"><label class="lbl">Iglesia</label><input id="log-traslado-iglesia" type="text"/></div>
+        <div class="f"><label class="lbl">Hora de Sepelio</label><input id="log-traslado-sepelio-hora" type="time"/></div>
+      </div>
     </div>
     <button class="bg" style="width:100%" onclick="guardarLogistica()">💾 Guardar Logística</button>
   </div>
@@ -1658,14 +1720,16 @@ function fechaLiquidacionDe(o){
 // Fecha que marca "servicio realizado" para efectos de seguimiento (deja de
 // aparecer en Servicios Activos y pasa a Pendiente de Pago si aún se debe algo).
 function fechaServicioDe(o){
-  return fechaCeremoniaDe(o); // inhumación local o cremación; foráneo no tiene fecha propia capturada aún
+  return fechaCeremoniaDe(o);
 }
 // La logística de sepelio/cremación (fecha, horas, lugar) ya usa un solo
 // juego de campos para las dos modalidades. Estas funciones además caen de
 // vuelta a los campos viejos (fechaSepelio/fechaCremacion, etc.) para que
-// las órdenes creadas antes de este cambio se sigan mostrando bien.
-function fechaCeremoniaDe(o){ return o.fechaCeremonia||o.fechaSepelio||o.fechaCremacion||''; }
-function horaCeremoniaDe(o){ return o.horaCeremonia||o.horaSepelio||o.horaCremacion||''; }
+// las órdenes creadas antes de este cambio se sigan mostrando bien, y —
+// cuando es un Traslado con sepelio en destino — a la fecha/hora capturadas
+// ahí (trasladoSepelioFecha/trasladoSepelioHora), que solo existen en ese caso.
+function fechaCeremoniaDe(o){ return o.fechaCeremonia||o.fechaSepelio||o.fechaCremacion||o.trasladoSepelioFecha||''; }
+function horaCeremoniaDe(o){ return o.horaCeremonia||o.horaSepelio||o.horaCremacion||o.trasladoSepelioHora||''; }
 function salidaTrasladoDe(o){ return o.salidaTraslado||o.salidaCremacion||''; }
 function horaMisaDe(o){ return o.horaMisa||o.horaMisaCrem||''; }
 function lugarCeremoniaDe(o){ return o.modalidadServicio==='CREMACION'?(o.crematorio||''):(o.lugSepelio||''); }
@@ -2090,14 +2154,25 @@ function updDash(){
     elServ.innerHTML=activasOrdenadas.length?activasOrdenadas.map(o=>{
       const fServ=fechaServicioDe(o);
       const esCrem=o.modalidadServicio==='CREMACION';
-      const lugar=esCrem?(o.crematorio||'—'):(o.lugSepelio||'—');
-      const etiquetaLugar=esCrem?'Crematorio':'Panteón';
+      const esForaneo=o.destinoTipo==='FORANEO';
+      const lugar=esForaneo?(o.destinoNombre||'—'):(esCrem?(o.crematorio||'—'):(o.lugSepelio||'—'));
+      const etiquetaLugar=esForaneo?'Destino':(esCrem?'Crematorio':'Panteón');
       let d=null;
       if(fServ){const f=new Date(fServ);f.setHours(0,0,0,0);d=Math.ceil((f-hoyD)/(864e5))}
       // d<0 aquí no es un atraso de cobro (eso ya lo cubre Pendientes de Pago):
       // es un servicio ya realizado y liquidado al que falta darle clic en "Cerrar ODS".
       const dTxt=d===null?'Sin fecha capturada':d<0?'Realizado — falta cerrar ODS':d===0?'Hoy':`En ${d}d`;
       const dCol=d===null?'var(--text3)':d<0?'var(--green)':d<=1?'var(--amber)':'var(--text2)';
+      // Traslado foráneo: dónde se vela y si habrá sepelio en el destino —
+      // esta línea solo aparece si ya se capturó algo de eso (normalmente se
+      // conoce varias horas después, desde "Actualizar Logística").
+      let lineaTraslado='';
+      if(esForaneo){
+        const partes=[];
+        if(o.trasladoVelacionLugar)partes.push(`Velación ${o.trasladoVelacionLugar==='DESTINO'?'en destino':'local'}${o.trasladoVelacionNombre?': '+o.trasladoVelacionNombre:''}`);
+        if(o.trasladoRealizaSepelio==='SI')partes.push(`Sepelio${o.trasladoIglesia?' en '+o.trasladoIglesia:''}`);
+        if(partes.length)lineaTraslado=`<div style="font-size:11px;color:var(--text3)">${partes.join(' · ')}</div>`;
+      }
       return`<div class="card" style="margin-bottom:8px" onclick="verODS('${o.folio}')">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div><div style="font-size:11px;font-weight:700;color:var(--gold)">${o.folio}</div>
@@ -2106,6 +2181,7 @@ function updDash(){
         </div>
         <div style="font-size:12px;color:var(--text2);margin-top:4px">${etiquetaLugar}: ${lugar} · ${fServ?fechaPlano(fServ):'—'}</div>
         <div style="font-size:11px;color:var(--text3)">${o.modalidadServicio||''} · ${o.modalidadVelacion||''}${(+o.restante||0)>0?` · Restante ${fmt(o.restante)}`:''}</div>
+        ${lineaTraslado}
       </div>`;
     }).join(''):'<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px 0">Sin servicios activos.</div>';
   }
@@ -2196,6 +2272,21 @@ function toggleDest(){
   toggleLogistica();
   if(v==='FORANEO') calcKm();
   else calcTotal();
+}
+// Traslado foráneo: dónde se vela (habilita el nombre del velatorio/domicilio
+// en cuanto se elige cualquiera de las 2 opciones) y si habrá sepelio en el
+// destino (habilita fecha/horas/iglesia solo si se responde que sí).
+function toggleTrasladoVelacion(){
+  $('blq-traslado-velacion-nombre').style.display=$('o-traslado-velacion-lugar').value?'block':'none';
+}
+function toggleTrasladoSepelio(){
+  $('blq-traslado-sepelio').style.display=$('o-traslado-sepelio').value==='SI'?'block':'none';
+}
+function toggleLogTrasladoVelacion(){
+  $('log-blq-traslado-velacion-nombre').style.display=$('log-traslado-velacion-lugar').value?'block':'none';
+}
+function toggleLogTrasladoSepelio(){
+  $('log-blq-traslado-sepelio').style.display=$('log-traslado-sepelio').value==='SI'?'block':'none';
 }
 /* ══════════════════════════════════════════════════════════
    INVENTARIO COMPARTIDO CON LA TIENDA VIRTUAL
@@ -2521,6 +2612,7 @@ function pg_letras(){
 function recopilar(){
   const mod=$('o-modalidad').value;
   const vel=$('o-vel-tipo').value;
+  const dest=($('o-dest-tipo')||{value:'LOCAL'}).value;
   const exc=$('o-exceso'),emb=$('o-emb'),obj=$('o-obj-cuerpo');
   const tramites=['tr-registro','tr-fge','tr-periciales'].filter(id=>$(id)&&$(id).checked).map(id=>id.replace('tr-',''))
     .concat($('tr-cert')&&$('tr-cert').value==='SI'?['cert']:[])
@@ -2572,7 +2664,7 @@ function recopilar(){
     salaVelacion:vel==='SALA'?($('o-sala')||{value:''}).value:'',
     costoSala:vel==='SALA'?($('o-sala-costo')||{value:0}).value:0,
     insumos,
-    destinoTipo:($('o-dest-tipo')||{value:'LOCAL'}).value,
+    destinoTipo:dest,
     destinoNombre:($('o-dest-nom')||{value:''}).value,
     kmTraslado:($('o-km')||{value:0}).value,
     costoTraslado:($('o-costo-traslado')||{value:0}).value,
@@ -2607,9 +2699,21 @@ function recopilar(){
     salidaTraslado:($('o-salida')||{value:''}).value,
     horaMisa:($('o-misa')||{value:''}).value,
     horaCeremonia:($('o-hora-ceremonia')||{value:''}).value,
-    // Logística Traslado Foráneo
-    foraneoLugarSalida:($('o-foraneo-salida-lugar')||{value:''}).value,
-    foraneoHoraSalida:($('o-foraneo-hora-salida')||{value:''}).value,
+    // Logística Traslado Foráneo — todo este bloque solo aplica (y solo se
+    // guarda) si el destino es FORÁNEO; si no, se limpia para que no quede
+    // pegado el valor de un input oculto al cambiar de LOCAL a FORÁNEO y
+    // viceversa.
+    foraneoLugarSalida:dest==='FORANEO'?($('o-foraneo-salida-lugar')||{value:''}).value:'',
+    foraneoHoraSalida:dest==='FORANEO'?($('o-foraneo-hora-salida')||{value:''}).value:'',
+    foraneoFechaSalida:dest==='FORANEO'?($('o-foraneo-fecha-salida')||{value:''}).value:'',
+    trasladoVelacionLugar:dest==='FORANEO'?($('o-traslado-velacion-lugar')||{value:''}).value:'',
+    trasladoVelacionNombre:(dest==='FORANEO'&&($('o-traslado-velacion-lugar')||{value:''}).value)?($('o-traslado-velacion-nombre')||{value:''}).value:'',
+    trasladoRealizaSepelio:dest==='FORANEO'?($('o-traslado-sepelio')||{value:'NO'}).value:'NO',
+    trasladoSepelioFecha:(dest==='FORANEO'&&$('o-traslado-sepelio')&&$('o-traslado-sepelio').value==='SI')?($('o-traslado-sepelio-fecha')||{value:''}).value:'',
+    trasladoSepelioHoraSalida:(dest==='FORANEO'&&$('o-traslado-sepelio')&&$('o-traslado-sepelio').value==='SI')?($('o-traslado-sepelio-salida')||{value:''}).value:'',
+    trasladoSepelioHoraMisa:(dest==='FORANEO'&&$('o-traslado-sepelio')&&$('o-traslado-sepelio').value==='SI')?($('o-traslado-sepelio-misa')||{value:''}).value:'',
+    trasladoIglesia:(dest==='FORANEO'&&$('o-traslado-sepelio')&&$('o-traslado-sepelio').value==='SI')?($('o-traslado-iglesia')||{value:''}).value:'',
+    trasladoSepelioHora:(dest==='FORANEO'&&$('o-traslado-sepelio')&&$('o-traslado-sepelio').value==='SI')?($('o-traslado-sepelio-hora')||{value:''}).value:'',
     anotaciones:($('o-anot')||{value:''}).value,
     estatusEquipo:vel==='DOMICILIO'?'ACTIVO':'N/A',
     estatus:'ACTIVA',
@@ -2755,13 +2859,14 @@ function limpiarODS(){
    'o-urna-cambio-id','o-urna-cambio-nom','o-urna-cambio-costo',
    'o-inst','o-recol','o-sala-costo','o-dest-nom','o-km','o-costo-traslado','o-otros','o-anticipo','o-desc',
    'o-anot','o-panteon','o-crematorio','o-fecha-ceremonia','o-salida','o-misa','o-hora-ceremonia',
-   'o-foraneo-hora-salida',
+   'o-foraneo-hora-salida','o-foraneo-fecha-salida','o-traslado-velacion-nombre',
+   'o-traslado-sepelio-fecha','o-traslado-sepelio-salida','o-traslado-sepelio-misa','o-traslado-iglesia','o-traslado-sepelio-hora',
    'pg-monto','pg-letras','pg-nombre','pg-tel','pg-ine','pg-venc','pg-dom'
   ].forEach(id=>{const el=$(id);if(el)el.value=id.includes('otros')||id.includes('anticipo')||id.includes('desc')?'0':''});
   const pctEl=$('o-pct-ant');if(pctEl)pctEl.value=60;
   ['tr-registro','tr-fge','tr-periciales','eq-biombo','eq-base','eq-cristo','eq-cande','ins-cruz','ins-cirios','o-pagare'].forEach(id=>{const el=$(id);if(el)el.checked=false});
-  ['o-exceso','o-obj-cuerpo','o-modalidad','o-vel-tipo','o-dest-tipo','o-foraneo-salida-lugar','tr-cert','tr-p48','tr-traslado'].forEach(id=>{const el=$(id);if(el)el.selectedIndex=0});
-  toggleLogistica();
+  ['o-exceso','o-obj-cuerpo','o-modalidad','o-vel-tipo','o-dest-tipo','o-foraneo-salida-lugar','tr-cert','tr-p48','tr-traslado','o-traslado-velacion-lugar','o-traslado-sepelio'].forEach(id=>{const el=$(id);if(el)el.selectedIndex=0});
+  toggleLogistica();toggleTrasladoVelacion();toggleTrasladoSepelio();
   const ivaEl=$('o-aplica-iva');if(ivaEl)ivaEl.checked=true;
   $('blq-cande-piezas').style.display='none';
   $('blq-urna-cambio-detalle').style.display='none';
@@ -2852,8 +2957,20 @@ function verODS(folio){
       <div class="div"></div>
       ${o.destinoTipo==='FORANEO'?`<div class="g2">
         <div><div style="color:var(--text3)">Lugar de Salida</div><div>${o.foraneoLugarSalida==='FUNERARIA'?'Funeraria':o.foraneoLugarSalida==='DOMICILIO'?'Domicilio':'—'}</div></div>
-        <div><div style="color:var(--text3)">Hora de Salida</div><div>${o.foraneoHoraSalida||'—'}</div></div>
-      </div>`:o.modalidadServicio==='CREMACION'?`<div class="g2">
+        <div><div style="color:var(--text3)">Salida hacia Destino</div><div>${fechaPlano(o.foraneoFechaSalida)||'—'} ${o.foraneoHoraSalida||''}</div></div>
+      </div>
+      <div class="g2" style="margin-top:6px">
+        <div><div style="color:var(--text3)">Velación</div><div>${o.trasladoVelacionLugar==='DESTINO'?'En destino':o.trasladoVelacionLugar==='LOCAL'?'Local':'—'}${o.trasladoVelacionNombre?': '+o.trasladoVelacionNombre:''}</div></div>
+        <div><div style="color:var(--text3)">¿Sepelio?</div><div>${o.trasladoRealizaSepelio==='SI'?'Sí':'No'}</div></div>
+      </div>
+      ${o.trasladoRealizaSepelio==='SI'?`<div class="g2" style="margin-top:6px">
+        <div><div style="color:var(--text3)">Iglesia</div><div>${o.trasladoIglesia||'—'}</div></div>
+        <div><div style="color:var(--text3)">Fecha Sepelio</div><div>${fechaPlano(o.trasladoSepelioFecha)||'—'}</div></div>
+      </div>
+      <div class="g2" style="margin-top:6px">
+        <div><div style="color:var(--text3)">Horarios</div><div>Salida ${o.trasladoSepelioHoraSalida||'—'} · Misa ${o.trasladoSepelioHoraMisa||'—'}</div></div>
+        <div><div style="color:var(--text3)">Hora Sepelio</div><div style="color:var(--amber)">${o.trasladoSepelioHora||'—'}</div></div>
+      </div>`:''}`:o.modalidadServicio==='CREMACION'?`<div class="g2">
         <div><div style="color:var(--text3)">Crematorio</div><div>${o.crematorio||'—'}</div></div>
         <div><div style="color:var(--text3)">Fecha Cremación</div><div>${fechaPlano(fechaCeremoniaDe(o))||'—'}</div></div>
       </div>
@@ -3639,8 +3756,18 @@ function _seccionLogisticaHTML(o){
     <div class="doc-row2">
       <div><b>Destino:</b> ${o.destinoNombre||'—'}</div>
       <div><b>Lugar de Salida:</b> ${o.foraneoLugarSalida==='FUNERARIA'?'Funeraria':o.foraneoLugarSalida==='DOMICILIO'?'Domicilio':'—'}</div>
+      <div><b>Fecha de Salida:</b> ${fechaPlano(o.foraneoFechaSalida)||'—'}</div>
       <div><b>Hora de Salida:</b> ${o.foraneoHoraSalida||'—'}</div>
-    </div>`;
+      <div><b>Velación:</b> ${o.trasladoVelacionLugar==='DESTINO'?'En destino (al terminar trámites)':o.trasladoVelacionLugar==='LOCAL'?'Funeraria/domicilio local':'—'}</div>
+      <div><b>Velatorio/Domicilio:</b> ${o.trasladoVelacionNombre||'—'}</div>
+    </div>
+    ${o.trasladoRealizaSepelio==='SI'?`<div class="doc-row2" style="margin-top:6px">
+      <div><b>Fecha de Sepelio:</b> ${fechaPlano(o.trasladoSepelioFecha)||'—'}</div>
+      <div><b>Iglesia:</b> ${o.trasladoIglesia||'—'}</div>
+      <div><b>Hora Salida de Domicilio:</b> ${o.trasladoSepelioHoraSalida||'—'}</div>
+      <div><b>Hora de Misa:</b> ${o.trasladoSepelioHoraMisa||'—'}</div>
+      <div><b>Hora de Sepelio:</b> ${o.trasladoSepelioHora||'—'}</div>
+    </div>`:''}`;
   }
   if(esCrem){
     return `<div class="doc-sec-title">Logística de Cremación</div>
@@ -5859,7 +5986,18 @@ function abrirEdicionLogistica(folio){
   $('log-hora-ceremonia').value=horaCeremoniaDe(o);
 
   $('log-foraneo-salida-lugar').value=o.foraneoLugarSalida||'DOMICILIO';
+  $('log-foraneo-fecha-salida').value=o.foraneoFechaSalida||'';
   $('log-foraneo-hora-salida').value=o.foraneoHoraSalida||'';
+  $('log-traslado-velacion-lugar').value=o.trasladoVelacionLugar||'';
+  $('log-traslado-velacion-nombre').value=o.trasladoVelacionNombre||'';
+  $('log-traslado-sepelio').value=o.trasladoRealizaSepelio||'NO';
+  $('log-traslado-sepelio-fecha').value=o.trasladoSepelioFecha||'';
+  $('log-traslado-sepelio-salida').value=o.trasladoSepelioHoraSalida||'';
+  $('log-traslado-sepelio-misa').value=o.trasladoSepelioHoraMisa||'';
+  $('log-traslado-iglesia').value=o.trasladoIglesia||'';
+  $('log-traslado-sepelio-hora').value=o.trasladoSepelioHora||'';
+  toggleLogTrasladoVelacion();
+  toggleLogTrasladoSepelio();
 
   $('mo-logistica').classList.add('show');
 }
@@ -5870,6 +6008,7 @@ function guardarLogistica(){
   const o=db[idx];
   const esLocal=o.modalidadServicio==='INHUMACION'&&o.destinoTipo!=='FORANEO';
   const esCrem=o.modalidadServicio==='CREMACION';
+  const esForaneo=o.destinoTipo==='FORANEO';
 
   o.lugSepelio=esLocal?$('log-panteon').value:'';
   o.crematorio=esCrem?$('log-crematorio').value:'';
@@ -5883,6 +6022,18 @@ function guardarLogistica(){
 
   o.foraneoLugarSalida=$('log-foraneo-salida-lugar').value;
   o.foraneoHoraSalida=$('log-foraneo-hora-salida').value;
+  o.foraneoFechaSalida=$('log-foraneo-fecha-salida').value;
+  const velacionLugar=$('log-traslado-velacion-lugar').value;
+  o.trasladoVelacionLugar=velacionLugar;
+  o.trasladoVelacionNombre=velacionLugar?$('log-traslado-velacion-nombre').value:'';
+  const realizaSepelio=$('log-traslado-sepelio').value;
+  o.trasladoRealizaSepelio=esForaneo?realizaSepelio:'NO';
+  const haySepelioTraslado=esForaneo&&realizaSepelio==='SI';
+  o.trasladoSepelioFecha=haySepelioTraslado?$('log-traslado-sepelio-fecha').value:'';
+  o.trasladoSepelioHoraSalida=haySepelioTraslado?$('log-traslado-sepelio-salida').value:'';
+  o.trasladoSepelioHoraMisa=haySepelioTraslado?$('log-traslado-sepelio-misa').value:'';
+  o.trasladoIglesia=haySepelioTraslado?$('log-traslado-iglesia').value:'';
+  o.trasladoSepelioHora=haySepelioTraslado?$('log-traslado-sepelio-hora').value:'';
   o.fechaActualizacion=new Date().toISOString();
 
   db[idx]=o;sDB(db);
@@ -6227,7 +6378,11 @@ async function precargarFormularioODS(o){
     'o-otros':'otrosCargos','o-desc':'descuento','o-anticipo':'anticipo',
     'o-anot':'anotaciones','o-pct-ant':'porcentajeAnticipo',
     'o-panteon':'lugSepelio','o-crematorio':'crematorio',
-    'o-foraneo-hora-salida':'foraneoHoraSalida',
+    'o-foraneo-hora-salida':'foraneoHoraSalida','o-foraneo-fecha-salida':'foraneoFechaSalida',
+    'o-traslado-velacion-nombre':'trasladoVelacionNombre',
+    'o-traslado-sepelio-fecha':'trasladoSepelioFecha','o-traslado-sepelio-salida':'trasladoSepelioHoraSalida',
+    'o-traslado-sepelio-misa':'trasladoSepelioHoraMisa','o-traslado-iglesia':'trasladoIglesia',
+    'o-traslado-sepelio-hora':'trasladoSepelioHora',
     'pg-monto':'montoPagare','pg-nombre':'nombreDeudor','pg-tel':'telefonoDeudor','pg-ine':'ineDeudor','pg-venc':'vencimientoPagare','pg-dom':'domicilioDeudor','pg-letras':'cantidadLetras'
   };
   Object.keys(directos).forEach(id=>{const el=$(id);if(el)el.value=o[directos[id]]??''});
@@ -6244,8 +6399,9 @@ async function precargarFormularioODS(o){
   if($('o-misa'))$('o-misa').value=horaMisaDe(o);
   if($('o-hora-ceremonia'))$('o-hora-ceremonia').value=horaCeremoniaDe(o);
 
-  const selects={'o-modalidad':'modalidadServicio','o-vel-tipo':'modalidadVelacion','o-dest-tipo':'destinoTipo','o-foraneo-salida-lugar':'foraneoLugarSalida','o-exceso':'excesoPeso','o-obj-cuerpo':'objetoCuerpo'};
+  const selects={'o-modalidad':'modalidadServicio','o-vel-tipo':'modalidadVelacion','o-dest-tipo':'destinoTipo','o-foraneo-salida-lugar':'foraneoLugarSalida','o-exceso':'excesoPeso','o-obj-cuerpo':'objetoCuerpo','o-traslado-velacion-lugar':'trasladoVelacionLugar'};
   Object.keys(selects).forEach(id=>{const el=$(id);if(el&&o[selects[id]])el.value=o[selects[id]]});
+  if($('o-traslado-sepelio'))$('o-traslado-sepelio').value=o.trasladoRealizaSepelio||'NO';
 
   const tramites=String(o.tramites||'').split(',');
   ['registro','fge','periciales'].forEach(t=>{const el=$('tr-'+t);if(el)el.checked=tramites.includes(t)});
@@ -6271,7 +6427,7 @@ async function precargarFormularioODS(o){
   $('blq-pagare').style.display=hayPagare?'block':'none';
   $('blq-anticipo-pct').style.display=hayPagare?'block':'none';
 
-  toggleMod();toggleVel();toggleDest();toggleLogistica();
+  toggleMod();toggleVel();toggleDest();toggleLogistica();toggleTrasladoVelacion();toggleTrasladoSepelio();
 
   // El catálogo de piezas disponibles no incluye la que ya está apartada
   // para ESTA orden (porque no está "disponible", está reservada a ella
