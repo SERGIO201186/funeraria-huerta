@@ -275,6 +275,7 @@ button:active{transform:scale(.97)}
     <button class="ni" onclick="abrirBuscarDocs()"><span class="ic">🔎</span>Buscar Documentos</button>
     <div class="nav-sec">Sistema</div>
     <button class="ni" data-admin-only onclick="navTo('ventas')"><span class="ic">📈</span>Dashboard de Ventas</button>
+    <button class="ni" data-admin-only onclick="navTo('historico')"><span class="ic">🕰️</span>Captura Histórica</button>
     <button class="ni" data-admin-only onclick="navTo('inventario')"><span class="ic">⚰️</span>Inventario Ataúdes/Urnas</button>
     <button class="ni" data-admin-only onclick="navTo('solicitudes')"><span class="ic">✏️</span>Solicitudes de Edición<span class="nbdg" id="bdg-sol">0</span></button>
     <button class="ni" data-admin-only onclick="navTo('colab')"><span class="ic">👥</span>Colaboradores</button>
@@ -779,6 +780,42 @@ button:active{transform:scale(.97)}
       <div class="card">
         <div class="st">Tendencia — Últimos 6 Meses</div>
         <div id="vt-tendencia" style="color:var(--text3);font-size:13px">Cargando…</div>
+      </div>
+    </div>
+
+    <!-- ── CAPTURA HISTÓRICA DE VENTAS (solo Administrador) ── -->
+    <div class="page" id="page-historico">
+      <div class="st">Captura Histórica de Ventas</div>
+      <p style="font-size:11px;color:var(--text2);margin-top:-6px;margin-bottom:13px">Para dar de alta servicios que ya se realizaron ANTES de usar la app (o que no se capturaron en su momento) — solo alimenta el Dashboard de Ventas y el histórico de ODS. No selecciona pieza de inventario, no genera equipo de velación ni trámites.</p>
+      <div class="card">
+        <div class="g2">
+          <div class="f"><label class="lbl">Fecha del Servicio *</label><input id="h-fecha" type="date" onchange="onFechaHistoricaChange()"/></div>
+          <div class="f"><label class="lbl">Modalidad *</label>
+            <select id="h-modalidad"><option value="INHUMACION">INHUMACIÓN</option><option value="CREMACION">CREMACIÓN</option></select>
+          </div>
+        </div>
+        <div class="f"><label class="lbl">Fallecido *</label><input id="h-fallecido" type="text" placeholder="Nombre del finado"/></div>
+        <div class="f"><label class="lbl">Contratante</label><input id="h-contratante" type="text" placeholder="Si es distinto al de arriba"/></div>
+        <div class="f"><label class="lbl">Vendido por (empleado) *</label>
+          <select id="h-empleado"><option value="">-- Selecciona --</option></select>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Monto Total Vendido ($) *</label><input id="h-total" type="number" min="0" oninput="onMontoHistoricoChange()"/></div>
+          <div class="f"><label class="lbl">Saldo Pendiente ($)</label><input id="h-restante" type="number" min="0" value="0"/></div>
+        </div>
+        <div class="f">
+          <label class="lbl">Folio</label>
+          <div style="display:flex;gap:8px">
+            <input id="h-folio" type="text" style="flex:1"/>
+            <button class="bo bsm" onclick="sugerirFolioHistoricoUI()">🔄 Sugerir</button>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">Usa el prefijo ODS-HIST- para no chocar nunca con la numeración normal de folios operativos.</div>
+        </div>
+        <button class="bg" style="width:100%" onclick="guardarODSHistorica()">💾 Guardar Orden Histórica</button>
+      </div>
+      <div class="card">
+        <div class="st">Órdenes Históricas Capturadas</div>
+        <div id="lista-historico" style="color:var(--text3);font-size:13px">Sin registros históricos todavía.</div>
       </div>
     </div>
 
@@ -2162,7 +2199,7 @@ function mostrarBienvenida(){
 
 /* ── NAV ── */
 function navTo(p){
-  if((p==='colab'||p==='nube'||p==='solicitudes'||p==='ventas'||p==='inventario') && !requiereAdmin('⚠ Solo el Administrador puede acceder a esta sección')) return;
+  if((p==='colab'||p==='nube'||p==='solicitudes'||p==='ventas'||p==='inventario'||p==='historico') && !requiereAdmin('⚠ Solo el Administrador puede acceder a esta sección')) return;
   ST.page=p;
   document.querySelectorAll('.page').forEach(el=>el.classList.remove('act'));
   document.querySelectorAll('.ni').forEach(el=>el.classList.remove('act'));
@@ -2180,6 +2217,7 @@ function navTo(p){
   if(p==='solicitudes')cargarSolicitudes();
   if(p==='ventas'){ST.ods=lDB();renderVentas();}
   if(p==='inventario')cargarProductos();
+  if(p==='historico'){poblarSelectEmpleados();renderHistorico();}
   if(p==='nueva'){setTimeout(initFirmaCanvas,80);cargarCatalogoTienda();toggleLogistica();}
 }
 function toggleSB(){$('sb').classList.toggle('open');$('sov').classList.toggle('show')}
@@ -2719,6 +2757,115 @@ async function sembrarCatalogoDefault(){
   }
   toast('✅ Catálogo por defecto cargado');
   cargarProductos();
+}
+
+/* ══════════════════════════════════════════════════════════
+   CAPTURA HISTÓRICA DE VENTAS
+   Para dar de alta servicios ya realizados ANTES de usar la app (o que no
+   se capturaron en su momento) sin pasar por el formulario operativo
+   completo de Nueva Orden — ese siempre pone fechaCreacion=ahora y exige
+   elegir una pieza del inventario real, dos cosas que no tienen sentido
+   para un registro histórico. Usa el MISMO guardarODS del backend (folio +
+   fechaCreacion elegida a mano), así que alimenta el Dashboard de Ventas y
+   el Tablero exactamente igual que una orden capturada en tiempo real.
+   El folio siempre usa el prefijo "ODS-HIST-" para que nunca choque con la
+   numeración normal (genFolio() solo mira el prefijo "ODS-{añoActual}-").
+════════════════════════════════════════════════════════════ */
+function poblarSelectEmpleados(){
+  const sel=$('h-empleado'); if(!sel)return;
+  const emps=(ST.emps&&ST.emps.length?ST.emps:lEmp()).filter(e=>e.estatus!=='INACTIVO');
+  const valorPrevio=sel.value;
+  sel.innerHTML='<option value="">-- Selecciona --</option>'
+    + emps.map(e=>`<option value="${(e.nombreCompleto||'').replace(/"/g,'&quot;')}">${e.nombreCompleto}${e.puesto?' — '+e.puesto:''}</option>`).join('');
+  if(valorPrevio) sel.value=valorPrevio;
+}
+
+function sugerirFolioHistorico(fechaStr){
+  const y=(fechaStr?new Date(fechaStr+'T12:00:00'):new Date()).getFullYear().toString().slice(-2);
+  const prefijo=`ODS-HIST-${y}-`;
+  let max=0;
+  lDB().forEach(o=>{
+    if(o.folio&&o.folio.indexOf(prefijo)===0){
+      const n=parseInt(o.folio.slice(prefijo.length),10);
+      if(!isNaN(n)&&n>max)max=n;
+    }
+  });
+  return prefijo+(max+1).toString().padStart(4,'0');
+}
+function sugerirFolioHistoricoUI(){
+  $('h-folio').value=sugerirFolioHistorico(($('h-fecha')||{value:''}).value);
+}
+function onFechaHistoricaChange(){
+  if(!(($('h-folio')||{value:''}).value||'').trim()) sugerirFolioHistoricoUI();
+}
+function onMontoHistoricoChange(){
+  const total=+(($('h-total')||{value:0}).value)||0;
+  const restEl=$('h-restante');
+  if(restEl){ restEl.max=total; if(+restEl.value>total) restEl.value=total; }
+}
+
+function limpiarFormHistorico(){
+  ['h-fecha','h-fallecido','h-contratante','h-total','h-folio'].forEach(id=>{const el=$(id);if(el)el.value=''});
+  if($('h-restante'))$('h-restante').value=0;
+  if($('h-modalidad'))$('h-modalidad').value='INHUMACION';
+  if($('h-empleado'))$('h-empleado').value='';
+}
+
+function guardarODSHistorica(){
+  const fecha=($('h-fecha')||{value:''}).value;
+  const fallecido=($('h-fallecido')||{value:''}).value.trim();
+  const empleado=($('h-empleado')||{value:''}).value;
+  const total=+(($('h-total')||{value:0}).value)||0;
+  if(!fecha||!fallecido||!empleado||!total){toast('⚠ Fecha, fallecido, empleado y monto son obligatorios');return}
+  const restante=Math.min(+(($('h-restante')||{value:0}).value)||0, total);
+  let folio=($('h-folio')||{value:''}).value.trim()||sugerirFolioHistorico(fecha);
+  if(lDB().some(o=>o.folio===folio)){toast('⚠ Ese folio ya existe — usa "Sugerir" para uno libre');return}
+  const fechaIso=new Date(fecha+'T12:00:00').toISOString();
+  const d={
+    folio, fallecido,
+    contratante:($('h-contratante')||{value:''}).value.trim()||fallecido,
+    modalidadServicio:$('h-modalidad').value,
+    totalGeneral:total, subtotal:total, descuento:0, iva:0,
+    anticipo:Math.max(total-restante,0), restante,
+    estatus:restante>0?'PENDIENTE_PAGO':'CERRADA',
+    estatusEquipo:'N/A',
+    creadoPor:empleado,
+    fechaCreacion:fechaIso,
+    fechaActualizacion:new Date().toISOString(),
+    anotaciones:'Capturada como venta histórica (previa al uso de la app o no registrada en su momento).'
+  };
+  const db=lDB();db.unshift(d);sDB(db);
+  encolar({accion:'guardarODS',datos:d});
+  if(ST.online&&ST.url) sincronizarTodo(true);
+  toast(`✅ ${folio} capturada como venta histórica`);
+  limpiarFormHistorico();
+  renderHistorico();
+  updDash();
+}
+
+function eliminarHistoricoUI(folio){
+  elimODS(folio);
+  renderHistorico();
+}
+
+function renderHistorico(){
+  const el=$('lista-historico'); if(!el)return;
+  const hist=lDB().filter(o=>String(o.folio||'').indexOf('ODS-HIST-')===0)
+    .sort((a,b)=>new Date(b.fechaCreacion)-new Date(a.fechaCreacion));
+  el.innerHTML = hist.length ? hist.map(o=>`
+    <div class="card" style="padding:10px 12px;margin-bottom:7px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--gold)">${o.folio}</div>
+          <div style="font-size:14px;font-weight:700">${o.fallecido||'—'}</div>
+          <div style="font-size:12px;color:var(--text2)">${o.creadoPor||'—'} · ${fechaPlano(o.fechaCreacion)} · ${o.modalidadServicio||''}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:13px;font-weight:700;color:var(--gold)">${fmt(o.totalGeneral)}</div>
+          <button class="br bsm" style="margin-top:6px" onclick="eliminarHistoricoUI('${o.folio}')">🗑</button>
+        </div>
+      </div>
+    </div>`).join('') : '<div style="color:var(--text3);font-size:13px">Sin registros históricos todavía.</div>';
 }
 
 function toggleCandeleros(){
