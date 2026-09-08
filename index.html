@@ -274,6 +274,8 @@ button:active{transform:scale(.97)}
     <button class="ni" onclick="window.open('https://sergio201186.github.io/tienda_huerta/','_blank')"><span class="ic">🛍</span>Tienda Virtual</button>
     <button class="ni" onclick="abrirBuscarDocs()"><span class="ic">🔎</span>Buscar Documentos</button>
     <div class="nav-sec">Sistema</div>
+    <button class="ni" data-admin-only onclick="navTo('ventas')"><span class="ic">📈</span>Dashboard de Ventas</button>
+    <button class="ni" data-admin-only onclick="navTo('inventario')"><span class="ic">⚰️</span>Inventario Ataúdes/Urnas</button>
     <button class="ni" data-admin-only onclick="navTo('solicitudes')"><span class="ic">✏️</span>Solicitudes de Edición<span class="nbdg" id="bdg-sol">0</span></button>
     <button class="ni" data-admin-only onclick="navTo('colab')"><span class="ic">👥</span>Colaboradores</button>
     <button class="ni" data-admin-only onclick="navTo('nube')"><span class="ic">☁️</span>Sincronización Nube</button>
@@ -741,6 +743,77 @@ button:active{transform:scale(.97)}
       <div class="div" style="margin:18px 0"></div>
       <div class="st" style="font-size:11px">Resueltas recientemente</div>
       <div id="lista-solic-resueltas"></div>
+    </div>
+
+    <!-- ── DASHBOARD DE VENTAS (solo Administrador) ── -->
+    <div class="page" id="page-ventas">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:8px">
+        <div class="st" style="margin:0;border:none;padding:0">Dashboard de Ventas</div>
+        <input id="vt-mes" type="month" onchange="renderVentas()" style="width:auto"/>
+      </div>
+      <div id="vt-mes-lbl" style="font-size:12px;color:var(--text2);margin-bottom:13px;text-transform:capitalize">—</div>
+
+      <div class="sg">
+        <div class="sc ac">
+          <div class="v" id="vt-cant">0</div><div class="l">Servicios Vendidos</div>
+          <div id="vt-cant-delta" style="margin-top:4px"></div>
+        </div>
+        <div class="sc">
+          <div class="v" id="vt-monto">$0</div><div class="l">Ingresos del Mes</div>
+          <div id="vt-monto-delta" style="margin-top:4px"></div>
+        </div>
+        <div class="sc"><div class="v" id="vt-ticket">$0</div><div class="l">Ticket Promedio</div></div>
+        <div class="sc"><div class="v" id="vt-restante" style="color:var(--red)">$0</div><div class="l">Por Cobrar (mes)</div></div>
+      </div>
+
+      <div class="card">
+        <div class="st">Ventas por Empleado</div>
+        <div id="vt-empleados" style="color:var(--text3);font-size:13px">Cargando…</div>
+      </div>
+
+      <div class="card">
+        <div class="st">Ventas por Modalidad</div>
+        <div id="vt-modalidad"></div>
+      </div>
+
+      <div class="card">
+        <div class="st">Tendencia — Últimos 6 Meses</div>
+        <div id="vt-tendencia" style="color:var(--text3);font-size:13px">Cargando…</div>
+      </div>
+    </div>
+
+    <!-- ── INVENTARIO DE ATAÚDES/URNAS (catálogo general temporal, solo Administrador) ── -->
+    <div class="page" id="page-inventario">
+      <div class="st">Inventario de Ataúdes y Urnas (catálogo general)</div>
+      <p style="font-size:11px;color:var(--text2);margin-top:-6px;margin-bottom:13px">Catálogo temporal de tipos con costo general (sin control de existencias por pieza) — complementa al inventario de la Tienda Virtual. Al elegirlos en una Nueva Orden se marcan como "genérico" y su costo se puede seguir descontando al final igual que cualquier otro concepto.</p>
+      <div class="card">
+        <div class="st">Agregar / Editar Tipo</div>
+        <input type="hidden" id="pr-id"/>
+        <div class="f"><label class="lbl">Aplica a *</label>
+          <select id="pr-tipo">
+            <option value="INHUMACION">INHUMACIÓN (ataúd)</option>
+            <option value="CREMACION">CREMACIÓN (paquete/urna)</option>
+          </select>
+        </div>
+        <div class="f"><label class="lbl">Nombre *</label><input id="pr-nombre" type="text" placeholder="Ej. Barnizado liso o con imagen"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Costo General ($) *</label><input id="pr-costo" type="number" min="0"/></div>
+          <div class="f"><label class="lbl">Estatus</label>
+            <select id="pr-activo"><option value="true">Activo (visible en Nueva Orden)</option><option value="false">Inactivo (oculto)</option></select>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="bg" style="flex:1" onclick="guardarProductoUI()">💾 Guardar</button>
+          <button class="bo" onclick="limpiarFormProducto()">✖ Cancelar</button>
+        </div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div class="st" style="margin:0;border:none;padding:0">Catálogo Actual</div>
+          <button class="bo bsm" onclick="sembrarCatalogoDefault()">➕ Cargar paquetes por defecto</button>
+        </div>
+        <div id="lista-productos" style="color:var(--text3);font-size:13px">Cargando…</div>
+      </div>
     </div>
 
     <!-- ── COLABORADORES ── -->
@@ -1620,7 +1693,7 @@ button:active{transform:scale(.97)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
-const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1', CERK='huerta_certificaciones_v1', RCK='huerta_solicitudes_rc_v1';
+const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1', CERK='huerta_certificaciones_v1', RCK='huerta_solicitudes_rc_v1', PRODK='huerta_prods_v1';
 // Sesión persistente (por dispositivo): guarda QUIÉN inició sesión en ESTE
 // celular y la credencial (PIN o usuario/contraseña) que se manda con cada
 // sincronización para que el servidor la valide. Es distinto del atajo de
@@ -1693,7 +1766,7 @@ let _catalogoTienda=[]; // caché del catálogo cargado (productos segment="inme
 // correcto, solo en esos dispositivos. Este valor por defecto rompe ese círculo.
 const DEFAULT_APPS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwYAzofFgAYk9QP7xJBkFfF0JBcxjf_e7DCwvQArfzdy1N6XZaIHre2jmsI6NOUHEPnaw/exec";
 
-let ST={user:null,online:navigator.onLine,url:localStorage.getItem(UK)||DEFAULT_APPS_SCRIPT_URL,page:'dash',ods:[],emps:[],q:JSON.parse(localStorage.getItem(QK)||'[]'),pin:'',loginTab:'pin'};
+let ST={user:null,online:navigator.onLine,url:localStorage.getItem(UK)||DEFAULT_APPS_SCRIPT_URL,page:'dash',ods:[],emps:[],prods:JSON.parse(localStorage.getItem(PRODK)||'[]'),q:JSON.parse(localStorage.getItem(QK)||'[]'),pin:'',loginTab:'pin'};
 let _firmaPendiente=null;
 
 const $=id=>document.getElementById(id);
@@ -2089,7 +2162,7 @@ function mostrarBienvenida(){
 
 /* ── NAV ── */
 function navTo(p){
-  if((p==='colab'||p==='nube'||p==='solicitudes') && !requiereAdmin('⚠ Solo el Administrador puede acceder a esta sección')) return;
+  if((p==='colab'||p==='nube'||p==='solicitudes'||p==='ventas'||p==='inventario') && !requiereAdmin('⚠ Solo el Administrador puede acceder a esta sección')) return;
   ST.page=p;
   document.querySelectorAll('.page').forEach(el=>el.classList.remove('act'));
   document.querySelectorAll('.ni').forEach(el=>el.classList.remove('act'));
@@ -2105,6 +2178,8 @@ function navTo(p){
   if(p==='colab')renderColab();
   if(p==='nube')initNube();
   if(p==='solicitudes')cargarSolicitudes();
+  if(p==='ventas'){ST.ods=lDB();renderVentas();}
+  if(p==='inventario')cargarProductos();
   if(p==='nueva'){setTimeout(initFirmaCanvas,80);cargarCatalogoTienda();toggleLogistica();}
 }
 function toggleSB(){$('sb').classList.toggle('open');$('sov').classList.toggle('show')}
@@ -2224,6 +2299,130 @@ function updDash(){
   $('box-tareas').innerHTML=items.map(i=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">${i}</div>`).join('');
 }
 
+/* ── DASHBOARD DE VENTAS ──
+   Se calcula del lado del cliente sobre ST.ods (el mismo arreglo ya
+   sincronizado que usa el resto de la app) — no agrega ninguna llamada
+   nueva al backend ni toca la sincronización compartida con Previsión.
+   "Vendido" = cualquier ODS capturada (ACTIVA/PENDIENTE_PAGO/CERRADA), sin
+   importar su estatus actual: el compromiso de venta ya quedó firmado desde
+   que se guarda la orden. Se agrupa por mes de fechaCreacion y por
+   creadoPor (nombre del colaborador que la capturó). ── */
+function _mesKey(iso){ return String(iso||'').slice(0,7); } // "YYYY-MM"
+function _mesAnterior(mesStr){
+  const [y,m]=(mesStr||'').split('-').map(Number);
+  if(!y||!m) return '';
+  const d=new Date(y, m-2, 1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+function _nombreMes(mesStr){
+  const [y,m]=(mesStr||'').split('-').map(Number);
+  if(!y||!m) return mesStr||'—';
+  const d=new Date(y, m-1, 1);
+  return d.toLocaleDateString('es-MX',{month:'long',year:'numeric'});
+}
+function _deltaPct(actual,previo){
+  if(!previo) return actual?100:0;
+  return Math.round((actual-previo)/previo*100);
+}
+function _badgeDelta(pct,abs,esMoneda){
+  if(pct===0&&abs===0) return `<span style="font-size:11px;color:var(--text3)">Sin cambio vs. mes anterior</span>`;
+  const subiendo=pct>=0;
+  const color=subiendo?'var(--green)':'var(--red)';
+  const flecha=subiendo?'▲':'▼';
+  const absTxt=esMoneda?fmt(Math.abs(abs)):Math.abs(abs);
+  return `<span style="font-size:11px;font-weight:700;color:${color}">${flecha} ${Math.abs(pct)}% (${absTxt}) vs. mes anterior</span>`;
+}
+
+function renderVentas(){
+  const ods=(ST.ods&&ST.ods.length?ST.ods:lDB()).filter(o=>o.folio);
+  const inputMes=$('vt-mes');
+  if(inputMes && !inputMes.value){
+    const hoy=new Date();
+    inputMes.value=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0');
+  }
+  const mesSel=inputMes?inputMes.value:_mesKey(new Date().toISOString());
+  const mesPrev=_mesAnterior(mesSel);
+
+  const delMes=m=>ods.filter(o=>_mesKey(o.fechaCreacion)===m);
+  const actual=delMes(mesSel), previo=delMes(mesPrev);
+  const sumMonto=arr=>arr.reduce((s,o)=>s+(+o.totalGeneral||0),0);
+  const sumRestante=arr=>arr.reduce((s,o)=>s+(+o.restante||0),0);
+
+  const totActual=sumMonto(actual), totPrevio=sumMonto(previo);
+  const cantActual=actual.length, cantPrevio=previo.length;
+  const ticketActual=cantActual?totActual/cantActual:0;
+
+  $('vt-mes-lbl').textContent=_nombreMes(mesSel);
+  $('vt-cant').textContent=cantActual;
+  $('vt-cant-delta').innerHTML=_badgeDelta(_deltaPct(cantActual,cantPrevio),cantActual-cantPrevio,false);
+  $('vt-monto').textContent=fmt(totActual);
+  $('vt-monto-delta').innerHTML=_badgeDelta(_deltaPct(totActual,totPrevio),totActual-totPrevio,true);
+  $('vt-ticket').textContent=fmt(ticketActual);
+  $('vt-restante').textContent=fmt(sumRestante(actual));
+
+  // Ventas por empleado (creadoPor ya guarda el nombre completo del colaborador)
+  const porEmp={};
+  actual.forEach(o=>{
+    const key=o.creadoPor||'— Sin asignar —';
+    if(!porEmp[key])porEmp[key]={cant:0,monto:0};
+    porEmp[key].cant++;
+    porEmp[key].monto+=(+o.totalGeneral||0);
+  });
+  const filasEmp=Object.entries(porEmp).sort((a,b)=>b[1].monto-a[1].monto);
+  $('vt-empleados').innerHTML = filasEmp.length ? filasEmp.map(([nombre,d])=>{
+    const pct=totActual?Math.round(d.monto/totActual*100):0;
+    return `<div class="card" style="padding:10px 12px;margin-bottom:7px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:14px;font-weight:700">${nombre}</div>
+        <span class="badge bg-g">${d.cant} servicio${d.cant===1?'':'s'}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px">
+        <span style="font-size:12px;color:var(--text2)">Ticket prom.: ${fmt(d.cant?d.monto/d.cant:0)}</span>
+        <span style="font-size:13px;font-weight:700;color:var(--gold)">${fmt(d.monto)}</span>
+      </div>
+      <div style="height:5px;background:var(--bg);border-radius:4px;margin-top:6px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--gold)"></div>
+      </div>
+    </div>`;
+  }).join('') : '<div style="color:var(--text3);font-size:13px">Sin ventas registradas este mes.</div>';
+
+  // Ventas por modalidad
+  const porMod={INHUMACION:{cant:0,monto:0},CREMACION:{cant:0,monto:0}};
+  actual.forEach(o=>{
+    const k=o.modalidadServicio==='CREMACION'?'CREMACION':'INHUMACION';
+    porMod[k].cant++; porMod[k].monto+=(+o.totalGeneral||0);
+  });
+  $('vt-modalidad').innerHTML=`
+    <div class="g2">
+      <div class="sc"><div class="v">${porMod.INHUMACION.cant}</div><div class="l">Inhumación — ${fmt(porMod.INHUMACION.monto)}</div></div>
+      <div class="sc"><div class="v">${porMod.CREMACION.cant}</div><div class="l">Cremación — ${fmt(porMod.CREMACION.monto)}</div></div>
+    </div>`;
+
+  // Tendencia — últimos 6 meses (incluye el mes seleccionado)
+  const meses=[];
+  {
+    const [y,m]=mesSel.split('-').map(Number);
+    for(let i=5;i>=0;i--){
+      const d=new Date(y,(m-1)-i,1);
+      meses.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));
+    }
+  }
+  const montosPorMes=meses.map(m=>sumMonto(delMes(m)));
+  const maxMonto=Math.max(1,...montosPorMes);
+  $('vt-tendencia').innerHTML=meses.map((m,i)=>{
+    const cant=delMes(m).length, monto=montosPorMes[i];
+    const pct=Math.round(monto/maxMonto*100);
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <div style="width:74px;font-size:11px;color:var(--text2);text-transform:capitalize">${_nombreMes(m).split(' de ')[0]}</div>
+      <div style="flex:1;height:14px;background:var(--bg);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${m===mesSel?'var(--gold)':'var(--golddim)'}"></div>
+      </div>
+      <div style="width:92px;text-align:right;font-size:11px;color:var(--text2)">${fmt(monto)}</div>
+      <div style="width:34px;text-align:right;font-size:11px;color:var(--text3)">${cant}</div>
+    </div>`;
+  }).join('');
+}
+
 /* ── ODS FORM LÓGICA ── */
 let _folioActual='ODS-XXXX';
 // Modo edición: si _folioEnEdicion tiene un folio, el formulario de "Nueva
@@ -2322,7 +2521,7 @@ function _norm(s){
 }
 
 async function cargarCatalogoTienda(){
-  const datos=await tiendaGet();
+  const [datos]=await Promise.all([tiendaGet(), cargarProductosGenericos()]);
   _catalogoTienda=Array.isArray(datos)?datos.filter(p=>_norm(p.segment)==='inmediato'&&_norm(p.estado||'disponible')==='disponible'):[];
   llenarSelectCatalogo('o-ataud-id','ataud');
   llenarSelectCatalogo('o-urna-id','urna');
@@ -2336,15 +2535,22 @@ function llenarSelectCatalogo(selectId,categoriaFiltro){
   const mapaCategoria={ataud:'inhumacion',urna:'cremacion','urna-cambio':'urna'};
   const catReal=mapaCategoria[categoriaFiltro]||categoriaFiltro;
   const items=_catalogoTienda.filter(p=>_norm(p.categoria)===catReal||(catReal!=='urna'&&_norm(p.categoria).includes(catReal)));
+  // Catálogo genérico temporal (ver INVENTARIO — página "Inventario Ataúdes/Urnas"):
+  // tipos con costo general, sin control de existencias por pieza. Solo aplica a
+  // ataúd/paquete de cremación, no a "cambiar la urna incluida" (esa sigue siendo
+  // solo piezas físicas de la tienda).
+  const tipoGenerico={ataud:'INHUMACION',urna:'CREMACION'}[categoriaFiltro];
+  const genericos=tipoGenerico?(ST.prods||[]).filter(p=>p.tipo===tipoGenerico&&String(p.activo)!=='false'):[];
   const valorPrevio=sel.value;
   const placeholder=categoriaFiltro==='urna-cambio'?'-- Mantener la urna incluida en el paquete --':'-- Selecciona del inventario --';
   sel.innerHTML=`<option value="">${placeholder}</option>`
-    + items.map(p=>`<option value="${p.id}" data-nombre="${(p.nombre||'').replace(/"/g,'&quot;')}" data-precio="${p.precio||0}">${p.nombre} — ${fmt(p.precio||0)}</option>`).join('');
+    + items.map(p=>`<option value="${p.id}" data-nombre="${(p.nombre||'').replace(/"/g,'&quot;')}" data-precio="${p.precio||0}">${p.nombre} — ${fmt(p.precio||0)}</option>`).join('')
+    + genericos.map(p=>`<option value="${p.id}" data-nombre="${(p.nombre||'').replace(/"/g,'&quot;')}" data-precio="${p.costo||0}" data-generico="1">🏷️ ${p.nombre} — ${fmt(p.costo||0)} (genérico)</option>`).join('');
   const idsSinStock={ataud:'ataud-sin-stock',urna:'urna-sin-stock','urna-cambio':'urna-cambio-sin-stock'};
   const sinStock=$(idsSinStock[categoriaFiltro]);
-  if(sinStock) sinStock.style.display=items.length===0?'block':'none';
+  if(sinStock) sinStock.style.display=(items.length===0&&genericos.length===0)?'block':'none';
   // Restaurar selección previa si la pieza sigue disponible (ej. al editar una orden)
-  if(valorPrevio && items.some(p=>String(p.id)===String(valorPrevio))) sel.value=valorPrevio;
+  if(valorPrevio && (items.some(p=>String(p.id)===String(valorPrevio))||genericos.some(p=>String(p.id)===String(valorPrevio)))) sel.value=valorPrevio;
 }
 
 function seleccionarProducto(tipo){
@@ -2371,23 +2577,148 @@ function seleccionarUrnaCambio(){
   calcTotal();
 }
 
+// Un id "PROD-..." es del catálogo genérico (ver INVENTARIO) y no existe en la
+// Tienda Virtual — nunca hay que llamar a tiendaApi con él (reservar/borrar/
+// liberar ahí no aplicaría a nada y solo generaría un error silencioso).
+function _esProductoGenerico(id){ return typeof id==='string' && id.indexOf('PROD-')===0; }
+
 // Reserva en la tienda la pieza elegida (ataúd y/o urna) al guardar una orden
 async function reservarPiezasDeOrden(o){
-  if(o.ataudId) await tiendaApi({action:'reservar',id:o.ataudId});
-  if(o.urnaId) await tiendaApi({action:'reservar',id:o.urnaId});
-  if(o.urnaCambioId) await tiendaApi({action:'reservar',id:o.urnaCambioId});
+  if(o.ataudId && !_esProductoGenerico(o.ataudId)) await tiendaApi({action:'reservar',id:o.ataudId});
+  if(o.urnaId && !_esProductoGenerico(o.urnaId)) await tiendaApi({action:'reservar',id:o.urnaId});
+  if(o.urnaCambioId && !_esProductoGenerico(o.urnaCambioId)) await tiendaApi({action:'reservar',id:o.urnaCambioId});
 }
 // Elimina definitivamente del inventario las piezas de una orden ya cerrada
 async function eliminarPiezasDeOrden(o){
-  if(o.ataudId) await tiendaApi({action:'delete',id:o.ataudId});
-  if(o.urnaId) await tiendaApi({action:'delete',id:o.urnaId});
-  if(o.urnaCambioId) await tiendaApi({action:'delete',id:o.urnaCambioId});
+  if(o.ataudId && !_esProductoGenerico(o.ataudId)) await tiendaApi({action:'delete',id:o.ataudId});
+  if(o.urnaId && !_esProductoGenerico(o.urnaId)) await tiendaApi({action:'delete',id:o.urnaId});
+  if(o.urnaCambioId && !_esProductoGenerico(o.urnaCambioId)) await tiendaApi({action:'delete',id:o.urnaCambioId});
 }
 // Libera de vuelta a disponible las piezas de una orden cancelada/eliminada
 async function liberarPiezasDeOrden(o){
-  if(o.ataudId) await tiendaApi({action:'liberar',id:o.ataudId});
-  if(o.urnaId) await tiendaApi({action:'liberar',id:o.urnaId});
-  if(o.urnaCambioId) await tiendaApi({action:'liberar',id:o.urnaCambioId});
+  if(o.ataudId && !_esProductoGenerico(o.ataudId)) await tiendaApi({action:'liberar',id:o.ataudId});
+  if(o.urnaId && !_esProductoGenerico(o.urnaId)) await tiendaApi({action:'liberar',id:o.urnaId});
+  if(o.urnaCambioId && !_esProductoGenerico(o.urnaCambioId)) await tiendaApi({action:'liberar',id:o.urnaCambioId});
+}
+
+/* ══════════════════════════════════════════════════════════
+   INVENTARIO GENERAL DE ATAÚDES/URNAS (catálogo temporal)
+   Distinto del catálogo de la Tienda Virtual (arriba): aquí cada tipo tiene
+   un costo GENERAL, sin control de existencias por pieza física. Vive en la
+   hoja "Productos" del mismo backend (Codigo.gs — guardarProducto/
+   obtenerProductos/eliminarProducto), que hasta ahora no usaba ningún
+   cliente. No interfiere con la app de Previsión: esas acciones no forman
+   parte de su sincronización ni de sus hojas.
+════════════════════════════════════════════════════════════ */
+function lProd(){return JSON.parse(localStorage.getItem(PRODK)||'[]')}
+function sProd(d){localStorage.setItem(PRODK,JSON.stringify(d));ST.prods=d}
+
+async function cargarProductosGenericos(){
+  if(!ST.url||!ST.online){ST.prods=lProd();return;}
+  try{
+    const r=await api({accion:'obtenerProductos',filtros:{},auth:ST.authCred});
+    if(r&&r.ok) sProd(r.datos||[]);
+    else ST.prods=lProd();
+  }catch(e){ ST.prods=lProd(); }
+}
+
+async function cargarProductos(){
+  const el=$('lista-productos'); if(el)el.innerHTML='Cargando…';
+  await cargarProductosGenericos();
+  renderProductos();
+}
+
+function renderProductos(){
+  const el=$('lista-productos'); if(!el)return;
+  const prods=(ST.prods||[]).slice().sort((a,b)=>(a.tipo||'').localeCompare(b.tipo||'')||(a.nombre||'').localeCompare(b.nombre||''));
+  el.innerHTML = prods.length ? prods.map(p=>`
+    <div class="card" style="padding:10px 12px;margin-bottom:7px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:14px;font-weight:700">${p.nombre}</div>
+          <div style="font-size:12px;color:var(--text2)">${p.tipo==='CREMACION'?'Cremación':'Inhumación'} · ${fmt(p.costo)}</div>
+        </div>
+        <span class="badge ${String(p.activo)==='false'?'bg-r':'bg-g'}">${String(p.activo)==='false'?'INACTIVO':'ACTIVO'}</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="bo bsm" onclick="editarProductoUI('${p.id}')">✏️ Editar</button>
+        <button class="br bsm" onclick="eliminarProductoUI('${p.id}')">🗑 Eliminar</button>
+      </div>
+    </div>`).join('') : '<div style="color:var(--text3);font-size:13px">Catálogo vacío — agrega un tipo arriba o carga los paquetes por defecto.</div>';
+}
+
+function limpiarFormProducto(){
+  $('pr-id').value=''; $('pr-nombre').value=''; $('pr-costo').value='';
+  $('pr-tipo').value='INHUMACION'; $('pr-activo').value='true';
+}
+
+async function guardarProductoUI(){
+  if(!ST.online||!ST.url){toast('⚠ Necesitas conexión para guardar el catálogo');return}
+  const nombre=($('pr-nombre')||{value:''}).value.trim();
+  const costo=+(($('pr-costo')||{value:0}).value)||0;
+  if(!nombre||!costo){toast('⚠ Nombre y costo son obligatorios');return}
+  const datos={
+    tipo:$('pr-tipo').value,
+    nombre, costo, precioSugerido:costo,
+    activo:$('pr-activo').value==='true',
+    creadoPor:ST.user?(ST.user.nombreCompleto||''):''
+  };
+  const idExistente=($('pr-id')||{value:''}).value;
+  if(idExistente) datos.id=idExistente;
+  try{
+    const r=await api({accion:'guardarProducto',datos,auth:ST.authCred});
+    if(r&&r.ok){ toast('✅ '+(r.mensaje||'Guardado')); limpiarFormProducto(); cargarProductos(); }
+    else toast('⚠ '+((r&&r.mensaje)||'No se pudo guardar'));
+  }catch(e){ toast('⚠ Sin conexión — no se pudo guardar'); }
+}
+
+function editarProductoUI(id){
+  const p=(ST.prods||[]).find(x=>String(x.id)===String(id));
+  if(!p)return;
+  $('pr-id').value=p.id; $('pr-nombre').value=p.nombre||''; $('pr-costo').value=p.costo||0;
+  $('pr-tipo').value=p.tipo||'INHUMACION'; $('pr-activo').value=String(p.activo)==='false'?'false':'true';
+  $('main').scrollTop=0;
+}
+
+async function eliminarProductoUI(id){
+  if(!confirm('¿Eliminar este tipo del catálogo? Las órdenes que ya lo usaron no se modifican.'))return;
+  try{
+    const r=await api({accion:'eliminarProducto',id,auth:ST.authCred});
+    if(r&&r.ok){ toast('🗑 Eliminado'); cargarProductos(); }
+  }catch(e){ toast('⚠ Sin conexión'); }
+}
+
+// Los 13 paquetes/tipos que se manejan hoy en general — se cargan una sola
+// vez con este botón (no duplica si el nombre ya existe en el catálogo).
+const CATALOGO_DEFAULT_PRODUCTOS=[
+  {tipo:'INHUMACION',nombre:'Inhumación básico tapa corrida',costo:7500},
+  {tipo:'INHUMACION',nombre:'Semifino forrado',costo:10000},
+  {tipo:'INHUMACION',nombre:'Barnizado liso o con imagen (varios colores, MDF)',costo:14500},
+  {tipo:'INHUMACION',nombre:'Barnizado desmontable (varios colores, MDF)',costo:16500},
+  {tipo:'INHUMACION',nombre:'Pino de imagen tallada',costo:21000},
+  {tipo:'INHUMACION',nombre:'Pino desmontable intermedio',costo:25000},
+  {tipo:'INHUMACION',nombre:'Pino fino desmontable o tallado',costo:29000},
+  {tipo:'INHUMACION',nombre:'Bóveda de pino grabada o lisa',costo:35000},
+  {tipo:'INHUMACION',nombre:'Bóveda de pino fina',costo:43000},
+  {tipo:'INHUMACION',nombre:'Bóveda de cedro',costo:45000},
+  {tipo:'CREMACION',nombre:'Cremación del Ángel',costo:18000},
+  {tipo:'CREMACION',nombre:'Cremación Escandón',costo:23000},
+  {tipo:'CREMACION',nombre:'Cremación Bosques',costo:31000}
+];
+
+async function sembrarCatalogoDefault(){
+  if(!ST.online||!ST.url){toast('⚠ Necesitas conexión para cargar el catálogo');return}
+  const existentes=new Set((ST.prods||[]).map(p=>(p.nombre||'').trim().toLowerCase()));
+  const faltantes=CATALOGO_DEFAULT_PRODUCTOS.filter(p=>!existentes.has(p.nombre.toLowerCase()));
+  if(!faltantes.length){ toast('Ya están cargados los paquetes por defecto'); return; }
+  if(!confirm(`Se agregarán ${faltantes.length} tipo(s) por defecto al catálogo. ¿Continuar?`))return;
+  for(const p of faltantes){
+    try{
+      await api({accion:'guardarProducto',datos:{tipo:p.tipo,nombre:p.nombre,costo:p.costo,precioSugerido:p.costo,activo:true,creadoPor:ST.user?(ST.user.nombreCompleto||''):''},auth:ST.authCred});
+    }catch(e){}
+  }
+  toast('✅ Catálogo por defecto cargado');
+  cargarProductos();
 }
 
 function toggleCandeleros(){
