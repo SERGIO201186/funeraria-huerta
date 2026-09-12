@@ -1730,7 +1730,7 @@ button:active{transform:scale(.97)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
-const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1', CERK='huerta_certificaciones_v1', RCK='huerta_solicitudes_rc_v1', PRODK='huerta_prods_v1';
+const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1', CERK='huerta_certificaciones_v1', RCK='huerta_solicitudes_rc_v1', PRODK='huerta_prods_v1', SUBK='huerta_last_upload_v1';
 // Sesión persistente (por dispositivo): guarda QUIÉN inició sesión en ESTE
 // celular y la credencial (PIN o usuario/contraseña) que se manda con cada
 // sincronización para que el servidor la valide. Es distinto del atajo de
@@ -3801,6 +3801,33 @@ function encolar(item){
   localStorage.setItem(QK,JSON.stringify(ST.q));
   $('est-q').textContent=ST.q.length;
 }
+// Qué ODS locales van en el próximo sincronizarTodo(): antes se mandaba
+// SIEMPRE lDB() completo (todo el historial que este dispositivo conoce),
+// aunque no hubiera cambiado nada. Con cientos de órdenes ya capturadas —
+// cada una con la firma del contratante como imagen embebida, que pesa
+// bastante — esto volvía cada sincronización (incluida la automática cada 5
+// minutos, ver _SYNC_INTERVALO_MS) cada vez más pesada y lenta, hasta que
+// Google Apps Script terminaba agotando su tiempo de ejecución y la
+// sincronización tronaba con error sin avisar por qué. Ahora solo se
+// re-sube lo que se modificó DESDE la última subida limpia de este
+// dispositivo (localStorage[SUBK], distinta de SK: esa es solo la etiqueta
+// de "última sincronía" que ya se mostraba en pantalla, y sigue
+// actualizándose igual que antes) — el resto ya está en la nube, no hace
+// falta reenviarlo ni que el servidor lo vuelva a escribir. SUBK solo
+// avanza cuando el sync terminó SIN erroresSync (ver más abajo), para que
+// un dato que falló al guardarse se siga reintentando en el próximo sync en
+// vez de quedar excluido para siempre por este filtro. Si nunca ha subido
+// limpio (dispositivo nuevo, o su almacenamiento local se vació), se manda
+// todo lo que tenga, igual que antes.
+function _odsParaSubir(){
+  const ultimaSubidaTs=(()=>{ const v=localStorage.getItem(SUBK); return v?new Date(v).getTime():0; })();
+  if(!ultimaSubidaTs) return lDB();
+  return lDB().filter(o=>{
+    const t=o.fechaActualizacion?new Date(o.fechaActualizacion).getTime():0;
+    return !t || t>=ultimaSubidaTs;
+  });
+}
+
 async function sincronizarTodo(silencioso=false){
   if(!ST.url){if(!silencioso)toast('⚠ Configura URL primero');return false}
   if(!ST.online){if(!silencioso)toast('⚠ Sin conexión');return false}
@@ -3809,7 +3836,7 @@ async function sincronizarTodo(silencioso=false){
     const r=await api({
       accion:'sincronizarTodo',
       auth:ST.authCred,
-      ods:lDB(),
+      ods:_odsParaSubir(),
       colaboradores:lEmp(),
       abonos:lAbonos(),
       solicitudes:lSolic(),
@@ -3922,6 +3949,10 @@ async function sincronizarTodo(silencioso=false){
         toast('⚠ '+r.erroresSync.length+' dato(s) no se guardaron — vuelve a intentar o revisa con soporte');
         return false;
       }
+      // Solo se marca "subida limpia" (ver _odsParaSubir) cuando de verdad no
+      // hubo ningún erroresSync — así lo que falló se sigue mandando en el
+      // próximo intento en vez de quedar excluido para siempre por fecha.
+      localStorage.setItem(SUBK,now);
       if(!silencioso)toast('✅ Sincronización completa');
       return true;
     }else{
@@ -3965,7 +3996,7 @@ function copiarInstrucciones(){
 }
 function resetLocal(){
   if(!confirm('¿Borrar TODOS los datos locales?'))return;
-  [DB,EK,QK,SK,ABK,SOLK,CERK,RCK,SESK,AUTHK,EPK].forEach(k=>localStorage.removeItem(k));
+  [DB,EK,QK,SK,SUBK,ABK,SOLK,CERK,RCK,SESK,AUTHK,EPK].forEach(k=>localStorage.removeItem(k));
   ST.q=[];ST.ods=[];ST.emps=[];
   toast('🗑 Datos locales eliminados');updDash();
 }
