@@ -3930,6 +3930,7 @@ async function sincronizarTodo(silencioso=false){
         const lbl=new Date().toLocaleString('es-MX');
         $('lbl-sync').textContent=lbl;$('est-sync').textContent=lbl;
         $('sync-log').textContent='⏳ '+r.mensaje;
+        $('sync-log').style.color='var(--text3)';
         updDash();
         if(!silencioso)toast('⏳ Dispositivo pendiente de autorización — se descargó lo último, pero tus cambios locales todavía no se subieron',4500);
         return false;
@@ -3939,6 +3940,7 @@ async function sincronizarTodo(silencioso=false){
       const lbl=new Date(now).toLocaleString('es-MX');
       $('lbl-sync').textContent=lbl;$('est-sync').textContent=lbl;$('est-q').textContent=0;
       $('sync-log').textContent='✅ '+r.mensaje+' · '+lbl;
+      $('sync-log').style.color='var(--text3)';
       updDash();
       // Aunque el resto de la sincronización sí haya funcionado, algún
       // elemento específico pudo fallar al guardarse en el servidor (ver
@@ -3965,14 +3967,42 @@ async function sincronizarTodo(silencioso=false){
         _cerrarSesionLocal();
         return false;
       }
-      if(!silencioso)toast('❌ '+(r.mensaje||r.error||'Error'));
+      // Antes esto solo se veía 2.8s en un toast y desaparecía — si el
+      // mensaje real no traía "mensaje" ni "error" (algunas respuestas del
+      // servidor no los incluyen) solo se veía la palabra suelta "Error", sin
+      // forma de saber qué pasó de verdad. Ahora, además del toast (más
+      // tiempo en pantalla), el detalle completo queda escrito en
+      // "Sincronización Nube" → registro, para poder consultarlo con calma o
+      // copiarlo para soporte.
+      const detalle=r.mensaje||r.error||'El servidor respondió sin detalle del error (revisa tu conexión o vuelve a intentar en unos minutos).';
+      _registrarErrorSync(detalle);
+      if(!silencioso)toast('❌ '+detalle,6000);
       // El servidor rechazó la credencial guardada en este dispositivo (PIN
       // cambiado, colaborador dado de baja, etc.) — se desloguea para que
       // pida credenciales frescas en vez de seguir intentando en silencio.
       if(r.mensaje&&r.mensaje.indexOf('No autorizado')!==-1)_cerrarSesionLocal();
       return false;
     }
-  }catch(e){if(!silencioso)toast('❌ Error: '+e.message);return false}
+  }catch(e){
+    // Sin esto, una falla de red o una respuesta que no era JSON válido
+    // (ej. Apps Script agotó su tiempo de ejecución y devolvió una página de
+    // error en vez de la respuesta esperada) solo se veía como un toast
+    // fugaz — igual queda el detalle en el registro de Sincronización Nube.
+    const detalle=(e&&e.message)?e.message:String(e);
+    _registrarErrorSync(detalle);
+    if(!silencioso)toast('❌ Error: '+detalle,6000);
+    return false;
+  }
+}
+// Deja constancia del último error de sincronización en la página
+// "Sincronización Nube" (con hora), aunque en ese momento no se esté viendo
+// esa página — así queda algo consultable después del toast, que desaparece
+// solo en unos segundos.
+function _registrarErrorSync(detalle){
+  const el=$('sync-log');
+  if(!el) return;
+  el.textContent=`❌ ${detalle} · ${new Date().toLocaleString('es-MX')}`;
+  el.style.color='var(--red)';
 }
 // Muestra/oculta la franja de "dispositivo pendiente de autorización" —
 // igual que #offbar para sin conexión, pero para este otro motivo. Se
