@@ -457,7 +457,17 @@ function doPost(e) {
 
     return jsonOut(result);
   } catch(err) {
-    return jsonOut({ ok:false, error: err.message });
+    // err.message puede venir vacío para ciertas excepciones internas de Apps
+    // Script (o si algo lanza un valor que no es un Error real, ej. un
+    // string) — sin esto, el cliente solo mostraba la palabra suelta
+    // "Error", sin ninguna pista real de qué pasó. Aquí se arma un mensaje
+    // que SIEMPRE trae texto útil: el tipo de excepción y, si existe, las
+    // primeras líneas de su stack (en Apps Script suelen apuntar directo a
+    // la línea que falló).
+    const detalle = (err && err.message) ? err.message : String(err || 'Excepción desconocida');
+    const tipo = (err && err.name) ? err.name + ': ' : '';
+    const stackResumen = (err && err.stack) ? ' — ' + String(err.stack).split('\n').slice(0, 2).join(' | ') : '';
+    return jsonOut({ ok:false, error: tipo + detalle + stackResumen });
   }
 }
 
