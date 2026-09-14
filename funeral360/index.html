@@ -1,0 +1,3079 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Funeral360"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#0f172a"/>
+<title>Funeral360 — Certificación de Defunciones</title>
+<style>
+:root{
+  --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;
+  --gold:#c9a84c;--gold2:#e6c96a;--golddim:#7a5f1e;
+  --red:#ef4444;--red2:#dc2626;
+  --green:#22c55e;--green2:#16a34a;
+  --blue:#3b82f6;--amber:#f59e0b;
+  --text:#f8fafc;--text2:#94a3b8;--text3:#64748b;
+  --border:#334155;--border2:#475569;
+  --r:10px;--rsm:6px;
+  --shadow:0 4px 24px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px;overscroll-behavior:none}
+input,select,textarea{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font:inherit;padding:8px 10px;width:100%;outline:none;transition:border .2s}
+/* El formato de Registro Civil exige "LETRA DE MOLDE" (mayúsculas) — se
+   muestra así desde que se escribe; guardarSolicitudRC() además normaliza
+   el valor guardado, por si se pega texto en minúsculas. */
+#cert-tab-2 input[type=text],#cert-tab-2 input[type=tel]{text-transform:uppercase}
+input:focus,select:focus,textarea:focus{border-color:var(--gold)}
+select option{background:var(--bg2)}
+label.lbl{display:block;font-size:11px;color:var(--text2);margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+button{cursor:pointer;font:inherit;border:none;border-radius:var(--rsm);padding:9px 16px;transition:filter .15s,transform .1s}
+button:active{transform:scale(.97)}
+.bg{background:var(--gold);color:#0f172a;font-weight:700}
+.bg:hover{filter:brightness(1.1)}
+.bo{background:transparent;border:1px solid var(--border2);color:var(--text)}
+.bo:hover{border-color:var(--gold);color:var(--gold)}
+.br{background:var(--red2);color:#fff;font-weight:600}
+.bgr{background:var(--green2);color:#fff;font-weight:600}
+.ba{background:var(--amber);color:#1a1206;font-weight:700}
+.ba:hover{filter:brightness(1.1)}
+.bsm{padding:5px 11px;font-size:12px}
+.f{margin-bottom:11px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bg-g{background:rgba(34,197,94,.15);color:var(--green)}
+.bg-r{background:rgba(239,68,68,.15);color:var(--red)}
+.bg-a{background:rgba(245,158,11,.15);color:var(--amber)}
+.bg-b{background:rgba(59,130,246,.15);color:var(--blue)}
+.bg-gr{background:rgba(100,116,139,.18);color:var(--text2)}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:15px;margin-bottom:12px}
+.st{font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.07em;margin-bottom:11px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.div{height:1px;background:var(--border);margin:13px 0}
+/* DOCUMENTOS (respaldos digitalizados) */
+.doc-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rsm);padding:10px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.doc-card .doc-info{flex:1;min-width:140px}
+.doc-card .doc-tipo{font-size:12px;font-weight:700}
+.doc-card .doc-meta{font-size:11px;color:var(--text2)}
+.doc-slot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px;background:var(--bg3);border-radius:var(--rsm);margin-bottom:8px;flex-wrap:wrap}
+.doc-slot .doc-slot-label{font-size:12px;font-weight:600}
+.doc-slot .doc-slot-status{font-size:11px;color:var(--text2)}
+/* Campo autollenado por IA: se marca hasta que el usuario lo revise/edite. */
+.ia-detectado{background:rgba(245,158,11,.14)!important;border-color:var(--amber)!important}
+/* APP */
+#app{display:flex;flex-direction:column;height:100vh}
+/* TOPBAR */
+#topbar{display:flex;align-items:center;gap:10px;background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 14px;position:sticky;top:0;z-index:100;min-height:52px}
+#topbar .logo{font-size:13px;font-weight:800;color:var(--gold);letter-spacing:.07em;white-space:nowrap}
+#topbar .sp{flex:1}
+#sync-ind{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+#sdot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+#sdot.off{background:var(--red)}
+#sdot.sy{background:var(--amber);animation:pulse .8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+#mbtn{background:none;border:none;color:var(--text2);font-size:20px;padding:4px}
+/* SIDEBAR */
+#sb{position:fixed;top:0;left:-265px;width:265px;height:100%;background:var(--bg2);border-right:1px solid var(--border);z-index:300;transition:left .25s;overflow-y:auto;display:flex;flex-direction:column}
+#sb.open{left:0}
+#sov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:299;display:none}
+#sov.show{display:block}
+.sb-logo{display:flex;align-items:center;gap:10px;padding:18px 14px 14px;border-bottom:1px solid var(--border)}
+.sb-ico{width:36px;height:36px;background:var(--gold);border-radius:8px;display:grid;place-items:center;color:#0f172a;font-weight:800;font-size:16px;flex-shrink:0}
+.sb-name{font-size:14px;font-weight:700}
+.sb-sub{font-size:11px;color:var(--text3)}
+.nav-sec{padding:10px 12px 4px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em}
+.ni{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--rsm);cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;transition:all .15s;margin:1px 6px;border:none;background:none;width:calc(100% - 12px);text-align:left}
+.ni:hover{background:var(--bg3);color:var(--text)}
+.ni.act{background:rgba(201,168,76,.15);color:var(--gold)}
+.ni .ic{font-size:15px;width:18px;text-align:center}
+.nbdg{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px}
+.sb-ft{padding:12px 8px;border-top:1px solid var(--border);margin-top:auto}
+/* MAIN */
+#main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.page{display:none;padding:13px;max-width:820px;margin:0 auto}
+.page.act{display:block}
+/* LOGIN */
+#login{position:fixed;inset:0;background:var(--bg);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+.l-logo{width:60px;height:60px;background:var(--gold);border-radius:14px;display:grid;place-items:center;color:#0f172a;font-size:26px;font-weight:800;margin-bottom:18px}
+.l-title{font-size:21px;font-weight:800;margin-bottom:3px;text-align:center}
+.l-sub{font-size:13px;color:var(--text3);margin-bottom:8px;text-align:center}
+.l-tabs{display:flex;gap:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:22px;width:100%;max-width:300px}
+.l-tab{flex:1;padding:8px;text-align:center;font-size:12px;font-weight:600;color:var(--text3);cursor:pointer;border:none;background:none;transition:all .2s}
+.l-tab.act{background:var(--gold);color:#0f172a}
+/* PIN */
+#pin-panel{display:flex;flex-direction:column;align-items:center;width:100%;max-width:300px}
+.pdots{display:flex;gap:10px;margin-bottom:22px}
+.pd{width:13px;height:13px;border-radius:50%;border:2px solid var(--border2);transition:background .15s}
+.pd.on{background:var(--gold);border-color:var(--gold)}
+.ppad{display:grid;grid-template-columns:repeat(3,68px);gap:8px}
+.pb{width:68px;height:52px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);font-size:19px;font-weight:600;color:var(--text);cursor:pointer;transition:all .15s}
+.pb:active{background:var(--gold);color:#0f172a;transform:scale(.95)}
+/* USER/PASS */
+#up-panel{display:none;flex-direction:column;gap:10px;width:100%;max-width:300px}
+#up-panel.show{display:flex}
+.l-status{font-size:12px;color:var(--text3);text-align:center;min-height:16px;margin-top:10px}
+/* STATS */
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+@media(min-width:600px){.sg{grid-template-columns:repeat(4,1fr)}}
+.sc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:13px}
+.sc .v{font-size:24px;font-weight:800;line-height:1}
+.sc .l{font-size:11px;color:var(--text3);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+.sc.ac{border-color:var(--golddim)}
+.sc.ac .v{color:var(--gold)}
+/* ODS CARD */
+.oc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:13px;margin-bottom:9px;cursor:pointer;transition:border .15s}
+.oc:hover{border-color:var(--golddim)}
+.oc .fo{font-size:11px;font-weight:700;color:var(--gold);letter-spacing:.06em}
+.oc .fn{font-size:15px;font-weight:700;margin:2px 0}
+.oc .mt{font-size:12px;color:var(--text2)}
+.oc .fr{display:flex;align-items:center;justify-content:space-between;margin-top:9px;padding-top:7px;border-top:1px solid var(--border)}
+/* TABS */
+.tabs{display:flex;gap:3px;background:var(--bg2);border-radius:var(--r);padding:4px;margin-bottom:13px}
+.tab{flex:1;text-align:center;padding:7px;border-radius:var(--rsm);font-size:12px;font-weight:600;color:var(--text3);cursor:pointer;transition:all .15s;border:none;background:none}
+.tab.act{background:var(--bg3);color:var(--gold)}
+/* MODAL */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:400;display:none;align-items:flex-end;justify-content:center}
+.mo.show{display:flex}
+@media(min-width:600px){.mo{align-items:center}}
+.mb{background:var(--bg2);border:1px solid var(--border);border-radius:16px 16px 0 0;width:100%;max-width:660px;max-height:90vh;overflow-y:auto;padding:18px;position:relative}
+@media(min-width:600px){.mb{border-radius:16px;max-height:86vh}}
+.mc{position:absolute;top:13px;right:13px;background:var(--bg3);border:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--text2);font-size:15px;cursor:pointer}
+.mt2{font-size:16px;font-weight:800;margin-bottom:14px;padding-right:34px}
+/* PAGARE */
+.pagare-box{background:var(--bg);border:1px solid var(--golddim);border-radius:var(--r);padding:13px;margin-top:10px}
+/* ALERT EQUIPO */
+.aeq{display:flex;align-items:center;gap:10px;padding:9px;background:var(--bg);border-radius:var(--rsm);margin-bottom:6px;border-left:3px solid var(--amber)}
+.aeq.venc{border-left-color:var(--red)}
+/* TOAST */
+#toast{position:fixed;bottom:76px;left:50%;transform:translateX(-50%) translateY(16px);background:var(--bg2);border:1px solid var(--border);border-radius:22px;padding:8px 18px;font-size:13px;color:var(--text);box-shadow:var(--shadow);opacity:0;transition:all .3s;z-index:600;white-space:nowrap;pointer-events:none;max-width:90vw;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* OFFLINE */
+#offbar{background:var(--red2);color:#fff;text-align:center;font-size:12px;padding:5px;display:none}
+#pendbar{background:#92650c;color:#fff;text-align:center;font-size:12px;padding:5px;display:none}
+/* LOADER */
+#loader{position:fixed;inset:0;background:var(--bg);z-index:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px}
+.spin{width:38px;height:38px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* TRASLADO INFO */
+.km-info{background:rgba(201,168,76,.1);border:1px solid var(--golddim);border-radius:var(--rsm);padding:9px 12px;font-size:12px;color:var(--gold2);margin-top:6px}
+@media print{#topbar,#sb,#toast,#login,#loader,.bg,.bo,.br,.bgr,.mc{display:none!important}body{background:#fff;color:#000}}
+
+/* ── DOCUMENTOS IMPRIMIBLES (hoja carta, 1 doc = 1 página, sin saltos internos) ──
+   --k es el factor de autoajuste: _ajustarEscalaDocs() lo reduce por JS cuando
+   el contenido de un documento no cabe en una sola hoja (p.ej. una ODS con
+   muchos conceptos), encogiendo fuente/paddings/márgenes de forma proporcional
+   en todo el documento. Así el pie con la firma del cliente y el sello de la
+   funeraria NUNCA se recorta por el overflow:hidden ni se brinca a otra hoja. */
+@page{size:letter;margin:0.45in 0.5in}
+.doc-print{
+  --k:1;
+  font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#fff;
+  width:7.5in;height:10.1in;margin:0 auto;padding:0;overflow:hidden;
+  box-sizing:border-box;page-break-after:always;break-after:page;page-break-inside:avoid;
+  display:flex;flex-direction:column;font-size:calc(var(--k)*10pt);line-height:calc(var(--k)*1.32);
+}
+.doc-print:last-child{page-break-after:auto;break-after:auto}
+.doc-print *{box-sizing:border-box}
+.doc-print table{width:100%;border-collapse:collapse}
+.doc-print td,.doc-print th{border:1px solid #c9b87a;padding:calc(var(--k)*4px) calc(var(--k)*6px);font-size:calc(var(--k)*9.5pt);vertical-align:top}
+.doc-print thead th{background:#0f172a;color:#fff;font-weight:700}
+.doc-print tbody tr:nth-child(even){background:#f7f3e8}
+.doc-print tfoot td,.doc-print tr.doc-total-row td{background:#0f172a;color:#fff;font-weight:700}
+.doc-hd{text-align:center;border-bottom:3px solid #c9a84c;padding-bottom:calc(var(--k)*6px);margin-bottom:calc(var(--k)*8px);background:linear-gradient(to bottom,#fbf8ef,#fff)}
+.doc-hd h1{font-size:calc(var(--k)*14pt);margin:0;letter-spacing:.04em;color:#0f172a}
+.doc-hd .sub{font-size:calc(var(--k)*9pt);color:#5a5a5a;margin-top:calc(var(--k)*2px)}
+.doc-hd .tag{display:inline-block;margin-top:calc(var(--k)*6px);font-size:calc(var(--k)*9pt);font-weight:700;background:#0f172a;color:#e6c96a;padding:calc(var(--k)*3px) calc(var(--k)*12px);border-radius:3px;letter-spacing:.05em;border:1px solid #c9a84c}
+.doc-sec-title{font-size:calc(var(--k)*10pt);font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:#0f172a;color:#e6c96a;padding:calc(var(--k)*3px) calc(var(--k)*8px);margin:calc(var(--k)*7px) 0 calc(var(--k)*3px);border-left:4px solid #c9a84c}
+.doc-row2{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--k)*4px) calc(var(--k)*14px);font-size:calc(var(--k)*9.5pt);margin-bottom:calc(var(--k)*3px)}
+/* Antes usaba margin-top:auto para pegar el pie (firma+sello) hasta abajo
+   de la hoja — con una orden de muchos conceptos, el contenido de arriba ya
+   ocupaba toda la altura y el auto-margin empujaba el pie MÁS ALLÁ del
+   área de 10.1in, apareciendo fuera del margen impreso. Ahora el pie sigue
+   el flujo normal justo debajo del contenido: siempre queda pegado a lo
+   último capturado, nunca flotando fuera de la hoja. */
+.doc-foot{flex-shrink:0;margin-top:calc(var(--k)*14px);display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--k)*18px);text-align:center;font-size:calc(var(--k)*8.5pt);padding-top:calc(var(--k)*14px);border-top:1px solid #e6dcb8}
+.doc-foot .ln{border-top:1.5px solid #0f172a;margin-bottom:calc(var(--k)*3px);height:1px}
+.doc-foot img.firma-print{max-height:calc(var(--k)*50px);display:block;margin:0 auto calc(var(--k)*2px)}
+.doc-clause{font-size:calc(var(--k)*8.8pt);text-align:justify;margin-bottom:calc(var(--k)*5px);line-height:calc(var(--k)*1.28)}
+.doc-clause b{color:#0f172a}
+@media print{
+  body *{visibility:hidden}
+  #print-area,#print-area *{visibility:visible}
+  #print-area{position:absolute!important;top:0!important;left:0!important;width:100%!important;display:block!important}
+  .doc-print *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+
+<div id="loader"><div class="spin"></div><div style="color:var(--text2);font-size:13px">Cargando Funeral360…</div></div>
+<div id="offbar">Sin conexión — Modo offline activo</div>
+
+<!-- ═══ LOGIN ═══ -->
+<div id="login">
+  <div class="l-logo">F</div>
+  <div class="l-title">FUNERAL360</div>
+  <div class="l-sub">by Omnia T3chnology — Módulo de Certificación</div>
+  <div class="l-tabs">
+    <button class="l-tab act" onclick="switchLoginTab('pin',this)">PIN</button>
+    <button class="l-tab" onclick="switchLoginTab('up',this)">Usuario</button>
+  </div>
+
+  <!-- PIN -->
+  <div id="pin-panel">
+    <div class="pdots"><div class="pd" id="pd0"></div><div class="pd" id="pd1"></div><div class="pd" id="pd2"></div><div class="pd" id="pd3"></div></div>
+    <div class="ppad">
+      <button class="pb" onclick="pinP(1)">1</button><button class="pb" onclick="pinP(2)">2</button><button class="pb" onclick="pinP(3)">3</button>
+      <button class="pb" onclick="pinP(4)">4</button><button class="pb" onclick="pinP(5)">5</button><button class="pb" onclick="pinP(6)">6</button>
+      <button class="pb" onclick="pinP(7)">7</button><button class="pb" onclick="pinP(8)">8</button><button class="pb" onclick="pinP(9)">9</button>
+      <button class="pb" onclick="pinDel()" style="font-size:13px;color:var(--text3)">⌫</button>
+      <button class="pb" onclick="pinP(0)">0</button>
+      <button class="pb" onclick="doLogin()" style="background:var(--gold);color:#0f172a;font-size:11px;font-weight:700">OK</button>
+    </div>
+  </div>
+
+  <!-- Usuario+Contraseña -->
+  <div id="up-panel">
+    <div class="f"><label class="lbl">Usuario</label><input id="l-user" type="text" autocomplete="username"/></div>
+    <div class="f"><label class="lbl">Contraseña</label><input id="l-pass" type="password" autocomplete="current-password"/></div>
+    <button class="bg" style="width:100%" onclick="doLogin()">Iniciar Sesión</button>
+  </div>
+
+  <div class="l-status" id="l-status"></div>
+  <div style="font-size:11px;color:var(--text3);margin-top:12px;text-align:center" id="offline-login-note"></div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div id="app" style="display:none">
+  <div id="topbar">
+    <button id="mbtn" onclick="toggleSB()">☰</button>
+    <div class="logo">🕊 FUNERAL360</div>
+    <div class="sp"></div>
+    <div id="sync-ind"><div id="sdot"></div><span id="stext">EN LÍNEA</span></div>
+  </div>
+  <div id="sov" onclick="closeSB()"></div>
+  <div id="sb">
+    <div class="sb-logo">
+      <div class="sb-ico">F</div>
+      <div><div class="sb-name">FUNERAL360</div><div class="sb-sub" id="user-rol">OPERATIVO</div></div>
+    </div>
+    <div class="nav-sec">Certificación</div>
+    <button class="ni act" onclick="navTo('certs')"><span class="ic">📋</span>Certificaciones</button>
+    <button class="ni" onclick="abrirBuscarDocs()"><span class="ic">🔎</span>Buscar Documentos</button>
+    <div class="nav-sec">Sistema</div>
+    <button class="ni" data-admin-only onclick="navTo('colab')"><span class="ic">👥</span>Colaboradores</button>
+    <button class="ni" data-admin-only onclick="navTo('config')"><span class="ic">🏢</span>Datos de la Funeraria</button>
+    <button class="ni" data-admin-only onclick="navTo('nube')"><span class="ic">☁️</span>Sincronización Nube</button>
+    <div class="sb-ft">
+      <button class="ni bo" style="width:100%;justify-content:center;margin:0" onclick="logout()">🔐 Cerrar Sesión</button>
+    </div>
+  </div>
+
+  <div id="main">
+
+<!-- ── CERTIFICACIONES (lista de folios) ── -->
+<div class="page act" id="page-certs">
+  <div class="card">
+    <div class="st">Certificaciones</div>
+    <button class="bg" style="width:100%;margin-bottom:12px" onclick="abrirNuevoFolio()">➕ Nuevo Folio</button>
+    <div class="f"><input id="certs-buscar" type="text" placeholder="Buscar por folio o nombre del finado…" oninput="renderListaFolios()"/></div>
+    <div id="lista-folios"><p style="font-size:12px;color:var(--text3)">Cargando…</p></div>
+  </div>
+</div>
+
+<!-- ── COLABORADORES ── -->
+<div class="page" id="page-colab">
+  <div class="card">
+    <div class="st">Registrar Colaborador</div>
+    <p style="font-size:11px;color:var(--text3);margin-top:-4px">Solo quien tenga acceso a Funeral360 puede certificar, subir documentos o usar la lectura automática — da de alta aquí a cada persona que vaya a usar la app.</p>
+    <div class="g2">
+      <div class="f"><label class="lbl">ID *</label><input id="c-id" type="text"/></div>
+      <div class="f"><label class="lbl">Nombre completo *</label><input id="c-nom" type="text"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Puesto</label><input id="c-puesto" type="text" placeholder="ADMIN, Operativo…"/></div>
+      <div class="f"><label class="lbl">Teléfono</label><input id="c-tel" type="tel"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">PIN (4 dígitos) *</label><input id="c-pin" type="text" maxlength="4" inputmode="numeric"/></div>
+      <div class="f"><label class="lbl">Usuario (opcional)</label><input id="c-user" type="text"/></div>
+    </div>
+    <div class="f"><label class="lbl">Contraseña (opcional, si usa usuario)</label><input id="c-pass" type="password"/></div>
+    <button class="bg" style="width:100%" onclick="registrarColab()">💾 Registrar</button>
+  </div>
+  <div class="card">
+    <div class="st">Colaboradores Registrados</div>
+    <div id="lista-colab"></div>
+  </div>
+</div>
+
+<!-- ── DATOS DE LA FUNERARIA ── -->
+<div class="page" id="page-config">
+  <div class="card">
+    <div class="st">Datos de la Funeraria</div>
+    <p style="font-size:12px;color:var(--text2)">Funeral360 es un software genérico — estos datos son los de TU funeraria y alimentan el PDF que se manda al médico y el Grupo 6 de la Solicitud de Registro Civil.</p>
+    <div class="f"><label class="lbl">Nombre de la Funeraria</label><input id="cf-nombre" type="text"/></div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Ciudad</label><input id="cf-ciudad" type="text"/></div>
+      <div class="f"><label class="lbl">Teléfono</label><input id="cf-telefono" type="tel"/></div>
+    </div>
+    <div class="f"><label class="lbl">Dirección</label><input id="cf-direccion" type="text"/></div>
+    <button class="bg" style="width:100%" onclick="guardarConfigFuneraria()">💾 Guardar</button>
+  </div>
+</div>
+
+<!-- ── SINCRONIZACIÓN NUBE ── -->
+<div class="page" id="page-nube">
+  <div class="card">
+    <div class="st">Sincronización en la Nube</div>
+    <p style="font-size:12px;color:var(--text2)">Pega aquí la URL de TU backend de Funeral360 (un Apps Script propio, desplegado como Aplicación Web — ver instrucciones al inicio de Codigo.gs). Sin esto, la app funciona solo localmente en este dispositivo.</p>
+    <div class="f"><label class="lbl">URL de Apps Script</label><input id="sc-url" type="text" placeholder="https://script.google.com/macros/s/.../exec"/></div>
+    <div style="display:flex;gap:8px">
+      <button class="bg" style="flex:1" onclick="guardarUrl()">💾 Guardar</button>
+      <button class="bo" style="flex:1" onclick="probarConexion()">🔌 Probar Conexión</button>
+    </div>
+    <button class="bo" style="width:100%;margin-top:9px" onclick="sincronizarTodo()">☁️ Sincronizar Ahora</button>
+    <p style="font-size:12px;color:var(--text2);margin-top:10px">Última sincronización: <b id="lbl-sync">Nunca.</b></p>
+    <p id="sync-log" style="font-size:11px;color:var(--text3)"></p>
+  </div>
+</div>
+
+  </div>
+</div>
+
+<!-- ═══ MODALES ═══ -->
+
+<!-- MODAL NUEVO FOLIO -->
+<div class="mo" id="mo-nuevo-folio">
+  <div class="mb">
+    <button class="mc" onclick="closeMo('mo-nuevo-folio')">✕</button>
+    <div class="mt2">Nuevo Folio</div>
+    <div class="f"><label class="lbl">Folio</label><input id="nf-folio" type="text"/></div>
+    <div class="f"><label class="lbl">Nombre del Finado *</label><input id="nf-fallecido" type="text"/></div>
+    <div class="f"><label class="lbl">Contratante</label><input id="nf-contratante" type="text"/></div>
+    <div class="f"><label class="lbl">Teléfono</label><input id="nf-telefono" type="tel"/></div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Calle y número</label><input id="nf-calle" type="text"/></div>
+      <div class="f"><label class="lbl">Colonia</label><input id="nf-colonia" type="text"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Localidad</label><input id="nf-localidad" type="text"/></div>
+      <div class="f"><label class="lbl">Municipio</label><input id="nf-municipio" type="text"/></div>
+    </div>
+    <button class="bg" style="width:100%" onclick="guardarNuevoFolio()">💾 Guardar y Certificar</button>
+  </div>
+</div>
+
+<div class="mo" id="mo-certificar">
+  <div class="mb" style="max-width:760px">
+    <button class="mc" onclick="closeMo('mo-certificar')">✕</button>
+    <div class="mt2">Certificar — <span id="cert-folio-disp"></span></div>
+    <div style="display:flex;gap:6px;margin:10px 0 14px;flex-wrap:wrap">
+      <button class="bg bsm cert-tab-btn" data-tab="1" onclick="certTab(1)">1. Info para Médico</button>
+      <button class="bo bsm cert-tab-btn" data-tab="2" onclick="certTab(2)">2. Solicitud Registro Civil</button>
+      <button class="bo bsm cert-tab-btn" data-tab="3" onclick="certTab(3)">3. Mapeo de Formato</button>
+      <button class="bo bsm cert-tab-btn" data-tab="4" onclick="certTab(4)">📎 Documentos</button>
+    </div>
+
+    <!-- PESTAÑA 1: INFO PARA EL MÉDICO -->
+    <div id="cert-tab-1" class="cert-tab">
+      <div class="card">
+        <div class="st">Datos del Finado</div>
+        <div class="f"><label class="lbl">Nombre completo</label><input id="c-fi-nombre" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Estado Civil</label>
+            <select id="c-fi-edocivil">
+              <option value="SOLTERO">Soltero(a)</option>
+              <option value="CASADO">Casado(a)</option>
+              <option value="VIUDO">Viudo(a)</option>
+              <option value="DIVORCIADO">Divorciado(a)</option>
+              <option value="UNION_LIBRE">Unión libre</option>
+            </select>
+          </div>
+          <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="c-fi-fecnac" type="date"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Entidad de Nacimiento</label><input id="c-fi-entnac" type="text"/></div>
+          <div class="f"><label class="lbl">Grado de Estudios</label><input id="c-fi-estudios" type="text"/></div>
+        </div>
+        <div class="f"><label class="lbl">Domicilio Habitual</label><input id="c-fi-domicilio" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Afiliación a Servicios de Salud</label><input id="c-fi-afiliacion" type="text" placeholder="IMSS, ISSSTE, Ninguna…"/></div>
+          <div class="f"><label class="lbl">Ocupación Habitual</label><input id="c-fi-ocupacion" type="text"/></div>
+        </div>
+        <div class="f"><label class="lbl">Lugar donde Ocurrió la Defunción</label><input id="c-fi-lugardef" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Fecha de Defunción</label><input id="c-fi-fecdef" type="date"/></div>
+          <div class="f"><label class="lbl">Hora de Defunción</label><input id="c-fi-hordef" type="time"/></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="st">Causas de la Muerte (Certificado de Defunción)</div>
+        <p style="font-size:11px;color:var(--text3);margin:-4px 0 8px">Se transcribe tal cual lo certificó el médico, para el expediente de la funeraria — no se incluye en el PDF que se manda a pedirle el certificado.</p>
+        <div class="f"><label class="lbl">I.a) Causa Directa — enfermedad o estado patológico que produjo la muerte directamente</label><input id="c-causa-directa" type="text"/></div>
+        <div class="f"><label class="lbl">Intervalo aproximado entre inicio y muerte</label><input id="c-causa-directa-intervalo" type="text" placeholder="Ej. 2 días, 6 horas…"/></div>
+        <div class="f"><label class="lbl">I.b) Debido a (o como consecuencia de) — Causa Intermedia</label><input id="c-causa-intermedia" type="text"/></div>
+        <div class="f"><label class="lbl">Intervalo aproximado entre inicio y muerte</label><input id="c-causa-intermedia-intervalo" type="text"/></div>
+        <div class="f"><label class="lbl">I.c) Debido a (o como consecuencia de) — Causa Básica</label><input id="c-causa-basica" type="text"/></div>
+        <div class="f"><label class="lbl">Intervalo aproximado entre inicio y muerte</label><input id="c-causa-basica-intervalo" type="text"/></div>
+        <div class="f"><label class="lbl">II. Otros Estados Patológicos Significativos que Contribuyeron a la Muerte</label><textarea id="c-otros-patologicos" rows="2"></textarea></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Tipo de Defunción</label>
+            <select id="c-tipo-defuncion">
+              <option value="ENFERMEDAD">Enfermedad</option>
+              <option value="ACCIDENTE">Accidente</option>
+              <option value="HOMICIDIO">Homicidio</option>
+              <option value="SUICIDIO">Suicidio</option>
+              <option value="SE_IGNORA">Se ignora</option>
+            </select>
+          </div>
+          <div class="f"><label class="lbl">¿Se practicó necropsia?</label>
+            <select id="c-necropsia">
+              <option value="NO">No</option>
+              <option value="SI">Sí</option>
+            </select>
+          </div>
+        </div>
+        <div class="f"><label class="lbl">Si es mujer: ¿Falleció durante el embarazo, parto o puerperio?</label>
+          <select id="c-embarazo-parto">
+            <option value="NO_APLICA">No aplica</option>
+            <option value="SI">Sí</option>
+            <option value="NO">No</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="st">¿El finado era casado?</div>
+        <div class="f"><select id="c-fi-eracasado" onchange="toggleCertConyuge()">
+          <option value="NO">No</option>
+          <option value="SI">Sí</option>
+        </select></div>
+        <div id="c-blq-conyuge" style="display:none">
+          <div class="f"><label class="lbl">Nombre del Esposo(a)</label><input id="c-cony-nombre" type="text"/></div>
+          <div class="f"><label class="lbl">¿El esposo(a) vive?</label>
+            <select id="c-cony-estado" onchange="toggleCertVivo('cony')">
+              <option value="VIVO">Vivo</option>
+              <option value="FINADO">Finado</option>
+            </select>
+          </div>
+          <div id="c-blq-cony-vivo" style="display:none">
+            <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="c-cony-fecnac" type="date"/></div>
+            <div class="g2">
+              <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-cony-localidad" type="text"/></div>
+              <div class="f"><label class="lbl">Municipio</label><input id="c-cony-municipio" type="text"/></div>
+            </div>
+            <div class="g2">
+              <div class="f"><label class="lbl">Estado</label><input id="c-cony-estadonac" type="text"/></div>
+              <div class="f"><label class="lbl">País</label><input id="c-cony-pais" type="text" value="México"/></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="st">Padre del Finado</div>
+        <div class="f"><label class="lbl">Nombre del Padre</label><input id="c-pa-nombre" type="text"/></div>
+        <div class="f"><label class="lbl">¿El padre vive?</label>
+          <select id="c-pa-estado" onchange="toggleCertVivo('pa')">
+            <option value="VIVO">Vivo</option>
+            <option value="FINADO">Finado</option>
+          </select>
+        </div>
+        <div id="c-blq-pa-vivo" style="display:none">
+          <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="c-pa-fecnac" type="date"/></div>
+          <div class="g2">
+            <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-pa-localidad" type="text"/></div>
+            <div class="f"><label class="lbl">Municipio</label><input id="c-pa-municipio" type="text"/></div>
+          </div>
+          <div class="g2">
+            <div class="f"><label class="lbl">Estado</label><input id="c-pa-estadonac" type="text"/></div>
+            <div class="f"><label class="lbl">País</label><input id="c-pa-pais" type="text" value="México"/></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="st">Madre del Finado</div>
+        <div class="f"><label class="lbl">Nombre de la Madre</label><input id="c-ma-nombre" type="text"/></div>
+        <div class="f"><label class="lbl">¿La madre vive?</label>
+          <select id="c-ma-estado" onchange="toggleCertVivo('ma')">
+            <option value="VIVO">Vivo</option>
+            <option value="FINADO">Finado</option>
+          </select>
+        </div>
+        <div id="c-blq-ma-vivo" style="display:none">
+          <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="c-ma-fecnac" type="date"/></div>
+          <div class="g2">
+            <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-ma-localidad" type="text"/></div>
+            <div class="f"><label class="lbl">Municipio</label><input id="c-ma-municipio" type="text"/></div>
+          </div>
+          <div class="g2">
+            <div class="f"><label class="lbl">Estado</label><input id="c-ma-estadonac" type="text"/></div>
+            <div class="f"><label class="lbl">País</label><input id="c-ma-pais" type="text" value="México"/></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="st">Declarante</div>
+        <div class="f"><label class="lbl">Nombre</label><input id="c-decl-nombre" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Parentesco con el Finado</label>
+            <select id="c-decl-parentesco">
+              <option value="NINGUNO">Ninguno (no consanguíneo)</option>
+              <option value="CONYUGE">Esposo(a)</option>
+              <option value="HIJO">Hijo(a)</option>
+              <option value="PADRE">Padre</option>
+              <option value="MADRE">Madre</option>
+              <option value="HERMANO">Hermano(a)</option>
+              <option value="ABUELO">Abuelo(a)</option>
+              <option value="NIETO">Nieto(a)</option>
+              <option value="TIO">Tío(a)</option>
+              <option value="SOBRINO">Sobrino(a)</option>
+              <option value="PRIMO">Primo(a)</option>
+              <option value="CUNADO">Cuñado(a)</option>
+              <option value="SUEGRO">Suegro(a)</option>
+              <option value="YERNO_NUERA">Yerno/Nuera</option>
+            </select>
+          </div>
+          <div class="f"><label class="lbl">Estado Civil</label>
+            <select id="c-decl-edocivil">
+              <option value="SOLTERO">Soltero(a)</option>
+              <option value="CASADO">Casado(a)</option>
+              <option value="VIUDO">Viudo(a)</option>
+              <option value="DIVORCIADO">Divorciado(a)</option>
+              <option value="UNION_LIBRE">Unión libre</option>
+            </select>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-decl-localidad" type="text"/></div>
+          <div class="f"><label class="lbl">Municipio</label><input id="c-decl-municipio" type="text"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Estado</label><input id="c-decl-estadonac" type="text"/></div>
+          <div class="f"><label class="lbl">País</label><input id="c-decl-pais" type="text" value="México"/></div>
+        </div>
+        <div class="f"><label class="lbl">Teléfono</label><input id="c-decl-telefono" type="tel"/></div>
+      </div>
+
+      <div class="card">
+        <div class="st">Testigo 1</div>
+        <div class="f"><label class="lbl">Nombre</label><input id="c-test1-nombre" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Parentesco con el Finado</label>
+            <select id="c-test1-parentesco">
+              <option value="NINGUNO">Ninguno (no consanguíneo)</option>
+              <option value="CONYUGE">Esposo(a)</option>
+              <option value="HIJO">Hijo(a)</option>
+              <option value="PADRE">Padre</option>
+              <option value="MADRE">Madre</option>
+              <option value="HERMANO">Hermano(a)</option>
+              <option value="ABUELO">Abuelo(a)</option>
+              <option value="NIETO">Nieto(a)</option>
+              <option value="TIO">Tío(a)</option>
+              <option value="SOBRINO">Sobrino(a)</option>
+              <option value="PRIMO">Primo(a)</option>
+              <option value="CUNADO">Cuñado(a)</option>
+              <option value="SUEGRO">Suegro(a)</option>
+              <option value="YERNO_NUERA">Yerno/Nuera</option>
+            </select>
+          </div>
+          <div class="f"><label class="lbl">Estado Civil</label>
+            <select id="c-test1-edocivil">
+              <option value="SOLTERO">Soltero(a)</option>
+              <option value="CASADO">Casado(a)</option>
+              <option value="VIUDO">Viudo(a)</option>
+              <option value="DIVORCIADO">Divorciado(a)</option>
+              <option value="UNION_LIBRE">Unión libre</option>
+            </select>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-test1-localidad" type="text"/></div>
+          <div class="f"><label class="lbl">Municipio</label><input id="c-test1-municipio" type="text"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Estado</label><input id="c-test1-estadonac" type="text"/></div>
+          <div class="f"><label class="lbl">País</label><input id="c-test1-pais" type="text" value="México"/></div>
+        </div>
+        <div class="f"><label class="lbl">Teléfono</label><input id="c-test1-telefono" type="tel"/></div>
+      </div>
+
+      <div class="card">
+        <div class="st">Testigo 2</div>
+        <div class="f"><label class="lbl">Nombre</label><input id="c-test2-nombre" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Parentesco con el Finado</label>
+            <select id="c-test2-parentesco">
+              <option value="NINGUNO">Ninguno (no consanguíneo)</option>
+              <option value="CONYUGE">Esposo(a)</option>
+              <option value="HIJO">Hijo(a)</option>
+              <option value="PADRE">Padre</option>
+              <option value="MADRE">Madre</option>
+              <option value="HERMANO">Hermano(a)</option>
+              <option value="ABUELO">Abuelo(a)</option>
+              <option value="NIETO">Nieto(a)</option>
+              <option value="TIO">Tío(a)</option>
+              <option value="SOBRINO">Sobrino(a)</option>
+              <option value="PRIMO">Primo(a)</option>
+              <option value="CUNADO">Cuñado(a)</option>
+              <option value="SUEGRO">Suegro(a)</option>
+              <option value="YERNO_NUERA">Yerno/Nuera</option>
+            </select>
+          </div>
+          <div class="f"><label class="lbl">Estado Civil</label>
+            <select id="c-test2-edocivil">
+              <option value="SOLTERO">Soltero(a)</option>
+              <option value="CASADO">Casado(a)</option>
+              <option value="VIUDO">Viudo(a)</option>
+              <option value="DIVORCIADO">Divorciado(a)</option>
+              <option value="UNION_LIBRE">Unión libre</option>
+            </select>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Localidad de Nacimiento</label><input id="c-test2-localidad" type="text"/></div>
+          <div class="f"><label class="lbl">Municipio</label><input id="c-test2-municipio" type="text"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Estado</label><input id="c-test2-estadonac" type="text"/></div>
+          <div class="f"><label class="lbl">País</label><input id="c-test2-pais" type="text" value="México"/></div>
+        </div>
+        <div class="f"><label class="lbl">Teléfono</label><input id="c-test2-telefono" type="tel"/></div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+        <button class="bg" style="flex:1" onclick="guardarCertificacion()">💾 Guardar</button>
+        <button class="bo" onclick="descargarInfoMedicoPDF()">📄 PDF</button>
+        <button class="bo" onclick="descargarInfoMedicoJPG()">🖼 JPG</button>
+      </div>
+      <p style="font-size:11px;color:var(--text3);margin-top:6px">El PDF/JPG solo incluye los datos del finado y el nombre del declarante (lo que se envía al médico) — guarda primero para que estén actualizados.</p>
+    </div>
+
+    <!-- PESTAÑA 2: SOLICITUD REGISTRO CIVIL (formato oficial Xalapa, tamaño oficio) -->
+    <div id="cert-tab-2" class="cert-tab" style="display:none">
+      <p style="font-size:11px;color:var(--text3);margin-top:-4px">Sigue el formato de Registro Civil de Xalapa (frente + reverso). Lo que ya se capturó en la Pestaña 1 se precarga aquí — revísalo, porque este formato pide algunos datos con más detalle.</p>
+
+
+      <!-- GRUPO 1: Datos del Finado -->
+      <div class="card">
+        <div class="st">Grupo 1 · Datos del Finado</div>
+        <div class="g2">
+          <div class="f"><label class="lbl">CURP</label><input id="rc-fi-curp" type="text" maxlength="18" style="text-transform:uppercase"/></div>
+          <div class="f"><label class="lbl">Nacionalidad</label><input id="rc-fi-nacionalidad" type="text" value="Mexicana"/></div>
+        </div>
+        <div class="f"><label class="lbl">Nombre(s)</label><input id="rc-fi-nombres" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Apellido Paterno</label><input id="rc-fi-ap1" type="text"/></div>
+          <div class="f"><label class="lbl">Apellido Materno</label><input id="rc-fi-ap2" type="text"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="rc-fi-fecnac" type="date" oninput="rcCalcEdad('fi')"/></div>
+          <div class="f"><label class="lbl">Edad (al fallecer)</label><input id="rc-fi-edad" type="number" readonly/></div>
+        </div>
+        <div class="f"><label class="lbl">Sexo</label><select id="rc-fi-sexo"></select></div>
+        <div class="st" style="margin-top:8px;font-size:12px">Lugar de Nacimiento</div>
+        <div id="rc-fi-lugarnac"></div>
+        <div class="st" style="margin-top:8px;font-size:12px">Domicilio Habitual</div>
+        <div id="rc-fi-domicilio"></div>
+        <div class="f"><label class="lbl">Estado Civil</label>
+          <select id="rc-fi-edocivil" onchange="rcToggleConyuge()"></select>
+        </div>
+      </div>
+
+      <!-- GRUPO 2: Esposo(a) / Padre / Madre -->
+      <div id="rc-grupo2-body"></div>
+
+      <!-- GRUPO 3: Datos del Fallecimiento -->
+      <div class="card">
+        <div class="st">Grupo 3 · Datos del Fallecimiento</div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Fecha de Defunción</label><input id="rc-fallec-fecha" type="date" oninput="rcCalcEdad('fi')"/></div>
+          <div class="f"><label class="lbl">Hora de Defunción</label><input id="rc-fallec-hora" type="time"/></div>
+        </div>
+        <div class="f"><label class="lbl">Lugar del Fallecimiento</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
+            <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="rc-fallec-lugar-radio" id="rc-fallec-lugar-hospital" value="HOSPITAL"/> Hospital</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="rc-fallec-lugar-radio" id="rc-fallec-lugar-hogar" value="HOGAR"/> Hogar</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="rc-fallec-lugar-radio" id="rc-fallec-lugar-otro" value="OTRO"/> Otro lugar</label>
+          </div>
+        </div>
+        <div class="f"><label class="lbl">Número de Certificado</label><input id="rc-fallec-certificado" type="text"/></div>
+        <div class="f"><label class="lbl">Destino del Cadáver</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="rc-destino-inhumacion" onchange="rcToggleDestino('inhumacion')"/> Inhumación</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="rc-destino-cremacion" onchange="rcToggleDestino('cremacion')"/> Cremación</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="rc-destino-traslado" onchange="rcToggleDestino('traslado')"/> Traslado</label>
+          </div>
+        </div>
+        <div class="f" id="rc-blq-traslado-destino" style="display:none"><label class="lbl">Traslado a:</label><input id="rc-traslado-destino" type="text" placeholder="Ciudad/lugar de destino"/></div>
+        <div class="f" id="rc-blq-traslado-municipio" style="display:none"><label class="lbl">Municipio de destino:</label><input id="rc-traslado-municipio" type="text" placeholder="Municipio"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Nombre del Panteón</label><input id="rc-fallec-panteon" type="text"/></div>
+          <div class="f"><label class="lbl">Ubicación del Panteón</label><input id="rc-fallec-panteon-ubicacion" type="text"/></div>
+        </div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Fecha de Inhumación</label><input id="rc-fallec-fecinhum" type="date"/></div>
+          <div class="f"><label class="lbl">Hora de Inhumación</label><input id="rc-fallec-horinhum" type="time"/></div>
+        </div>
+      </div>
+
+      <!-- GRUPO 4: Datos del Declarante -->
+      <div class="card">
+        <div class="st">Grupo 4 · Datos del Declarante</div>
+        <div class="f"><label class="lbl">Nombre completo</label><input id="rc-decl-nombre" type="text"/></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Parentesco con el Finado</label><select id="rc-decl-parentesco"></select></div>
+          <div class="f"><label class="lbl">Nacionalidad</label><input id="rc-decl-nacionalidad" type="text" value="Mexicana"/></div>
+        </div>
+        <div class="f"><label class="lbl">Estado Civil</label><select id="rc-decl-edocivil"></select></div>
+        <div class="st" style="margin-top:8px;font-size:12px">Lugar de Nacimiento</div>
+        <div id="rc-decl-lugarnac"></div>
+        <div class="st" style="margin-top:8px;font-size:12px">Domicilio Habitual</div>
+        <div id="rc-decl-domicilio"></div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="rc-decl-fecnac" type="date" oninput="rcCalcEdad('decl')"/></div>
+          <div class="f"><label class="lbl">Edad</label><input id="rc-decl-edad" type="number" readonly/></div>
+        </div>
+        <div class="f"><label class="lbl">Teléfono</label><input id="rc-decl-telefono" type="tel"/></div>
+      </div>
+
+      <!-- GRUPO 5: Testigo 1 y Testigo 2 -->
+      <div id="rc-grupo5-body"></div>
+
+      <!-- GRUPO 6: Datos de la Funeraria -->
+      <div class="card">
+        <div class="st">Grupo 6 · Datos de la Funeraria</div>
+        <div class="g2">
+          <div class="f"><label class="lbl">Nombre</label><input id="rc-fun-nombre" type="text"/></div>
+          <div class="f"><label class="lbl">Ciudad</label><input id="rc-fun-ciudad" type="text"/></div>
+        </div>
+        <div class="f"><label class="lbl">Teléfono</label><input id="rc-fun-telefono" type="text"/></div>
+        <p style="font-size:11px;color:var(--text3);margin-top:-4px">Se precargan desde Configuración → Datos de la Funeraria — puedes ajustarlos aquí solo para este folio.</p>
+        <div class="f"><label class="lbl">Funerario que Asiste</label><select id="rc-fun-asiste" onchange="rcToggleFunerarioOtro()"></select></div>
+        <div class="f" id="rc-blq-fun-otro" style="display:none"><label class="lbl">Especificar</label><input id="rc-fun-asiste-otro" type="text"/></div>
+      </div>
+
+      <!-- REVERSO: Datos Complementarios -->
+      <div class="card">
+        <div class="st">Reverso · Datos Complementarios</div>
+        <div class="f"><label class="lbl">¿Tuvo atención médica en su última enfermedad?</label>
+          <select id="rc-atencion-medica">
+            <option value="">—</option>
+            <option value="SI">Sí</option>
+            <option value="NO">No</option>
+            <option value="NO_SE_SABE">No se sabe</option>
+          </select>
+        </div>
+        <div id="rc-blq-mayor12">
+          <p style="font-size:11px;color:var(--text3);margin:2px 0 8px">Situación laboral/escolar y posición en el trabajo — solo aplica si el finado tenía más de 12 años (<span id="rc-edad-ref">—</span>).</p>
+          <div class="f"><label class="lbl">Situación al Momento de Fallecer</label>
+            <select id="rc-situacion-laboral" onchange="rcToggleSituacionOtro()">
+              <option value="">—</option>
+              <option value="TENIA_TRABAJO">Tenía trabajo</option>
+              <option value="ESTUDIABA">Estudiaba</option>
+              <option value="LABORES_DOMESTICAS">Labores domésticas</option>
+              <option value="INCAPACITADO">Incapacitado</option>
+              <option value="JUBILADO_PENSIONADO">Jubilado o pensionado</option>
+              <option value="OTRO">Otro</option>
+            </select>
+          </div>
+          <div class="f" id="rc-blq-situacion-otro" style="display:none"><label class="lbl">Especificar</label><input id="rc-situacion-laboral-otro" type="text"/></div>
+          <div class="f"><label class="lbl">Escolaridad</label>
+            <select id="rc-escolaridad" onchange="rcToggleEscolaridad()">
+              <option value="">—</option>
+              <option value="SIN_ESCOLARIDAD">Sin escolaridad</option>
+              <option value="PRIMARIA_COMPLETA">Primaria completa</option>
+              <option value="PRIMARIA_INCOMPLETA">Primaria incompleta</option>
+              <option value="SECUNDARIA">Secundaria o equivalente</option>
+              <option value="PREPARATORIA">Preparatoria o equivalente</option>
+              <option value="PROFESIONAL">Profesional</option>
+            </select>
+          </div>
+          <div class="f" id="rc-blq-ultimogrado" style="display:none"><label class="lbl">Último grado cursado</label><input id="rc-escolaridad-ultimogrado" type="text"/></div>
+          <div class="f"><label class="lbl">Posición en su Trabajo</label>
+            <select id="rc-posicion-trabajo">
+              <option value="">—</option>
+              <option value="OBRERO">Obrero</option>
+              <option value="EMPLEADO">Empleado</option>
+              <option value="JORNALERO_PEON">Jornalero o peón</option>
+              <option value="TRABAJADOR_CUENTA_PROPIA">Trabajador por su cuenta</option>
+              <option value="PATRON_EMPRESARIO">Patrón o empresario</option>
+              <option value="TRABAJADOR_NO_REMUNERADO">Trabajador no remunerado</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button class="bg" style="width:100%" onclick="guardarSolicitudRC()">💾 Guardar Solicitud Registro Civil</button>
+      <p style="font-size:11px;color:var(--text3);margin-top:6px">Formatos de Tlalnehuayocan, Banderilla y Emiliano Zapata: pendientes (se agregan por separado cuando lleguen).</p>
+    </div>
+
+    <!-- PESTAÑA 3: MAPEO SOBRE FORMATO OFICIAL — Xalapa -->
+    <div id="cert-tab-3" class="cert-tab" style="display:none">
+      <div class="card">
+        <div class="st">Formato de Registro Civil de Xalapa — listo para imprimir</div>
+        <p style="font-size:13px;color:var(--text2)">Genera un PDF de 2 páginas (tamaño oficio, frente y reverso) con la imagen real del formato de fondo y los datos de la Pestaña 2 ya colocados en cada casilla. Guarda primero la Pestaña 2 para que el PDF tenga lo último capturado.</p>
+        <button class="bg" style="width:100%" onclick="descargarFormatoRC()">📄 Descargar Formato Xalapa Lleno (PDF)</button>
+        <button class="bo" style="width:100%;margin-top:8px" onclick="abrirMapeoRC()">🎯 Calibrar posiciones (mapeador)</button>
+        <p style="font-size:11px;color:var(--text3);margin-top:8px">Si algo salió corrido al imprimir, usa "Calibrar posiciones": haz clic sobre la imagen del formato en el lugar exacto donde debe ir cada dato. Se guarda para todos los dispositivos.</p>
+      </div>
+      <div class="card" style="text-align:center;padding:24px 16px">
+        <div style="font-size:28px;margin-bottom:6px">🚧</div>
+        <div style="font-weight:700;margin-bottom:6px">Tlalnehuayocan, Banderilla y Emiliano Zapata</div>
+        <p style="font-size:13px;color:var(--text2)">Pendientes — se agregan por separado cuando lleguen sus formatos.</p>
+      </div>
+    </div>
+
+    <!-- PESTAÑA 4: DOCUMENTOS (respaldos digitalizados en la nube) -->
+    <div id="cert-tab-4" class="cert-tab" style="display:none">
+      <div class="card">
+        <div class="st">Documentos del Finado</div>
+        <p style="font-size:11px;color:var(--text3);margin:-4px 0 10px">Sube la foto desde el celular — se comprime sola antes de subirse. El INE, el acta y el certificado alimentan el llenado automático de la Pestaña 2 (revisa siempre lo que se rellenó solo, marcado en amarillo).</p>
+        <div id="doc-slots-finado"></div>
+      </div>
+      <div class="card">
+        <div class="st">Documentos del Contratante</div>
+        <div id="doc-slots-contratante"></div>
+      </div>
+      <div class="card">
+        <div class="st">Documentos del Declarante y Testigos (Registro Civil)</div>
+        <div id="doc-slots-personas"></div>
+      </div>
+      <div class="card">
+        <div class="st">Documentos guardados de este folio</div>
+        <div id="doc-lista-folio"><p style="font-size:12px;color:var(--text3)">Cargando…</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- MODAL MAPEADOR: calibrar a mano dónde va cada dato sobre el formato -->
+<div class="mo" id="mo-mapeo-rc">
+  <div class="mb" style="max-width:900px">
+    <button class="mc" onclick="closeMo('mo-mapeo-rc')">✕</button>
+    <div class="mt2">Mapeador — Formato Registro Civil Xalapa</div>
+    <p style="font-size:12px;color:var(--text2);margin-top:-6px">1) Elige el campo en la lista. 2) Haz clic en la imagen, exactamente donde debe caer ese dato. 3) Pasa al siguiente. Los puntos rojos muestran los campos ya ubicados.</p>
+    <div style="display:flex;gap:6px;margin:8px 0">
+      <button class="bo bsm" id="map-tab-1" onclick="mapCambiarPagina(1)">Página 1 (Frente)</button>
+      <button class="bo bsm" id="map-tab-2" onclick="mapCambiarPagina(2)">Página 2 (Reverso)</button>
+    </div>
+    <div class="f">
+      <label class="lbl">Campo a ubicar</label>
+      <select id="map-campo-select" onchange="mapSeleccionarCampo(this.value)"></select>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="bo bsm" onclick="mapCampoAnterior()">◀ Anterior</button>
+      <button class="bo bsm" onclick="mapCampoSiguiente()">Siguiente ▶</button>
+      <button class="br bsm" onclick="mapBorrarCampoActual()">🗑 Borrar este punto</button>
+    </div>
+    <div id="map-img-wrap" style="position:relative;width:100%;border:1px solid var(--border2);border-radius:var(--rsm);overflow:hidden;cursor:crosshair;touch-action:none">
+      <img id="map-img" src="" style="width:100%;display:block;user-select:none;-webkit-user-drag:none" draggable="false"/>
+      <div id="map-marcadores" style="position:absolute;inset:0;pointer-events:none"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="bg" style="flex:1" onclick="mapGuardar()">💾 Guardar Calibración</button>
+      <button class="bo" onclick="descargarFormatoRC()">📄 Probar PDF</button>
+      <button class="br" onclick="mapRestablecerTodo()">↺ Restablecer Todo</button>
+    </div>
+  </div>
+</div>
+<!-- MODAL BUSCAR DOCUMENTOS (por folio o nombre) -->
+<div class="mo" id="mo-buscar-docs">
+  <div class="mb" style="max-width:640px">
+    <button class="mc" onclick="closeMo('mo-buscar-docs')">✕</button>
+    <div class="mt2">🔎 Buscar Documentos</div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Folio</label><input id="bd-folio" type="text" placeholder="Ej. F360-0001" oninput="buscarDocsGlobal()"/></div>
+      <div class="f"><label class="lbl">Nombre (finado o contratante)</label><input id="bd-nombre" type="text" placeholder="Nombre…" oninput="buscarDocsGlobal()"/></div>
+    </div>
+    <div id="bd-resultados"><p style="font-size:12px;color:var(--text3)">Escribe un folio o un nombre para buscar.</p></div>
+  </div>
+</div>
+<div id="print-area" style="position:absolute;left:-9999px;top:0;width:8.5in"></div>
+
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════════
+     SCRIPT
+════════════════════════════════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+/* ═══════════════════ FUNERAL360 — Módulo de Certificación ═══════════════════
+   by Omnia T3chnology. Backend propio e independiente — ver Codigo.gs. */
+const EK='f360_emp_v1', UK='f360_url_v1', SK='f360_sync_v1', QK='f360_q_v1',
+      FOLK='f360_folios_v1', CERK='f360_certificaciones_v1', RCK='f360_solicitudes_rc_v1',
+      CFGK='f360_config_funeraria_v1';
+const SESK='f360_session_v1', AUTHK='f360_authcred_v1';
+const ACTIVITY_KEY='f360_last_activity';
+const SESSION_IDLE_MS=10*60*1000; // 10 minutos
+let lastActivityTs=Date.now();
+
+let ST={user:null,authCred:null,online:navigator.onLine,url:localStorage.getItem(UK)||'',page:'certs',folios:[],emps:[],q:JSON.parse(localStorage.getItem(QK)||'[]'),pin:'',loginTab:'pin'};
+
+const $=id=>document.getElementById(id);
+const fechaPlano=v=>{
+  if(!v)return v;
+  const s=String(v);
+  const m=s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m?m[1]:s;
+};
+function toast(m,d=2800){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),d)}
+
+/* ── CONEXIÓN ── */
+function setOnline(v){
+  ST.online=v;
+  const d=$('sdot'),t=$('stext'),b=$('offbar');
+  if(v){d.className='';d.style.background='var(--green)';t.textContent='EN LÍNEA';b.style.display='none'}
+  else{d.className='off';t.textContent='SIN CONEXIÓN';b.style.display='block'}
+  const note=$('offline-login-note');if(note)note.textContent=v?'':'Sin internet — puedes iniciar sesión igual si ya usaste este dispositivo antes';
+}
+window.addEventListener('online',()=>{setOnline(true);if(ST.q.length)sincronizarTodo(true)});
+window.addEventListener('offline',()=>setOnline(false));
+
+/* ── API ── */
+async function api(body){
+  if(!ST.url) throw new Error('URL no configurada');
+  const r=await fetch(ST.url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(body)});
+  return r.json();
+}
+
+/* ── ALMACENAMIENTO LOCAL ── */
+function lFolios(){return JSON.parse(localStorage.getItem(FOLK)||'[]')}
+function sFolios(d){localStorage.setItem(FOLK,JSON.stringify(d));ST.folios=d}
+function lEmp(){return JSON.parse(localStorage.getItem(EK)||'[]')}
+function sEmp(d){localStorage.setItem(EK,JSON.stringify(d));ST.emps=d}
+function lConfigFuneraria(){try{return JSON.parse(localStorage.getItem(CFGK)||'{}')}catch(e){return{}}}
+function sConfigFuneraria(d){localStorage.setItem(CFGK,JSON.stringify(d))}
+
+/* ── LOGIN ── */
+function switchLoginTab(t,btn){
+  ST.loginTab=t;
+  document.querySelectorAll('.l-tab').forEach(b=>b.classList.remove('act'));
+  btn.classList.add('act');
+  $('pin-panel').style.display=t==='pin'?'flex':'none';
+  const up=$('up-panel');
+  up.style.display=t==='up'?'flex':'none';
+  up.className='up-panel'+(t==='up'?' show':'');
+}
+function pinP(n){if(ST.pin.length>=4)return;ST.pin+=n;updDots();if(ST.pin.length===4)setTimeout(doLogin,180)}
+function pinDel(){ST.pin=ST.pin.slice(0,-1);updDots()}
+function updDots(){for(let i=0;i<4;i++)$(`pd${i}`).classList.toggle('on',i<ST.pin.length)}
+document.addEventListener('keydown', function(e){
+  const login=$('login'), pinPanel=$('pin-panel');
+  if(!login || login.style.display==='none') return;
+  if(!pinPanel || pinPanel.style.display==='none') return;
+  if(e.key>='0'&&e.key<='9'){e.preventDefault();pinP(Number(e.key));}
+  else if(e.key==='Backspace'){e.preventDefault();pinDel();}
+  else if(e.key==='Enter'){e.preventDefault();doLogin();}
+});
+// El servidor guarda PIN/contraseña hasheados ("h1:<salt>:<hash>", ver
+// Codigo.gs) — la copia local de Colaboradores (usada para el login sin
+// conexión) recibe esos mismos valores hasheados.
+async function _sha256Hex(str){
+  const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function _coincideCredencialLocal(valorPlano, valorGuardado){
+  if(!valorPlano||!valorGuardado) return false;
+  if(typeof valorGuardado==='string' && valorGuardado.indexOf('h1:')===0 && valorGuardado.split(':').length===3){
+    const partes=valorGuardado.split(':');
+    return ('h1:'+partes[1]+':'+await _sha256Hex(String(valorPlano)+':'+partes[1]))===valorGuardado;
+  }
+  return String(valorGuardado)===String(valorPlano); // cuenta vieja aún sin migrar
+}
+async function doLogin(){
+  const pin=ST.pin,user=($('l-user')||{value:''}).value.trim(),pass=($('l-pass')||{value:''}).value;
+  if(!pin&&!user){toast('Ingresa PIN o usuario');return}
+  $('l-status').textContent='Validando…';
+
+  // Local first (permite iniciar sesión sin conexión si este dispositivo ya
+  // sincronizó alguna vez).
+  const emps=lEmp();
+  let local=null;
+  for(const e of emps){
+    if(String(e.estatus)!=='ACTIVO') continue;
+    if(pin && await _coincideCredencialLocal(pin,e.pin)){local=e;break}
+    if(user&&pass&&String(e.usuario)===user && await _coincideCredencialLocal(pass,e.contrasena)){local=e;break}
+  }
+  if(local){startSession(local, pin?{pin}:{usuario:user,contrasena:pass});return}
+
+  // Nube
+  if(ST.url&&ST.online){
+    try{
+      const authCred=pin?{pin}:{usuario:user,contrasena:pass};
+      const r=await api(Object.assign({accion:'validarAcceso'},authCred));
+      if(r.ok){startSession(r.colaborador, authCred);return}
+    }catch(e){}
+  }
+
+  $('l-status').textContent='Credenciales incorrectas.';
+  ST.pin='';updDots();
+  setTimeout(()=>$('l-status').textContent='',2500);
+}
+function startSession(col,authCred,esNueva=true){
+  ST.user=col;
+  ST.authCred=authCred||ST.authCred||null;
+  localStorage.setItem(SESK, JSON.stringify(col));
+  localStorage.setItem(AUTHK, JSON.stringify(ST.authCred));
+  registrarActividad();
+  $('login').style.display='none';
+  $('app').style.display='flex';
+  $('user-rol').textContent=col.puesto||'OPERATIVO';
+  $('l-status').textContent='';ST.pin='';updDots();
+  aplicarPermisosUI();
+  navTo('certs');
+  cargarConfigFunerariaDeNube();
+  _refrescarTrasSync();
+  _iniciarSyncPeriodico();
+  _iniciarControlInactividad();
+}
+function checkSession(){
+  try{
+    const saved=localStorage.getItem(SESK);
+    if(!saved)return;
+    const lastActivity=Number(localStorage.getItem(ACTIVITY_KEY)||0);
+    if(!lastActivity || (Date.now()-lastActivity)>SESSION_IDLE_MS){
+      localStorage.removeItem(SESK);
+      localStorage.removeItem(AUTHK);
+      localStorage.removeItem(ACTIVITY_KEY);
+      return;
+    }
+    const col=JSON.parse(saved);
+    if(!col)return;
+    let authCred=null;
+    try{authCred=JSON.parse(localStorage.getItem(AUTHK)||'null')}catch(ex){authCred=null}
+    startSession(col,authCred,false);
+  }catch(e){
+    localStorage.removeItem(SESK);
+    localStorage.removeItem(AUTHK);
+  }
+}
+function registrarActividad(){
+  lastActivityTs=Date.now();
+  if(ST.user) localStorage.setItem(ACTIVITY_KEY, String(lastActivityTs));
+}
+['click','keydown','touchstart','mousemove'].forEach(ev=>document.addEventListener(ev, registrarActividad, {passive:true}));
+function _refrescarTrasSync(){
+  if(!(ST.online&&ST.url))return;
+  sincronizarTodo(true).then(ok=>{
+    if(!ok)return;
+    if(ST.page==='certs')renderListaFolios();
+    if(ST.page==='colab')renderColab();
+  });
+}
+const _SYNC_INTERVALO_MS=5*60*1000; // 5 minutos
+let _syncIntervalId=null;
+function _iniciarSyncPeriodico(){
+  if(_syncIntervalId)clearInterval(_syncIntervalId);
+  _syncIntervalId=setInterval(_refrescarTrasSync,_SYNC_INTERVALO_MS);
+}
+let _inactividadIntervalId=null;
+function _iniciarControlInactividad(){
+  if(_inactividadIntervalId)clearInterval(_inactividadIntervalId);
+  _inactividadIntervalId=setInterval(()=>{
+    if(!ST.user)return;
+    if(Date.now()-lastActivityTs>SESSION_IDLE_MS){
+      _cerrarSesionLocal();
+      toast('Sesión cerrada por inactividad. Ingresa tu PIN de nuevo.');
+    }
+  },15000);
+}
+function _detenerControlInactividad(){
+  if(_inactividadIntervalId){clearInterval(_inactividadIntervalId);_inactividadIntervalId=null}
+}
+function logout(){if(!confirm('¿Cerrar sesión?'))return;_cerrarSesionLocal()}
+function _cerrarSesionLocal(){
+  if(_syncIntervalId){clearInterval(_syncIntervalId);_syncIntervalId=null}
+  _detenerControlInactividad();
+  ST.user=null;ST.authCred=null;
+  localStorage.removeItem(SESK);
+  localStorage.removeItem(AUTHK);
+  localStorage.removeItem(ACTIVITY_KEY);
+  $('login').style.display='flex';$('app').style.display='none';ST.pin='';updDots()
+}
+
+/* ── PERMISOS POR ROL ── (ADMINISTRADOR: acceso total; el resto solo certifica) */
+function esAdmin(){
+  const p = String(ST.user && ST.user.puesto || '').trim().toUpperCase();
+  return p === 'ADMIN' || p.includes('ADMINISTRADOR');
+}
+function requiereAdmin(mensaje){
+  if(esAdmin())return true;
+  toast(mensaje||'⚠ Esta acción requiere permisos de Administrador');
+  return false;
+}
+function aplicarPermisosUI(){
+  const admin=esAdmin();
+  document.querySelectorAll('[data-admin-only]').forEach(el=>{el.style.display=admin?'':'none'});
+}
+
+/* ── NAV ── */
+function navTo(p){
+  if((p==='colab'||p==='config'||p==='nube') && !requiereAdmin('⚠ Solo el Administrador puede acceder a esta sección')) return;
+  ST.page=p;
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('act'));
+  document.querySelectorAll('.ni').forEach(el=>el.classList.remove('act'));
+  const pg=$(`page-${p}`);if(pg)pg.classList.add('act');
+  document.querySelectorAll('.ni').forEach(el=>{
+    const oc=el.getAttribute('onclick')||'';
+    if(oc.includes(`'${p}'`))el.classList.add('act');
+  });
+  closeSB();$('main').scrollTop=0;
+  if(p==='certs')renderListaFolios();
+  if(p==='colab')renderColab();
+  if(p==='config')cargarPaginaConfig();
+  if(p==='nube')initNube();
+}
+function toggleSB(){$('sb').classList.toggle('open');$('sov').classList.toggle('show')}
+function closeSB(){$('sb').classList.remove('open');$('sov').classList.remove('show')}
+function closeMo(id){$(id).classList.remove('show')}
+
+/* ── FOLIOS (expediente mínimo para poder certificar — sin lista de ODS) ── */
+function genFolio(){
+  const y=new Date().getFullYear().toString().slice(-2);
+  const prefijo=`F360-${y}-`;
+  let max=0;
+  lFolios().forEach(o=>{
+    if(o.folio&&o.folio.indexOf(prefijo)===0){
+      const n=parseInt(o.folio.slice(prefijo.length),10);
+      if(!isNaN(n)&&n>max)max=n;
+    }
+  });
+  return prefijo+(max+1).toString().padStart(4,'0');
+}
+function abrirNuevoFolio(){
+  ['nf-folio','nf-fallecido','nf-contratante','nf-telefono','nf-calle','nf-colonia','nf-localidad','nf-municipio'].forEach(id=>{const el=$(id);if(el)el.value=''});
+  $('nf-folio').value=genFolio();
+  $('mo-nuevo-folio').classList.add('show');
+}
+function guardarNuevoFolio(){
+  const folio=$('nf-folio').value.trim();
+  const fallecido=$('nf-fallecido').value.trim();
+  if(!folio||!fallecido){toast('⚠ Folio y nombre del finado son obligatorios');return}
+  if(lFolios().some(f=>f.folio===folio)){toast('⚠ Ya existe un folio con ese identificador');return}
+  const datos={
+    folio,fallecido,
+    contratante:$('nf-contratante').value.trim(),
+    telefono:$('nf-telefono').value.trim(),
+    direccionCalle:$('nf-calle').value.trim(),
+    direccionColonia:$('nf-colonia').value.trim(),
+    direccionLocalidad:$('nf-localidad').value.trim(),
+    direccionMunicipio:$('nf-municipio').value.trim(),
+    creadoPor:ST.user?(ST.user.nombreCompleto||ST.user.nombre||''):'',
+    fechaCreacion:new Date().toISOString()
+  };
+  const arr=lFolios();arr.push(datos);sFolios(arr);
+  encolar({accion:'guardarFolio',datos});
+  closeMo('mo-nuevo-folio');
+  renderListaFolios();
+  if(ST.online&&ST.url)sincronizarTodo(true);
+  abrirCertificar(folio);
+}
+function renderListaFolios(){
+  const host=$('lista-folios');if(!host)return;
+  const q=(($('certs-buscar')||{value:''}).value||'').trim().toLowerCase();
+  let folios=lFolios().slice().sort((a,b)=>new Date(b.fechaCreacion||0)-new Date(a.fechaCreacion||0));
+  if(q)folios=folios.filter(f=>(f.folio||'').toLowerCase().includes(q)||(f.fallecido||'').toLowerCase().includes(q)||(f.contratante||'').toLowerCase().includes(q));
+  if(!folios.length){host.innerHTML='<p style="font-size:12px;color:var(--text3)">Sin folios todavía. Crea uno con "➕ Nuevo Folio".</p>';return}
+  const cert=lCert(),rc=lRC();
+  host.innerHTML=folios.map(f=>{
+    const tieneCert=cert.some(c=>c.folio===f.folio);
+    const tieneRC=rc.some(c=>c.folio===f.folio);
+    return `<div class="card" style="padding:10px 12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700">${f.fallecido||'—'}</div>
+          <div style="font-size:12px;color:var(--text2)">Folio ${f.folio}${f.contratante?(' · Contratante: '+f.contratante):''}</div>
+          <div style="font-size:11px;color:var(--text3)">${tieneCert?'✅':'⬜'} Info Médico · ${tieneRC?'✅':'⬜'} Registro Civil</div>
+        </div>
+        <button class="bg bsm" onclick="abrirCertificar('${f.folio}')">📝 Certificar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── COLABORADORES (login PIN / usuario+contraseña) ── */
+function registrarColab(){
+  const id=($('c-id')||{value:''}).value.trim();
+  const nom=($('c-nom')||{value:''}).value.trim();
+  const pin=($('c-pin')||{value:''}).value.trim();
+  if(!id||!nom||!pin){toast('⚠ ID, nombre y PIN son obligatorios');return}
+  if(pin.length!==4||!/^\d+$/.test(pin)){toast('⚠ PIN debe ser 4 dígitos');return}
+  const datos={
+    idColaborador:id,nombreCompleto:nom,puesto:($('c-puesto')||{value:''}).value||'OPERATIVO',
+    telefono:($('c-tel')||{value:''}).value,
+    usuario:($('c-user')||{value:''}).value.trim(),
+    contrasena:($('c-pass')||{value:''}).value,
+    pin,estatus:'ACTIVO'
+  };
+  const emp=lEmp();const idx=emp.findIndex(e=>e.idColaborador===id);
+  if(idx>=0)emp[idx]={...emp[idx],...datos};else emp.push(datos);
+  sEmp(emp);
+  encolar({accion:'guardarColaborador',datos});
+  if(ST.online&&ST.url)sincronizarTodo(true);
+  toast(`✅ ${nom} registrado · PIN: ${pin}`);
+  ['c-id','c-nom','c-pin','c-tel','c-puesto','c-user','c-pass'].forEach(x=>{const el=$(x);if(el)el.value=''});
+  renderColab();
+}
+function renderColab(){
+  const emp=lEmp();
+  $('lista-colab').innerHTML=emp.length?emp.map(e=>`<div class="card" style="padding:10px 12px;margin-bottom:7px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-size:14px;font-weight:700">${e.nombreCompleto}</div>
+      <div style="font-size:12px;color:var(--text2)">${e.puesto} · ID: ${e.idColaborador}</div>
+      <div style="font-size:12px;color:var(--text3)">Tel: ${e.telefono||'—'} · PIN: ${'•'.repeat((e.pin||'').length)}${e.usuario?` · @${e.usuario}`:''}</div></div>
+      <span class="badge ${e.estatus==='ACTIVO'?'bg-g':'bg-gr'}">${e.estatus}</span>
+    </div>
+  </div>`).join(''):'<div style="color:var(--text3);font-size:13px">Sin colaboradores.</div>';
+}
+
+/* ── DATOS DE LA FUNERARIA (Funeral360 es genérico — nada viene fijo) ── */
+function cargarPaginaConfig(){
+  const c=lConfigFuneraria();
+  $('cf-nombre').value=c.nombre||'';
+  $('cf-ciudad').value=c.ciudad||'';
+  $('cf-telefono').value=c.telefono||'';
+  $('cf-direccion').value=c.direccion||'';
+}
+async function guardarConfigFuneraria(){
+  const datos={
+    nombre:$('cf-nombre').value.trim(),
+    ciudad:$('cf-ciudad').value.trim(),
+    telefono:$('cf-telefono').value.trim(),
+    direccion:$('cf-direccion').value.trim()
+  };
+  sConfigFuneraria(datos);
+  toast('✅ Datos de la funeraria guardados en este dispositivo');
+  if(ST.online&&ST.url){
+    try{await api({accion:'guardarConfigFuneraria',datos,auth:ST.authCred});}catch(e){}
+  }
+}
+async function cargarConfigFunerariaDeNube(){
+  if(!(ST.online&&ST.url))return;
+  try{
+    const r=await api({accion:'obtenerConfigFuneraria',auth:ST.authCred});
+    if(r.ok&&r.datos&&Object.keys(r.datos).length)sConfigFuneraria(r.datos);
+  }catch(e){}
+}
+
+/* ── SINCRONIZACIÓN NUBE ── */
+function initNube(){
+  $('sc-url').value=ST.url;
+  $('lbl-sync').textContent=(()=>{const ls=localStorage.getItem(SK);return ls?new Date(ls).toLocaleString('es-MX'):'Nunca.'})();
+}
+function guardarUrl(){
+  const url=$('sc-url').value.trim();
+  if(url&&!url.startsWith('https://')){toast('⚠ URL inválida');return}
+  ST.url=url;localStorage.setItem(UK,url);
+  toast(url?'✅ Enlace guardado':'URL eliminada');
+}
+async function probarConexion(){
+  const url=$('sc-url').value.trim();
+  if(!url){toast('⚠ Ingresa URL primero');return}
+  toast('⏳ Probando…',1500);
+  try{
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({accion:'ping'})});
+    const d=await r.json();
+    toast(d.ok?'✅ '+d.mensaje:'❌ '+(d.mensaje||'Error'));
+  }catch(e){toast('❌ Sin respuesta del servidor. Verifica la URL e implementación.')}
+}
+function encolar(item){
+  ST.q.push({...item,ts:Date.now()});
+  localStorage.setItem(QK,JSON.stringify(ST.q));
+}
+async function sincronizarTodo(silencioso=false){
+  if(!ST.url){if(!silencioso)toast('⚠ Configura URL primero en Sincronización Nube');return false}
+  if(!ST.online){if(!silencioso)toast('⚠ Sin conexión');return false}
+  if(!silencioso)toast('⏳ Sincronizando…',2000);
+  try{
+    const r=await api({
+      accion:'sincronizarTodo',auth:ST.authCred,
+      folios:lFolios(),colaboradores:lEmp(),certificaciones:lCert(),solicitudesRC:lRC()
+    });
+    if(r.ok){
+      if(r.folios)sFolios(r.folios);
+      if(r.colaboradores)sEmp(r.colaboradores);
+      if(r.certificaciones)sCert(r.certificaciones);
+      if(r.solicitudesRC)sRC(r.solicitudesRC);
+      ST.q=[];localStorage.setItem(QK,'[]');
+      const now=new Date().toISOString();localStorage.setItem(SK,now);
+      const lbl=new Date(now).toLocaleString('es-MX');
+      const lblEl=$('lbl-sync');if(lblEl)lblEl.textContent=lbl;
+      const logEl=$('sync-log');
+      if(r.erroresSync&&r.erroresSync.length){
+        if(logEl){logEl.textContent='⚠ '+r.erroresSync.length+' dato(s) no se guardaron';logEl.style.color='var(--amber)'}
+        toast('⚠ '+r.erroresSync.length+' dato(s) no se guardaron — vuelve a intentar');
+        return false;
+      }
+      if(logEl){logEl.textContent='✅ '+(r.mensaje||'Sincronizado')+' · '+lbl;logEl.style.color='var(--text3)'}
+      if(!silencioso)toast('✅ Sincronización completa');
+      return true;
+    }else{
+      const detalle=r.mensaje||r.error||'El servidor respondió sin detalle del error.';
+      const logEl=$('sync-log');if(logEl){logEl.textContent='❌ '+detalle;logEl.style.color='var(--red)'}
+      if(!silencioso)toast('❌ '+detalle,6000);
+      if(r.mensaje&&r.mensaje.indexOf('No autorizado')!==-1)_cerrarSesionLocal();
+      return false;
+    }
+  }catch(e){
+    const detalle=(e&&e.message)?e.message:String(e);
+    const logEl=$('sync-log');if(logEl){logEl.textContent='❌ '+detalle;logEl.style.color='var(--red)'}
+    if(!silencioso)toast('❌ Error: '+detalle,6000);
+    return false;
+  }
+}
+
+function lCert(){return JSON.parse(localStorage.getItem(CERK)||'[]')}
+function sCert(d){localStorage.setItem(CERK,JSON.stringify(d))}
+function lRC(){return JSON.parse(localStorage.getItem(RCK)||'[]')}
+function sRC(d){localStorage.setItem(RCK,JSON.stringify(d))}
+
+/* ── CERTIFICAR: 3 pestañas (Info Médico / Solicitud Registro Civil / Mapeo) ── */
+const CERT_PERSONAS=[['decl','declarante'],['test1','testigo1'],['test2','testigo2']];
+function certTab(n){
+  // La Pestaña 2 se precarga desde la Pestaña 1 SOLO la primera vez que se
+  // abre el modal (dentro de rcCargar) — si el usuario llena y guarda la
+  // Pestaña 1 y recién después entra a la Pestaña 2 en la misma sesión, sin
+  // esto se quedaba con la precarga vieja (de antes de guardar), mostrando padres
+  // "Vive" en vez de "Finado", parentesco del declarante en blanco, etc.
+  // Mientras no exista todavía una Solicitud de Registro Civil guardada
+  // (rc), cada vez que se entra a la Pestaña 2 se vuelve a precargar con
+  // lo último de la Pestaña 1 — en cuanto ya hay un "rc" propio guardado,
+  // ese pasa a ser la fuente y ya no se vuelve a pisar con la Pestaña 1.
+  if(n===2){
+    const folio=$('mo-certificar').dataset.folio;
+    if(folio && !lRC().find(x=>x.folio===folio))rcAplicarPrecargaCert(folio);
+  }
+  document.querySelectorAll('.cert-tab').forEach(el=>el.style.display='none');
+  $('cert-tab-'+n).style.display='block';
+  document.querySelectorAll('.cert-tab-btn').forEach(b=>{
+    const activo=b.dataset.tab===String(n);
+    b.classList.toggle('bg',activo);b.classList.toggle('bo',!activo);
+  });
+}
+function toggleCertConyuge(){
+  $('c-blq-conyuge').style.display=$('c-fi-eracasado').value==='SI'?'block':'none';
+}
+function toggleCertVivo(prefijo){
+  $('c-blq-'+prefijo+'-vivo').style.display=$('c-'+prefijo+'-estado').value==='VIVO'?'block':'none';
+}
+function abrirCertificar(folio){
+  const o=lFolios().find(x=>x.folio===folio);
+  if(!o){toast('⚠ Folio no encontrado');return}
+  $('mo-certificar').dataset.folio=folio;
+  $('cert-folio-disp').textContent=`${folio} — ${o.fallecido||'—'}`;
+
+  const c=lCert().find(x=>x.folio===folio)||{};
+  $('c-fi-nombre').value=c.finadoNombre||o.fallecido||'';
+  $('c-fi-edocivil').value=c.finadoEstadoCivil||'SOLTERO';
+  $('c-fi-fecnac').value=fechaPlano(c.finadoFechaNacimiento)||'';
+  $('c-fi-entnac').value=c.finadoEntidadNacimiento||'';
+  $('c-fi-estudios').value=c.finadoGradoEstudios||'';
+  $('c-fi-domicilio').value=c.finadoDomicilio||[o.direccionCalle,o.direccionColonia,o.direccionLocalidad,o.direccionMunicipio].filter(Boolean).join(', ');
+  $('c-fi-afiliacion').value=c.finadoAfiliacionSalud||'';
+  $('c-fi-ocupacion').value=c.finadoOcupacion||'';
+  $('c-fi-lugardef').value=c.finadoLugarDefuncion||'';
+  $('c-fi-fecdef').value=fechaPlano(c.finadoFechaDefuncion)||'';
+  $('c-fi-hordef').value=c.finadoHoraDefuncion||'';
+
+  $('c-causa-directa').value=c.causaDirecta||'';
+  $('c-causa-directa-intervalo').value=c.causaDirectaIntervalo||'';
+  $('c-causa-intermedia').value=c.causaIntermedia||'';
+  $('c-causa-intermedia-intervalo').value=c.causaIntermediaIntervalo||'';
+  $('c-causa-basica').value=c.causaBasica||'';
+  $('c-causa-basica-intervalo').value=c.causaBasicaIntervalo||'';
+  $('c-otros-patologicos').value=c.otrosEstadosPatologicos||'';
+  $('c-tipo-defuncion').value=c.tipoDefuncion||'ENFERMEDAD';
+  $('c-necropsia').value=c.seNecropsia||'NO';
+  $('c-embarazo-parto').value=c.fallecioEmbarazoPartoPuerperio||'NO_APLICA';
+
+  $('c-fi-eracasado').value=c.finadoEraCasado||'NO';
+  $('c-cony-nombre').value=c.conyugeNombre||'';
+  $('c-cony-estado').value=c.conyugeEstado||'VIVO';
+  $('c-cony-fecnac').value=fechaPlano(c.conyugeFechaNacimiento)||'';
+  $('c-cony-localidad').value=c.conyugeLocalidadNac||'';
+  $('c-cony-municipio').value=c.conyugeMunicipioNac||'';
+  $('c-cony-estadonac').value=c.conyugeEstadoNac||'';
+  $('c-cony-pais').value=c.conyugePaisNac||'México';
+
+  $('c-pa-nombre').value=c.padreNombre||'';
+  $('c-pa-estado').value=c.padreEstado||'VIVO';
+  $('c-pa-fecnac').value=fechaPlano(c.padreFechaNacimiento)||'';
+  $('c-pa-localidad').value=c.padreLocalidadNac||'';
+  $('c-pa-municipio').value=c.padreMunicipioNac||'';
+  $('c-pa-estadonac').value=c.padreEstadoNac||'';
+  $('c-pa-pais').value=c.padrePaisNac||'México';
+
+  $('c-ma-nombre').value=c.madreNombre||'';
+  $('c-ma-estado').value=c.madreEstado||'VIVO';
+  $('c-ma-fecnac').value=fechaPlano(c.madreFechaNacimiento)||'';
+  $('c-ma-localidad').value=c.madreLocalidadNac||'';
+  $('c-ma-municipio').value=c.madreMunicipioNac||'';
+  $('c-ma-estadonac').value=c.madreEstadoNac||'';
+  $('c-ma-pais').value=c.madrePaisNac||'México';
+
+  CERT_PERSONAS.forEach(([p,campo])=>{
+    $(`c-${p}-nombre`).value=c[`${campo}Nombre`]||'';
+    $(`c-${p}-parentesco`).value=c[`${campo}Parentesco`]||'NINGUNO';
+    $(`c-${p}-edocivil`).value=c[`${campo}EstadoCivil`]||'SOLTERO';
+    $(`c-${p}-localidad`).value=c[`${campo}LocalidadNac`]||'';
+    $(`c-${p}-municipio`).value=c[`${campo}MunicipioNac`]||'';
+    $(`c-${p}-estadonac`).value=c[`${campo}EstadoNac`]||'';
+    $(`c-${p}-pais`).value=c[`${campo}PaisNac`]||'México';
+    $(`c-${p}-telefono`).value=c[`${campo}Telefono`]||'';
+  });
+
+  toggleCertConyuge();toggleCertVivo('cony');toggleCertVivo('pa');toggleCertVivo('ma');
+  rcCargar(folio);
+  rcSincronizarMapeo();
+  renderDocSlots();
+  cargarDocumentosFolio(folio);
+  certTab(1);
+  $('mo-certificar').classList.add('show');
+}
+/* ══════════════════════════════════════════════════════════════
+   DOCUMENTOS (respaldos digitalizados en la nube — reemplaza el
+   expediente físico). Se suben comprimidos desde el navegador y se
+   guardan en Drive, indexados por folio. Los tipos marcados con
+   extrae:true además disparan la lectura automática (IA) que
+   precarga la Pestaña 2 — solo en campos que estén vacíos, y siempre
+   marcados para que el usuario los revise antes de guardar.
+   ══════════════════════════════════════════════════════════════ */
+const DOC_TIPOS_FINADO=[
+  {tipo:'INE_FINADO',label:'INE del Finado',extrae:true},
+  {tipo:'ACTA_NACIMIENTO_FINADO',label:'Acta de Nacimiento',extrae:true},
+  {tipo:'CERTIFICADO_DEFUNCION',label:'Certificado de Defunción',extrae:true},
+  {tipo:'ACTA_DEFUNCION',label:'Acta de Defunción',extrae:false}
+];
+const DOC_TIPOS_CONTRATANTE=[
+  {tipo:'INE_CONTRATANTE',label:'INE del Contratante',extrae:false}
+];
+const DOC_TIPOS_PERSONAS=[
+  {tipo:'INE_DECLARANTE',label:'INE del Declarante',extrae:true},
+  {tipo:'INE_TESTIGO1',label:'INE del Testigo 1',extrae:true},
+  {tipo:'INE_TESTIGO2',label:'INE del Testigo 2',extrae:true}
+];
+const DOC_TIPOS_TODOS=[...DOC_TIPOS_FINADO,...DOC_TIPOS_CONTRATANTE,...DOC_TIPOS_PERSONAS];
+function _etiquetaTipoDoc(t){const d=DOC_TIPOS_TODOS.find(x=>x.tipo===t);return d?d.label:t}
+function _tamanoLegible(bytes){
+  bytes=Number(bytes)||0;
+  if(bytes<1024)return bytes+' B';
+  if(bytes<1024*1024)return (bytes/1024).toFixed(0)+' KB';
+  return (bytes/1024/1024).toFixed(1)+' MB';
+}
+function _docSlotHTML(tipo,label){
+  return `<div class="doc-slot" id="doc-slot-${tipo}">
+    <div>
+      <div class="doc-slot-label">${label}</div>
+      <div class="doc-slot-status" id="doc-slot-status-${tipo}">Sin subir</div>
+    </div>
+    <label class="bo bsm" style="cursor:pointer">📤 Subir
+      <input type="file" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="onSeleccionArchivoDoc(event,'${tipo}')"/>
+    </label>
+  </div>`;
+}
+function renderDocSlots(){
+  $('doc-slots-finado').innerHTML=DOC_TIPOS_FINADO.map(d=>_docSlotHTML(d.tipo,d.label)).join('');
+  $('doc-slots-contratante').innerHTML=DOC_TIPOS_CONTRATANTE.map(d=>_docSlotHTML(d.tipo,d.label)).join('');
+  $('doc-slots-personas').innerHTML=DOC_TIPOS_PERSONAS.map(d=>_docSlotHTML(d.tipo,d.label)).join('');
+}
+// Redimensiona a máx. 1600px de lado mayor y recomprime a JPEG ~75% — una
+// foto de celular de varios MB queda normalmente en 150-400KB. Los PDF no
+// se tocan (ya suelen ser ligeros y no se pueden recomprimir con canvas).
+function comprimirImagen(file,maxDim=1600,calidad=0.75){
+  return new Promise((resolve,reject)=>{
+    if(!file.type||!file.type.startsWith('image/')){
+      const reader=new FileReader();
+      reader.onload=()=>resolve({base64:reader.result,mimeType:file.type||'application/pdf'});
+      reader.onerror=()=>reject(new Error('No se pudo leer el archivo'));
+      reader.readAsDataURL(file);
+      return;
+    }
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('No se pudo leer la imagen'));
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('No se pudo procesar la imagen'));
+      img.onload=()=>{
+        let {width,height}=img;
+        if(width>maxDim||height>maxDim){
+          if(width>height){height=Math.round(height*maxDim/width);width=maxDim}
+          else{width=Math.round(width*maxDim/height);height=maxDim}
+        }
+        const canvas=document.createElement('canvas');
+        canvas.width=width;canvas.height=height;
+        canvas.getContext('2d').drawImage(img,0,0,width,height);
+        resolve({base64:canvas.toDataURL('image/jpeg',calidad),mimeType:'image/jpeg'});
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function onSeleccionArchivoDoc(evt,tipo){
+  const file=evt.target.files[0];
+  evt.target.value='';
+  if(!file)return;
+  const folio=$('mo-certificar').dataset.folio;
+  const o=lFolios().find(x=>x.folio===folio)||{};
+  const statusEl=$('doc-slot-status-'+tipo);
+  if(statusEl)statusEl.textContent='Subiendo…';
+  // Los documentos que sí se leen con IA (INE/acta/certificado) llevan más
+  // resolución y calidad — un folio o CURP en letra chica queda ilegible con
+  // la compresión "ligera" que basta para los que solo se guardan.
+  const meta=DOC_TIPOS_TODOS.find(d=>d.tipo===tipo);
+  let base64,mimeType;
+  try{
+    ({base64,mimeType}=meta&&meta.extrae?await comprimirImagen(file,2200,0.85):await comprimirImagen(file));
+  }catch(e){
+    toast('⚠ No se pudo procesar el archivo: '+e.message);
+    if(statusEl)statusEl.textContent='Sin subir';
+    return;
+  }
+  // La subida a Drive y la lectura con IA son independientes (la IA no
+  // necesita que el archivo ya exista en Drive) — se lanzan las dos a la vez
+  // en vez de una tras otra, para no duplicar el tiempo de espera.
+  const extraccionPromise=(meta&&meta.extrae)?extraerYAplicar(tipo,base64,mimeType):null;
+  try{
+    const r=await api({
+      accion:'subirDocumento',auth:ST.authCred,
+      app:'ODS',folio,tipoDocumento:tipo,
+      nombreFinado:o.fallecido||'',nombreContratante:o.contratante||'',
+      base64,mimeType,nombreArchivo:file.name,
+      subidoPor:(ST.user&&ST.user.nombreCompleto)||''
+    });
+    if(!r.ok){toast('⚠ '+(r.error||'No se pudo subir el documento'));if(statusEl)statusEl.textContent='Sin subir';return}
+    toast('✅ Documento subido');
+    await cargarDocumentosFolio(folio);
+  }catch(e){
+    toast('⚠ Error al subir: '+e.message);
+    if(statusEl)statusEl.textContent='Sin subir';
+  }
+  if(extraccionPromise)await extraccionPromise;
+}
+let _docsFolioActual=[];
+async function cargarDocumentosFolio(folio){
+  try{
+    const r=await api({accion:'obtenerDocumentos',auth:ST.authCred,filtros:{app:'ODS',folio}});
+    _docsFolioActual=(r.ok&&r.documentos)||[];
+  }catch(e){_docsFolioActual=[]}
+  document.querySelectorAll('[id^="doc-slot-status-"]').forEach(el=>{
+    const tipo=el.id.replace('doc-slot-status-','');
+    const docs=_docsFolioActual.filter(d=>d.tipoDocumento===tipo);
+    el.textContent=docs.length?('✅ Subido — '+new Date(docs[0].fechaSubida).toLocaleString('es-MX')):'Sin subir';
+  });
+  renderListaDocsFolio();
+}
+function renderListaDocsFolio(){
+  const host=$('doc-lista-folio');
+  if(!host)return;
+  if(!_docsFolioActual.length){host.innerHTML='<p style="font-size:12px;color:var(--text3)">Todavía no hay documentos guardados en este folio.</p>';return}
+  host.innerHTML=_docsFolioActual.map(d=>`
+    <div class="doc-card">
+      <div class="doc-info">
+        <div class="doc-tipo">${_etiquetaTipoDoc(d.tipoDocumento)}</div>
+        <div class="doc-meta">${new Date(d.fechaSubida).toLocaleString('es-MX')} · ${_tamanoLegible(d.tamanoBytes)}</div>
+      </div>
+      <button class="bo bsm" onclick="verDocumento('${d.id}')">👁 Ver</button>
+      <button class="bo bsm" onclick="descargarDocumento('${d.id}')">⬇ Descargar</button>
+      ${esAdmin()?`<button class="br bsm" onclick="eliminarDocumentoUI('${d.id}')">🗑</button>`:''}
+    </div>
+  `).join('');
+}
+async function verDocumento(id){
+  toast('Cargando documento…');
+  try{
+    const r=await api({accion:'obtenerDocumentoArchivo',auth:ST.authCred,id});
+    if(!r.ok){toast('⚠ '+(r.error||'No se pudo abrir el documento'));return}
+    const w=window.open('');
+    if(!w){toast('⚠ El navegador bloqueó la ventana — permite ventanas emergentes para ver documentos');return}
+    if(r.mimeType==='application/pdf'){
+      w.document.write(`<iframe src="data:application/pdf;base64,${r.base64}" style="width:100%;height:100vh;border:0"></iframe>`);
+    }else{
+      w.document.write(`<body style="margin:0;background:#111"><img src="data:${r.mimeType};base64,${r.base64}" style="max-width:100%;display:block;margin:0 auto"/></body>`);
+    }
+  }catch(e){toast('⚠ Error: '+e.message)}
+}
+async function descargarDocumento(id){
+  try{
+    const r=await api({accion:'obtenerDocumentoArchivo',auth:ST.authCred,id});
+    if(!r.ok){toast('⚠ '+(r.error||'No se pudo descargar'));return}
+    const a=document.createElement('a');
+    a.href=`data:${r.mimeType};base64,${r.base64}`;
+    a.download=r.nombreArchivo||'documento';
+    document.body.appendChild(a);a.click();a.remove();
+  }catch(e){toast('⚠ Error: '+e.message)}
+}
+async function eliminarDocumentoUI(id){
+  if(!requiereAdmin())return;
+  if(!confirm('¿Eliminar este documento? No se puede deshacer.'))return;
+  try{
+    const r=await api({accion:'eliminarDocumento',auth:ST.authCred,id});
+    if(!r.ok){toast('⚠ '+(r.error||'No se pudo eliminar'));return}
+    toast('🗑 Documento eliminado');
+    const folio=$('mo-certificar').dataset.folio;
+    if(folio)cargarDocumentosFolio(folio);
+    if($('mo-buscar-docs').classList.contains('show'))buscarDocsGlobal();
+  }catch(e){toast('⚠ Error: '+e.message)}
+}
+
+/* ── Lectura automática (IA) — precarga la Pestaña 2, solo campos vacíos ── */
+async function extraerYAplicar(tipo,base64,mimeType){
+  toast('🤖 Leyendo datos del documento…');
+  try{
+    const r=await api({accion:'extraerDatosDocumento',auth:ST.authCred,tipoDocumento:tipo,base64,mimeType});
+    if(!r.ok){toast('ℹ No se pudo leer automáticamente: '+(r.error||'inténtalo de nuevo más tarde'));return}
+    aplicarExtraccionRC(tipo,r.datos||{});
+  }catch(e){
+    // La lectura automática es un plus — si falla, no interrumpe la subida del
+    // documento (que ya corrió aparte), pero SÍ hay que avisar: un catch
+    // silencioso aquí deja a quien capturó sin saber que debe llenar la
+    // Pestaña 2 a mano porque la IA nunca llegó a intentarlo.
+    toast('ℹ No se pudo leer automáticamente (sin conexión con el servicio) — llena la Pestaña 2 a mano');
+  }
+}
+function _marcarIA(el){
+  el.classList.add('ia-detectado');
+  const quitar=()=>{el.classList.remove('ia-detectado');el.removeEventListener('input',quitar);el.removeEventListener('change',quitar)};
+  el.addEventListener('input',quitar);
+  el.addEventListener('change',quitar);
+}
+// Igual que _setSiVacio pero sin marcar "detectado por IA" — la usa la
+// precarga Pestaña 1 → Pestaña 2 (no es una lectura automática de un
+// documento, es tu propio dato ya capturado en la Pestaña 1).
+function _rcFillIfVacio(id,val){
+  const el=$(id);
+  if(!el)return;
+  if(String(el.value||'').trim())return;
+  el.value=val||'';
+}
+// Solo llena si el campo está vacío — nunca pisa algo ya capturado a mano
+// (ni por un documento anterior ni por el usuario). Regresa 1/0 para contar
+// cuántos campos se aplicaron y avisar con un solo toast al final.
+function _setSiVacio(id,val){
+  const el=$(id);
+  val=(val==null?'':String(val)).trim();
+  if(!el||!val)return 0;
+  if(String(el.value||'').trim())return 0;
+  el.value=val;
+  if(el.value!==val)return 0; // el navegador rechazó el valor (formato de fecha/hora/opción inválida) — no cuenta como aplicado ni se marca
+  _marcarIA(el);
+  return 1;
+}
+// La IA no siempre regresa fecha/hora exactamente en el formato que piden los
+// <input type=date>/<input type=time> (que rechazan en silencio cualquier
+// otro formato, dejando el campo vacío sin avisar) — se normaliza aquí antes
+// de intentar aplicarlo.
+function _normFecha(v){
+  v=(v||'').trim();
+  if(!v)return '';
+  let m=v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m)return v;
+  m=v.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if(m)return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  const meses={enero:'01',febrero:'02',marzo:'03',abril:'04',mayo:'05',junio:'06',julio:'07',agosto:'08',septiembre:'09',setiembre:'09',octubre:'10',noviembre:'11',diciembre:'12'};
+  m=v.toLowerCase().match(/(\d{1,2})\s*(?:de)?\s*([a-záéíóúñ]+)\s*(?:de|del)?\s*(\d{4})/);
+  if(m&&meses[m[2]])return `${m[3]}-${meses[m[2]]}-${m[1].padStart(2,'0')}`;
+  return '';
+}
+function _normHora(v){
+  v=(v||'').trim();
+  if(!v)return '';
+  let m=v.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if(m){const h=+m[1];if(h>=0&&h<=23)return String(h).padStart(2,'0')+':'+m[2]}
+  m=v.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  if(m){let h=+m[1];const ap=m[3].toLowerCase();if(ap==='pm'&&h<12)h+=12;if(ap==='am'&&h===12)h=0;return String(h).padStart(2,'0')+':'+m[2]}
+  return '';
+}
+// Específico de la INE mexicana: solo imprime "H" o "M" junto a SEXO — nunca
+// Masculino/Femenino, así que no hay ambigüedad con "M" de Mujer.
+function _normSexoINE(v){
+  v=(v||'').trim().toUpperCase();
+  if(v==='H'||v==='HOMBRE')return 'HOMBRE';
+  if(v==='M'||v==='MUJER')return 'MUJER';
+  return '';
+}
+// La INE imprime primero los apellidos y después el/los nombre(s) — el
+// backend ya pide los 3 campos por separado para no depender de que la IA
+// "reordene" un texto ya concatenado; aquí se arma siempre en el orden
+// correcto: nombre(s) primero, apellidos después.
+function _nombreCompletoDesdeINE(d){
+  return [d.nombres,d.apellidoPaterno,d.apellidoMaterno].map(x=>(x||'').trim()).filter(Boolean).join(' ');
+}
+function aplicarExtraccionRC(tipo,d){
+  let n=0;
+  if(tipo==='ACTA_NACIMIENTO_FINADO'){
+    n+=_setSiVacio('rc-fi-nombres',d.nombres);
+    n+=_setSiVacio('rc-fi-ap1',d.apellidoPaterno);
+    n+=_setSiVacio('rc-fi-ap2',d.apellidoMaterno);
+    n+=_setSiVacio('rc-fi-fecnac',_normFecha(d.fechaNacimiento));
+    n+=_setSiVacio('rc-fi-localidad',d.lugarNacimientoLocalidad);
+    n+=_setSiVacio('rc-fi-municipio',d.lugarNacimientoMunicipio);
+    n+=_setSiVacio('rc-fi-entidad',_expandirEntidad(d.lugarNacimientoEntidad));
+    n+=_setSiVacio('rc-fi-pais',d.lugarNacimientoPais);
+    n+=_setSiVacio('rc-pa-nombre',d.nombrePadre);
+    n+=_setSiVacio('rc-ma-nombre',d.nombreMadre);
+    if($('rc-fi-fecnac').value)rcCalcEdad('fi');
+  }else if(tipo==='INE_FINADO'){
+    n+=_setSiVacio('rc-fi-nombres',d.nombres);
+    n+=_setSiVacio('rc-fi-ap1',d.apellidoPaterno);
+    n+=_setSiVacio('rc-fi-ap2',d.apellidoMaterno);
+    n+=_setSiVacio('rc-fi-curp',(d.curp||'').toUpperCase());
+    n+=_setSiVacio('rc-fi-sexo',_normSexoINE(d.sexo));
+    n+=_setSiVacio('rc-fi-fecnac',_normFecha(d.fechaNacimiento));
+    n+=_setSiVacio('rc-fi-domcalle',d.domicilioCalle);
+    n+=_setSiVacio('rc-fi-domnumero',d.domicilioNumero);
+    n+=_setSiVacio('rc-fi-domcolonia',d.domicilioColonia);
+    n+=_setSiVacio('rc-fi-domlocalidad',d.domicilioLocalidad);
+    n+=_setSiVacio('rc-fi-dommunicipio',d.domicilioMunicipio);
+    n+=_setSiVacio('rc-fi-domentidad',_expandirEntidad(d.domicilioEntidad));
+    if($('rc-fi-fecnac').value)rcCalcEdad('fi');
+  }else if(tipo==='CERTIFICADO_DEFUNCION'){
+    n+=_setSiVacio('rc-fallec-fecha',_normFecha(d.fechaDefuncion));
+    n+=_setSiVacio('rc-fallec-hora',_normHora(d.horaDefuncion));
+    n+=_setRadioLugarSiVacio(_rcInferirLugarFallecimiento(d.lugarDefuncionTexto));
+    n+=_setSiVacio('rc-fallec-certificado',d.numeroCertificado);
+    n+=_setSiVacio('rc-fi-domcalle',d.domicilioCalle);
+    n+=_setSiVacio('rc-fi-domnumero',d.domicilioNumero);
+    n+=_setSiVacio('rc-fi-domcolonia',d.domicilioColonia);
+    n+=_setSiVacio('rc-fi-domlocalidad',d.domicilioLocalidad);
+    n+=_setSiVacio('rc-fi-dommunicipio',d.domicilioMunicipio);
+    n+=_setSiVacio('rc-fi-domentidad',_expandirEntidad(d.domicilioEntidad));
+    if($('rc-fallec-fecha').value)rcCalcEdad('fi');
+  }else if(tipo==='INE_DECLARANTE'){
+    n+=_setSiVacio('rc-decl-nombre',_nombreCompletoDesdeINE(d));
+    n+=_setSiVacio('rc-decl-fecnac',_normFecha(d.fechaNacimiento));
+    n+=_setSiVacio('rc-decl-domcalle',d.domicilioCalle);
+    n+=_setSiVacio('rc-decl-domnumero',d.domicilioNumero);
+    n+=_setSiVacio('rc-decl-domcolonia',d.domicilioColonia);
+    n+=_setSiVacio('rc-decl-domlocalidad',d.domicilioLocalidad);
+    n+=_setSiVacio('rc-decl-dommunicipio',d.domicilioMunicipio);
+    n+=_setSiVacio('rc-decl-domentidad',_expandirEntidad(d.domicilioEntidad));
+    if($('rc-decl-fecnac').value)rcCalcEdad('decl');
+  }else if(tipo==='INE_TESTIGO1'||tipo==='INE_TESTIGO2'){
+    const p=tipo==='INE_TESTIGO1'?'test1':'test2';
+    n+=_setSiVacio(`rc-${p}-nombre`,_nombreCompletoDesdeINE(d));
+    n+=_setSiVacio(`rc-${p}-curp`,(d.curp||'').toUpperCase());
+    n+=_setSiVacio(`rc-${p}-sexo`,_normSexoINE(d.sexo));
+    n+=_setSiVacio(`rc-${p}-fecnac`,_normFecha(d.fechaNacimiento));
+    n+=_setSiVacio(`rc-${p}-domcalle`,d.domicilioCalle);
+    n+=_setSiVacio(`rc-${p}-domnumero`,d.domicilioNumero);
+    n+=_setSiVacio(`rc-${p}-domcolonia`,d.domicilioColonia);
+    n+=_setSiVacio(`rc-${p}-domlocalidad`,d.domicilioLocalidad);
+    n+=_setSiVacio(`rc-${p}-dommunicipio`,d.domicilioMunicipio);
+    n+=_setSiVacio(`rc-${p}-domentidad`,_expandirEntidad(d.domicilioEntidad));
+    if($(`rc-${p}-fecnac`).value)rcCalcEdad(p);
+  }
+  toast(n>0?`🤖 ${n} dato(s) detectados en la Pestaña 2 — revísalos antes de guardar`:'ℹ La IA no encontró datos nuevos para agregar');
+}
+
+/* ── Buscador global de documentos (por folio o nombre) ── */
+let _bdTimer=null;
+function buscarDocsGlobal(){
+  clearTimeout(_bdTimer);
+  _bdTimer=setTimeout(_buscarDocsGlobalAhora,300);
+}
+async function _buscarDocsGlobalAhora(){
+  const folio=$('bd-folio').value.trim();
+  const nombre=$('bd-nombre').value.trim();
+  const host=$('bd-resultados');
+  if(!folio&&!nombre){host.innerHTML='<p style="font-size:12px;color:var(--text3)">Escribe un folio o un nombre para buscar.</p>';return}
+  host.innerHTML='<p style="font-size:12px;color:var(--text3)">Buscando…</p>';
+  try{
+    const filtros={};
+    if(folio)filtros.folio=folio;
+    if(nombre)filtros.nombre=nombre;
+    const r=await api({accion:'obtenerDocumentos',auth:ST.authCred,filtros});
+    const docs=(r.ok&&r.documentos)||[];
+    if(!docs.length){host.innerHTML='<p style="font-size:12px;color:var(--text3)">Sin resultados.</p>';return}
+    host.innerHTML=docs.map(d=>`
+      <div class="doc-card">
+        <div class="doc-info">
+          <div class="doc-tipo">${_etiquetaTipoDoc(d.tipoDocumento)} <span class="badge bg-b">${d.folio}</span></div>
+          <div class="doc-meta">${d.nombreFinado||d.nombreContratante||'—'} · ${new Date(d.fechaSubida).toLocaleString('es-MX')} · ${_tamanoLegible(d.tamanoBytes)}</div>
+        </div>
+        <button class="bo bsm" onclick="verDocumento('${d.id}')">👁 Ver</button>
+        <button class="bo bsm" onclick="descargarDocumento('${d.id}')">⬇ Descargar</button>
+        ${esAdmin()?`<button class="br bsm" onclick="eliminarDocumentoUI('${d.id}')">🗑</button>`:''}
+      </div>
+    `).join('');
+  }catch(e){host.innerHTML='<p style="font-size:12px;color:var(--red)">Error al buscar: '+e.message+'</p>'}
+}
+function abrirBuscarDocs(){
+  $('bd-folio').value='';$('bd-nombre').value='';
+  $('bd-resultados').innerHTML='<p style="font-size:12px;color:var(--text3)">Escribe un folio o un nombre para buscar.</p>';
+  $('mo-buscar-docs').classList.add('show');
+}
+
+async function guardarCertificacion(){
+  const folio=$('mo-certificar').dataset.folio;
+  if(!folio){toast('⚠ Folio no encontrado');return}
+  const g=id=>($(id)||{value:''}).value;
+  const casado=g('c-fi-eracasado')==='SI';
+  const conyugeVivo=casado&&g('c-cony-estado')==='VIVO';
+  const padreVivo=g('c-pa-estado')==='VIVO';
+  const madreVivo=g('c-ma-estado')==='VIVO';
+
+  const datos={
+    folio,
+    finadoNombre:g('c-fi-nombre'),finadoEstadoCivil:g('c-fi-edocivil'),
+    finadoFechaNacimiento:g('c-fi-fecnac'),finadoEntidadNacimiento:g('c-fi-entnac'),
+    finadoGradoEstudios:g('c-fi-estudios'),finadoDomicilio:g('c-fi-domicilio'),
+    finadoAfiliacionSalud:g('c-fi-afiliacion'),finadoOcupacion:g('c-fi-ocupacion'),
+    finadoLugarDefuncion:g('c-fi-lugardef'),finadoFechaDefuncion:g('c-fi-fecdef'),finadoHoraDefuncion:g('c-fi-hordef'),
+    causaDirecta:g('c-causa-directa'),causaDirectaIntervalo:g('c-causa-directa-intervalo'),
+    causaIntermedia:g('c-causa-intermedia'),causaIntermediaIntervalo:g('c-causa-intermedia-intervalo'),
+    causaBasica:g('c-causa-basica'),causaBasicaIntervalo:g('c-causa-basica-intervalo'),
+    otrosEstadosPatologicos:g('c-otros-patologicos'),
+    tipoDefuncion:g('c-tipo-defuncion'),seNecropsia:g('c-necropsia'),
+    fallecioEmbarazoPartoPuerperio:g('c-embarazo-parto'),
+    finadoEraCasado:g('c-fi-eracasado'),
+    conyugeNombre:casado?g('c-cony-nombre'):'',
+    conyugeEstado:casado?g('c-cony-estado'):'',
+    conyugeFechaNacimiento:conyugeVivo?g('c-cony-fecnac'):'',
+    conyugeLocalidadNac:conyugeVivo?g('c-cony-localidad'):'',
+    conyugeMunicipioNac:conyugeVivo?g('c-cony-municipio'):'',
+    conyugeEstadoNac:conyugeVivo?g('c-cony-estadonac'):'',
+    conyugePaisNac:conyugeVivo?g('c-cony-pais'):'',
+    padreNombre:g('c-pa-nombre'),padreEstado:g('c-pa-estado'),
+    padreFechaNacimiento:padreVivo?g('c-pa-fecnac'):'',
+    padreLocalidadNac:padreVivo?g('c-pa-localidad'):'',
+    padreMunicipioNac:padreVivo?g('c-pa-municipio'):'',
+    padreEstadoNac:padreVivo?g('c-pa-estadonac'):'',
+    padrePaisNac:padreVivo?g('c-pa-pais'):'',
+    madreNombre:g('c-ma-nombre'),madreEstado:g('c-ma-estado'),
+    madreFechaNacimiento:madreVivo?g('c-ma-fecnac'):'',
+    madreLocalidadNac:madreVivo?g('c-ma-localidad'):'',
+    madreMunicipioNac:madreVivo?g('c-ma-municipio'):'',
+    madreEstadoNac:madreVivo?g('c-ma-estadonac'):'',
+    madrePaisNac:madreVivo?g('c-ma-pais'):''
+  };
+  CERT_PERSONAS.forEach(([p,campo])=>{
+    datos[`${campo}Nombre`]=g(`c-${p}-nombre`);
+    datos[`${campo}Parentesco`]=g(`c-${p}-parentesco`);
+    datos[`${campo}EstadoCivil`]=g(`c-${p}-edocivil`);
+    datos[`${campo}LocalidadNac`]=g(`c-${p}-localidad`);
+    datos[`${campo}MunicipioNac`]=g(`c-${p}-municipio`);
+    datos[`${campo}EstadoNac`]=g(`c-${p}-estadonac`);
+    datos[`${campo}PaisNac`]=g(`c-${p}-pais`);
+    datos[`${campo}Telefono`]=g(`c-${p}-telefono`);
+  });
+  if(!datos.finadoNombre){toast('⚠ Ingresa el nombre del finado');return}
+
+  const arr=lCert();const idx=arr.findIndex(x=>x.folio===folio);
+  datos.creadoPor=ST.user?(ST.user.nombreCompleto||''):'';
+  datos.fechaActualizacion=new Date().toISOString();
+  if(idx>=0){datos.fechaCreacion=arr[idx].fechaCreacion;arr[idx]=datos}
+  else{datos.fechaCreacion=new Date().toISOString();arr.push(datos)}
+  sCert(arr);
+  encolar({accion:'guardarCertificacion',datos});
+  if(ST.online&&ST.url){
+    const ok=await sincronizarTodo(true);
+    toast(ok?'✅ Información de certificación guardada':'⚠ Se guardó localmente, pero no se pudo confirmar en la nube — revisa tu conexión y vuelve a intentar');
+  }else{
+    toast('💾 Guardado local (sin conexión) — se subirá cuando haya internet');
+  }
+}
+function etiquetaEdoCivil(v){
+  return {SOLTERO:'Soltero(a)',CASADO:'Casado(a)',VIUDO:'Viudo(a)',DIVORCIADO:'Divorciado(a)',UNION_LIBRE:'Unión libre'}[v]||v||'—';
+}
+function etiquetaTipoDefuncion(v){
+  return {ENFERMEDAD:'Enfermedad',ACCIDENTE:'Accidente',HOMICIDIO:'Homicidio',SUICIDIO:'Suicidio',SE_IGNORA:'Se ignora'}[v]||v||'—';
+}
+function etiquetaSiNo(v){ return v==='SI'?'Sí':(v==='NO'?'No':'—'); }
+// El PDF/JPG que se manda al médico solo lleva los datos del finado + el
+// nombre del declarante (nada de cónyuge/padres/testigos) — así lo pidió
+// expresamente el negocio: esa es toda la información que el médico necesita.
+// Las causas de la muerte SÍ se incluyen (aunque se capturan después de que
+// el médico expide el certificado): este documento también sirve como
+// registro impreso/descargable de lo que certificó, no solo como solicitud.
+function _buildInfoMedicoHTML(datos,folio){
+  const fp=v=>v?fechaPlano(v):'—';
+  const fila=(a,b)=>`<tr><td style="border:1px solid #999;padding:6px;width:45%"><b>${a}</b></td><td style="border:1px solid #999;padding:6px">${b||'—'}</td></tr>`;
+  const subtitulo=t=>`<tr><td colspan="2" style="border:1px solid #999;padding:6px;background:#eee;font-weight:700">${t}</td></tr>`;
+  return `
+  <div id="cert-print-doc" style="width:7.5in;min-height:10.1in;background:#fff;color:#111;font-family:Georgia,serif;padding:30px;box-sizing:border-box">
+    <h2 style="text-align:center;margin-bottom:2px">${(lConfigFuneraria().nombre||'FUNERARIA').toUpperCase()}</h2>
+    <p style="text-align:center;font-size:12px;color:#555;margin-top:0">${[lConfigFuneraria().direccion,lConfigFuneraria().ciudad].filter(Boolean).join(', ')}</p>
+    <h3 style="text-align:center;text-decoration:underline;margin-top:18px">DATOS PARA CERTIFICADO DE DEFUNCIÓN</h3>
+    <p style="font-size:12px;color:#555">Folio: ${folio} · Fecha: ${new Date().toLocaleDateString('es-MX')}</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
+      ${fila('Nombre completo',datos.finadoNombre)}
+      ${fila('Estado Civil',etiquetaEdoCivil(datos.finadoEstadoCivil))}
+      ${fila('Fecha de Nacimiento',fp(datos.finadoFechaNacimiento))}
+      ${fila('Entidad de Nacimiento',_expandirEntidad(datos.finadoEntidadNacimiento))}
+      ${fila('Grado de Estudios',datos.finadoGradoEstudios)}
+      ${fila('Domicilio Habitual',datos.finadoDomicilio)}
+      ${fila('Afiliación a Servicios de Salud',datos.finadoAfiliacionSalud)}
+      ${fila('Ocupación Habitual',datos.finadoOcupacion)}
+      ${fila('Lugar donde Ocurrió la Defunción',datos.finadoLugarDefuncion)}
+      ${fila('Fecha de Defunción',fp(datos.finadoFechaDefuncion))}
+      ${fila('Hora de Defunción',datos.finadoHoraDefuncion)}
+      ${subtitulo('CAUSAS DE LA MUERTE')}
+      ${fila('I.a) Causa Directa',datos.causaDirecta)}
+      ${fila('Intervalo aproximado entre inicio y muerte',datos.causaDirectaIntervalo)}
+      ${fila('I.b) Causa Intermedia (debido a)',datos.causaIntermedia)}
+      ${fila('Intervalo aproximado entre inicio y muerte',datos.causaIntermediaIntervalo)}
+      ${fila('I.c) Causa Básica (debido a)',datos.causaBasica)}
+      ${fila('Intervalo aproximado entre inicio y muerte',datos.causaBasicaIntervalo)}
+      ${fila('II. Otros Estados Patológicos Significativos',datos.otrosEstadosPatologicos)}
+      ${fila('Tipo de Defunción',etiquetaTipoDefuncion(datos.tipoDefuncion))}
+      ${fila('¿Se practicó necropsia?',etiquetaSiNo(datos.seNecropsia))}
+      ${fila('¿Falleció en embarazo, parto o puerperio?',datos.fallecioEmbarazoPartoPuerperio==='NO_APLICA'?'No aplica':etiquetaSiNo(datos.fallecioEmbarazoPartoPuerperio))}
+      ${subtitulo('DECLARANTE')}
+      ${fila('Declarante',datos.declaranteNombre)}
+      ${fila('Parentesco del Declarante',_rcEtiquetaParentesco(datos.declaranteParentesco))}
+    </table>
+  </div>`;
+}
+async function _prepararPrintInfoMedico(){
+  const folio=$('mo-certificar').dataset.folio;
+  const datos=lCert().find(x=>x.folio===folio);
+  if(!datos||!datos.finadoNombre){toast('⚠ Guarda la información antes de descargar');return null}
+  let host=$('cert-print-host');
+  if(!host){
+    host=document.createElement('div');
+    host.id='cert-print-host';
+    host.style.position='fixed';host.style.left='-9999px';host.style.top='0';
+    document.body.appendChild(host);
+  }
+  host.innerHTML=_buildInfoMedicoHTML(datos,folio);
+  await new Promise(r=>setTimeout(r,60));
+  return {folio,el:$('cert-print-doc')};
+}
+// Antes se forzaba el canvas completo dentro de un solo rectángulo fijo de
+// 7.5×10.1in con addImage(): si el contenido real medía más que eso (como
+// pasó al agregar la sección de Causas de la Muerte), la imagen se
+// achicaba/deformaba para caber y las filas de abajo quedaban ilegibles o
+// prácticamente invisibles — lo que se veía como "no aparece el dato".
+// Ahora se respeta el alto real del contenido (a partir de su proporción
+// real en el canvas) y, si no cabe en una sola hoja carta, se reparte en
+// páginas adicionales en vez de deformarlo.
+function _agregarCanvasPaginado(pdf,canvas,marginX,marginY,boxWidthIn,pageHeightIn){
+  const pxPerIn=canvas.width/boxWidthIn;
+  const alturaMaxPx=Math.floor(pageHeightIn*pxPerIn);
+  let y=0,primera=true;
+  while(y<canvas.height){
+    const altoSlicePx=Math.min(alturaMaxPx,canvas.height-y);
+    const slice=document.createElement('canvas');
+    slice.width=canvas.width;slice.height=altoSlicePx;
+    slice.getContext('2d').drawImage(canvas,0,y,canvas.width,altoSlicePx,0,0,canvas.width,altoSlicePx);
+    if(!primera)pdf.addPage('letter');
+    pdf.addImage(slice.toDataURL('image/jpeg',0.92),'JPEG',marginX,marginY,boxWidthIn,altoSlicePx/pxPerIn);
+    y+=altoSlicePx;primera=false;
+  }
+}
+async function descargarInfoMedicoPDF(){
+  const prep=await _prepararPrintInfoMedico();
+  if(!prep)return;
+  toast('📄 Generando PDF…',1500);
+  const canvas=await html2canvas(prep.el,{scale:2,backgroundColor:'#ffffff'});
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({unit:'in',format:'letter'});
+  _agregarCanvasPaginado(pdf,canvas,0.5,0.45,7.5,10.1);
+  pdf.save(`InfoMedico_${prep.folio}.pdf`);
+}
+async function descargarInfoMedicoJPG(){
+  const prep=await _prepararPrintInfoMedico();
+  if(!prep)return;
+  toast('🖼 Generando imagen…',1500);
+  const canvas=await html2canvas(prep.el,{scale:2,backgroundColor:'#ffffff'});
+  const a=document.createElement('a');
+  a.href=canvas.toDataURL('image/jpeg',0.92);
+  a.download=`InfoMedico_${prep.folio}.jpg`;
+  a.click();
+}
+
+/* ── PESTAÑA 2: SOLICITUD REGISTRO CIVIL (formato oficial Xalapa) ── */
+const RC_SEXO_HTML='<option value="">—</option><option value="HOMBRE">Hombre</option><option value="MUJER">Mujer</option>';
+const RC_EDOCIVIL_HTML='<option value="">—</option><option value="SOLTERO">Soltero(a)</option><option value="CASADO">Casado(a)</option>';
+const RC_PARENTESCO_HTML=`<option value="NINGUNO">Ninguno (no consanguíneo)</option>
+  <option value="CONYUGE">Esposo(a)</option><option value="HIJO">Hijo(a)</option>
+  <option value="PADRE">Padre</option><option value="MADRE">Madre</option>
+  <option value="HERMANO">Hermano(a)</option><option value="ABUELO">Abuelo(a)</option>
+  <option value="NIETO">Nieto(a)</option><option value="TIO">Tío(a)</option>
+  <option value="SOBRINO">Sobrino(a)</option><option value="PRIMO">Primo(a)</option>
+  <option value="CUNADO">Cuñado(a)</option><option value="SUEGRO">Suegro(a)</option>
+  <option value="YERNO_NUERA">Yerno/Nuera</option>`;
+function rcLugarNacHTML(p){
+  return `<div class="g2">
+      <div class="f"><label class="lbl">Localidad</label><input id="rc-${p}-localidad" type="text"/></div>
+      <div class="f"><label class="lbl">Municipio</label><input id="rc-${p}-municipio" type="text"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Entidad Federativa</label><input id="rc-${p}-entidad" type="text"/></div>
+      <div class="f"><label class="lbl">País</label><input id="rc-${p}-pais" type="text" value="México"/></div>
+    </div>`;
+}
+function rcDomicilioHTML(p){
+  return `<div class="g2">
+      <div class="f"><label class="lbl">Calle</label><input id="rc-${p}-domcalle" type="text"/></div>
+      <div class="f"><label class="lbl">Número (ext. e int.)</label><input id="rc-${p}-domnumero" type="text"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Colonia</label><input id="rc-${p}-domcolonia" type="text"/></div>
+      <div class="f"><label class="lbl">Localidad</label><input id="rc-${p}-domlocalidad" type="text"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Municipio</label><input id="rc-${p}-dommunicipio" type="text"/></div>
+      <div class="f"><label class="lbl">Entidad Federativa</label><input id="rc-${p}-domentidad" type="text"/></div>
+    </div>
+    <div class="f"><label class="lbl">País</label><input id="rc-${p}-dompais" type="text" value="México"/></div>`;
+}
+function rcFamiliarCardHTML(p,titulo,idExtra){
+  return `<div class="card"${idExtra?` id="${idExtra}"`:''}>
+    <div class="st">${titulo}</div>
+    <div class="f"><label class="lbl">Nombre</label><input id="rc-${p}-nombre" type="text"/></div>
+    <div class="f"><label class="lbl">¿Vive?</label>
+      <select id="rc-${p}-estado" onchange="rcToggleVivoRC('${p}')">
+        <option value="VIVE">Vive</option><option value="FINADO">Finado</option>
+      </select>
+    </div>
+    <div id="rc-blq-${p}-vivo">
+      <div class="g2">
+        <div class="f"><label class="lbl">Nacionalidad</label><input id="rc-${p}-nacionalidad" type="text" value="Mexicana"/></div>
+        <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="rc-${p}-fecnac" type="date"/></div>
+      </div>
+      <div class="f"><label class="lbl">Sexo</label><select id="rc-${p}-sexo">${RC_SEXO_HTML}</select></div>
+      <div class="st" style="margin-top:8px;font-size:12px">Lugar de Nacimiento</div>
+      ${rcLugarNacHTML(p)}
+    </div>
+  </div>`;
+}
+function rcTestigoCardHTML(p,titulo){
+  return `<div class="card">
+    <div class="st">${titulo}</div>
+    <div class="g2">
+      <div class="f"><label class="lbl">CURP</label><input id="rc-${p}-curp" type="text" maxlength="18" style="text-transform:uppercase"/></div>
+      <div class="f"><label class="lbl">Nombre completo</label><input id="rc-${p}-nombre" type="text"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Teléfono</label><input id="rc-${p}-telefono" type="tel"/></div>
+      <div class="f"><label class="lbl">Nacionalidad</label><input id="rc-${p}-nacionalidad" type="text" value="Mexicana"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Fecha de Nacimiento</label><input id="rc-${p}-fecnac" type="date" oninput="rcCalcEdad('${p}')"/></div>
+      <div class="f"><label class="lbl">Edad</label><input id="rc-${p}-edad" type="number" readonly/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label class="lbl">Sexo</label><select id="rc-${p}-sexo">${RC_SEXO_HTML}</select></div>
+      <div class="f"><label class="lbl">Estado Civil</label><select id="rc-${p}-edocivil">${RC_EDOCIVIL_HTML}</select></div>
+    </div>
+    <div class="f"><label class="lbl">Parentesco con el Finado</label><select id="rc-${p}-parentesco">${RC_PARENTESCO_HTML}</select></div>
+    <div class="st" style="margin-top:8px;font-size:12px">Lugar de Nacimiento</div>
+    ${rcLugarNacHTML(p)}
+    <div class="st" style="margin-top:8px;font-size:12px">Domicilio Habitual</div>
+    ${rcDomicilioHTML(p)}
+  </div>`;
+}
+function rcInit(){
+  $('rc-fi-sexo').innerHTML=RC_SEXO_HTML;
+  $('rc-fi-edocivil').innerHTML=RC_EDOCIVIL_HTML;
+  $('rc-fi-lugarnac').innerHTML=rcLugarNacHTML('fi');
+  $('rc-fi-domicilio').innerHTML=rcDomicilioHTML('fi');
+  $('rc-decl-parentesco').innerHTML=RC_PARENTESCO_HTML;
+  $('rc-decl-edocivil').innerHTML=RC_EDOCIVIL_HTML;
+  $('rc-decl-lugarnac').innerHTML=rcLugarNacHTML('decl');
+  $('rc-decl-domicilio').innerHTML=rcDomicilioHTML('decl');
+  $('rc-grupo2-body').innerHTML=rcFamiliarCardHTML('cony','Esposo(a)','rc-card-conyuge')
+    +rcFamiliarCardHTML('pa','Padre del Finado')
+    +rcFamiliarCardHTML('ma','Madre del Finado');
+  $('rc-grupo5-body').innerHTML=rcTestigoCardHTML('test1','Testigo 1')+rcTestigoCardHTML('test2','Testigo 2');
+}
+function rcToggleConyuge(){
+  $('rc-card-conyuge').style.display=$('rc-fi-edocivil').value==='CASADO'?'block':'none';
+}
+function rcToggleVivoRC(p){
+  $('rc-blq-'+p+'-vivo').style.display=$('rc-'+p+'-estado').value==='VIVE'?'block':'none';
+}
+function rcToggleDestino(cual){
+  if(cual==='inhumacion'&&$('rc-destino-inhumacion').checked){
+    $('rc-destino-cremacion').checked=false;
+    $('rc-destino-traslado').checked=false;
+  }else if((cual==='cremacion'||cual==='traslado')&&$('rc-destino-'+cual).checked){
+    $('rc-destino-inhumacion').checked=false;
+  }
+  const muestraTraslado=$('rc-destino-traslado').checked?'block':'none';
+  $('rc-blq-traslado-destino').style.display=muestraTraslado;
+  $('rc-blq-traslado-municipio').style.display=muestraTraslado;
+}
+// ── Lugar del Fallecimiento: Hospital/Hogar/Otro lugar (opción múltiple) ──
+// Antes eran 2 campos (una categoría interna + un texto libre para el
+// formato) — se unificaron en un solo control: lo que se seleccione aquí
+// ES el texto que se imprime (rcFallecLugarDetalle se sigue guardando,
+// pero ahora siempre se deriva de esta selección, nunca se captura aparte).
+function _rcLugarFallecimientoGet(){
+  if($('rc-fallec-lugar-hospital')&&$('rc-fallec-lugar-hospital').checked)return 'HOSPITAL';
+  if($('rc-fallec-lugar-hogar')&&$('rc-fallec-lugar-hogar').checked)return 'HOGAR';
+  if($('rc-fallec-lugar-otro')&&$('rc-fallec-lugar-otro').checked)return 'OTRO';
+  return '';
+}
+function _rcLugarFallecimientoSet(valor){
+  ['hospital','hogar','otro'].forEach(k=>{
+    const el=$('rc-fallec-lugar-'+k);
+    if(el)el.checked=(valor===k.toUpperCase());
+  });
+}
+function _rcLugarFallecimientoEtiqueta(valor){
+  return valor==='HOSPITAL'?'Hospital':(valor==='HOGAR'?'Hogar':(valor==='OTRO'?'Otro lugar':''));
+}
+// Heurística para precargar la opción correcta a partir de un texto libre
+// (lectura por IA del certificado de defunción, o el dato ya capturado en
+// la Pestaña 1) — nunca inventa: si no reconoce nada, cae en "Otro lugar"
+// solo cuando SÍ hay texto (si no hay texto, no propone nada).
+function _rcInferirLugarFallecimiento(texto){
+  const t=String(texto||'').toUpperCase();
+  if(!t.trim())return '';
+  if(/HOSPITAL|CL[IÍ]NICA|SANATORIO|IMSS|ISSSTE|NOSOCOMIO/.test(t))return 'HOSPITAL';
+  if(/DOMICILIO|HOGAR|CASA/.test(t))return 'HOGAR';
+  return 'OTRO';
+}
+// Igual que _setSiVacio (solo llena si no había nada, marca "detectado por
+// IA" y cuenta para el aviso final), pero para el grupo de radios de Lugar
+// del Fallecimiento en vez de un input de texto.
+function _setRadioLugarSiVacio(valorInferido){
+  if(!valorInferido||_rcLugarFallecimientoGet())return 0;
+  _rcLugarFallecimientoSet(valorInferido);
+  const el=$('rc-fallec-lugar-'+valorInferido.toLowerCase());
+  if(el)_marcarIA(el);
+  return 1;
+}
+// Igual que _rcFillIfVacio (solo llena si estaba vacío, sin marcar
+// "detectado por IA") pero para el grupo de radios de Lugar del Fallecimiento.
+function _rcFillRadioLugarIfVacio(valorInferido){
+  if(!valorInferido||_rcLugarFallecimientoGet())return;
+  _rcLugarFallecimientoSet(valorInferido);
+}
+function rcToggleEscolaridad(){
+  $('rc-blq-ultimogrado').style.display=$('rc-escolaridad').value==='PRIMARIA_INCOMPLETA'?'block':'none';
+}
+function rcToggleSituacionOtro(){
+  $('rc-blq-situacion-otro').style.display=$('rc-situacion-laboral').value==='OTRO'?'block':'none';
+}
+function rcToggleFunerarioOtro(){
+  $('rc-blq-fun-otro').style.display=$('rc-fun-asiste').value==='__OTRO__'?'block':'none';
+}
+function rcPoblarFunerarios(seleccionActual){
+  const sel=$('rc-fun-asiste');
+  const activos=lEmp().filter(e=>e.estatus!=='INACTIVO'&&e.nombreCompleto);
+  const nombres=Array.from(new Set(activos.map(e=>e.nombreCompleto)));
+  sel.innerHTML=nombres.map(n=>`<option value="${n}">${n}</option>`).join('')+'<option value="__OTRO__">Otro…</option>';
+  if(seleccionActual&&nombres.includes(seleccionActual)){
+    sel.value=seleccionActual;
+  }else if(seleccionActual){
+    sel.value='__OTRO__';
+    $('rc-fun-asiste-otro').value=seleccionActual;
+  }else{
+    sel.value=nombres[0]||'__OTRO__';
+  }
+  rcToggleFunerarioOtro();
+}
+// Heurística: últimas 2 palabras = apellidos, resto = nombre(s) — es un
+// punto de partida editable, no autoridad; el nombre en Pestaña 1 viene
+// como texto libre y no distingue nombre compuesto de apellido compuesto.
+function splitNombreCompleto(nombreCompleto){
+  const partes=(nombreCompleto||'').trim().split(/\s+/).filter(Boolean);
+  if(partes.length===0)return{nombres:'',ap1:'',ap2:''};
+  if(partes.length===1)return{nombres:partes[0],ap1:'',ap2:''};
+  if(partes.length===2)return{nombres:partes[0],ap1:partes[1],ap2:''};
+  const ap2=partes.pop(),ap1=partes.pop();
+  return{nombres:partes.join(' '),ap1,ap2};
+}
+function calcularEdad(fechaNacStr,fechaRefStr){
+  if(!fechaNacStr)return '';
+  const nac=new Date(fechaNacStr+'T00:00:00');
+  const ref=fechaRefStr?new Date(fechaRefStr+'T00:00:00'):new Date();
+  if(isNaN(nac)||isNaN(ref))return '';
+  let edad=ref.getFullYear()-nac.getFullYear();
+  const m=ref.getMonth()-nac.getMonth();
+  if(m<0||(m===0&&ref.getDate()<nac.getDate()))edad--;
+  return edad>=0?edad:'';
+}
+function rcCalcEdad(p){
+  const fecnac=$('rc-'+p+'-fecnac').value;
+  const fref=p==='fi'?$('rc-fallec-fecha').value:'';
+  const edad=calcularEdad(fecnac,fref);
+  $('rc-'+p+'-edad').value=edad;
+  if(p==='fi')rcActualizaSeccionMayor12(edad);
+}
+function rcActualizaSeccionMayor12(edad){
+  $('rc-edad-ref').textContent=edad===''?'edad no calculada':`${edad} años`;
+  $('rc-blq-mayor12').style.display=(edad===''||edad>=12)?'block':'none';
+}
+// Autollena la Pestaña 2 con lo ya capturado en la Pestaña 1 (Certificaciones)
+// — SOLO en los campos que sigan vacíos: nunca pisa algo ya capturado en esta
+// pestaña, sea a mano o por la lectura automática de documentos (Pestaña 4).
+// Los selects de estado/parentesco sí se reasignan directo, porque su valor
+// "vacío" por defecto (Vive/Ninguno) no se puede distinguir de uno real — y
+// esos campos no los toca la lectura automática, así que no hay riesgo de
+// pisarla. A propósito NO llama a rcInit(): rcInit reconstruye por completo
+// las tarjetas de cónyuge/padre/madre/testigos (innerHTML), lo que borraría
+// cualquier dato ya puesto ahí por IA — por eso certTab la llama a ella
+// directo (no a rcCargar completo) cada vez que se entra a esta pestaña.
+function rcAplicarPrecargaCert(folio){
+  const cert=lCert().find(x=>x.folio===folio)||{};
+  const g=(id,v)=>{if($(id))$(id).value=v||''};
+  const nom=splitNombreCompleto(cert.finadoNombre);
+  _rcFillIfVacio('rc-fi-nombres',nom.nombres);
+  _rcFillIfVacio('rc-fi-ap1',nom.ap1);
+  _rcFillIfVacio('rc-fi-ap2',nom.ap2);
+  _rcFillIfVacio('rc-fi-fecnac',fechaPlano(cert.finadoFechaNacimiento));
+  _rcFillIfVacio('rc-fi-entidad',cert.finadoEntidadNacimiento);
+  if(['SOLTERO','CASADO'].includes(cert.finadoEstadoCivil))g('rc-fi-edocivil',cert.finadoEstadoCivil);
+
+  if(cert.finadoEraCasado==='SI'){
+    _rcFillIfVacio('rc-cony-nombre',cert.conyugeNombre);
+    g('rc-cony-estado',cert.conyugeEstado||'VIVE');
+    _rcFillIfVacio('rc-cony-fecnac',fechaPlano(cert.conyugeFechaNacimiento));
+    _rcFillIfVacio('rc-cony-localidad',cert.conyugeLocalidadNac);
+    _rcFillIfVacio('rc-cony-municipio',cert.conyugeMunicipioNac);
+    _rcFillIfVacio('rc-cony-entidad',cert.conyugeEstadoNac);
+    _rcFillIfVacio('rc-cony-pais',cert.conyugePaisNac||'México');
+  }
+  _rcFillIfVacio('rc-pa-nombre',cert.padreNombre);
+  g('rc-pa-estado',cert.padreEstado==='FINADO'?'FINADO':'VIVE');
+  _rcFillIfVacio('rc-pa-fecnac',fechaPlano(cert.padreFechaNacimiento));
+  g('rc-pa-sexo','HOMBRE');
+  _rcFillIfVacio('rc-pa-localidad',cert.padreLocalidadNac);
+  _rcFillIfVacio('rc-pa-municipio',cert.padreMunicipioNac);
+  _rcFillIfVacio('rc-pa-entidad',cert.padreEstadoNac);
+  _rcFillIfVacio('rc-pa-pais',cert.padrePaisNac||'México');
+
+  _rcFillIfVacio('rc-ma-nombre',cert.madreNombre);
+  g('rc-ma-estado',cert.madreEstado==='FINADO'?'FINADO':'VIVE');
+  _rcFillIfVacio('rc-ma-fecnac',fechaPlano(cert.madreFechaNacimiento));
+  g('rc-ma-sexo','MUJER');
+  _rcFillIfVacio('rc-ma-localidad',cert.madreLocalidadNac);
+  _rcFillIfVacio('rc-ma-municipio',cert.madreMunicipioNac);
+  _rcFillIfVacio('rc-ma-entidad',cert.madreEstadoNac);
+  _rcFillIfVacio('rc-ma-pais',cert.madrePaisNac||'México');
+
+  _rcFillIfVacio('rc-fallec-fecha',fechaPlano(cert.finadoFechaDefuncion));
+  _rcFillIfVacio('rc-fallec-hora',cert.finadoHoraDefuncion);
+  _rcFillRadioLugarIfVacio(_rcInferirLugarFallecimiento(cert.finadoLugarDefuncion));
+
+  _rcFillIfVacio('rc-decl-nombre',cert.declaranteNombre);
+  g('rc-decl-parentesco',cert.declaranteParentesco||'NINGUNO');
+  if(['SOLTERO','CASADO'].includes(cert.declaranteEstadoCivil))g('rc-decl-edocivil',cert.declaranteEstadoCivil);
+  _rcFillIfVacio('rc-decl-localidad',cert.declaranteLocalidadNac);
+  _rcFillIfVacio('rc-decl-municipio',cert.declaranteMunicipioNac);
+  _rcFillIfVacio('rc-decl-entidad',cert.declaranteEstadoNac);
+  _rcFillIfVacio('rc-decl-pais',cert.declarantePaisNac||'México');
+  _rcFillIfVacio('rc-decl-telefono',cert.declaranteTelefono);
+
+  ['test1','test2'].forEach(p=>{
+    const campo=p==='test1'?'testigo1':'testigo2';
+    _rcFillIfVacio(`rc-${p}-nombre`,cert[`${campo}Nombre`]);
+    _rcFillIfVacio(`rc-${p}-telefono`,cert[`${campo}Telefono`]);
+    _rcFillIfVacio(`rc-${p}-localidad`,cert[`${campo}LocalidadNac`]);
+    _rcFillIfVacio(`rc-${p}-municipio`,cert[`${campo}MunicipioNac`]);
+    _rcFillIfVacio(`rc-${p}-entidad`,cert[`${campo}EstadoNac`]);
+    _rcFillIfVacio(`rc-${p}-pais`,cert[`${campo}PaisNac`]||'México');
+    if(['SOLTERO','CASADO'].includes(cert[`${campo}EstadoCivil`]))g(`rc-${p}-edocivil`,cert[`${campo}EstadoCivil`]);
+    g(`rc-${p}-parentesco`,cert[`${campo}Parentesco`]||'NINGUNO');
+  });
+
+  rcPoblarFunerarios('');
+  rcToggleConyuge();
+  rcToggleVivoRC('cony');rcToggleVivoRC('pa');rcToggleVivoRC('ma');
+  rcCalcEdad('fi');rcCalcEdad('decl');rcCalcEdad('test1');rcCalcEdad('test2');
+}
+function rcCargar(folio){
+  rcInit();
+  const rc=lRC().find(x=>x.folio===folio);
+  const g=(id,v)=>{if($(id))$(id).value=v||''};
+  // Grupo 6 (Datos de la Funeraria) ya no viene fijo en el HTML — se precarga
+  // desde Configuración → Datos de la Funeraria (Funeral360 es un producto
+  // genérico, no pertenece a ninguna funeraria en particular). Si este folio
+  // ya tiene su propia Solicitud RC guardada con un dato distinto (ej. otra
+  // sucursal), ese gana sobre la configuración general (ver abajo).
+  const _cfgFun=lConfigFuneraria();
+  g('rc-fun-nombre',_cfgFun.nombre);
+  g('rc-fun-ciudad',_cfgFun.ciudad);
+  g('rc-fun-telefono',_cfgFun.telefono);
+
+  if(rc){
+    g('rc-fun-nombre',rc.rcFunerariaNombre||_cfgFun.nombre);
+    g('rc-fun-ciudad',rc.rcFunerariaCiudad||_cfgFun.ciudad);
+    g('rc-fun-telefono',rc.rcFunerariaTelefono||_cfgFun.telefono);
+    g('rc-fi-curp',rc.rcFinadoCurp);
+    g('rc-fi-nombres',rc.rcFinadoNombres);
+    g('rc-fi-ap1',rc.rcFinadoApellidoPaterno);
+    g('rc-fi-ap2',rc.rcFinadoApellidoMaterno);
+    g('rc-fi-fecnac',fechaPlano(rc.rcFinadoFechaNacimiento));
+    g('rc-fi-nacionalidad',rc.rcFinadoNacionalidad||'Mexicana');
+    g('rc-fi-sexo',rc.rcFinadoSexo);
+    g('rc-fi-localidad',rc.rcFinadoLocalidadNac);
+    g('rc-fi-municipio',rc.rcFinadoMunicipioNac);
+    g('rc-fi-entidad',rc.rcFinadoEntidadNac);
+    g('rc-fi-pais',rc.rcFinadoPaisNac||'México');
+    g('rc-fi-domcalle',rc.rcFinadoDomCalle);
+    g('rc-fi-domnumero',rc.rcFinadoDomNumero);
+    g('rc-fi-domcolonia',rc.rcFinadoDomColonia);
+    g('rc-fi-domlocalidad',rc.rcFinadoDomLocalidad);
+    g('rc-fi-dommunicipio',rc.rcFinadoDomMunicipio);
+    g('rc-fi-domentidad',rc.rcFinadoDomEntidad);
+    g('rc-fi-dompais',rc.rcFinadoDomPais||'México');
+    g('rc-fi-edocivil',rc.rcFinadoEstadoCivil);
+
+    g('rc-cony-nombre',rc.rcConyugeNombre);
+    g('rc-cony-estado',rc.rcConyugeEstado||'VIVE');
+    g('rc-cony-nacionalidad',rc.rcConyugeNacionalidad||'Mexicana');
+    g('rc-cony-fecnac',fechaPlano(rc.rcConyugeFechaNacimiento));
+    g('rc-cony-sexo',rc.rcConyugeSexo);
+    g('rc-cony-localidad',rc.rcConyugeLocalidadNac);
+    g('rc-cony-municipio',rc.rcConyugeMunicipioNac);
+    g('rc-cony-entidad',rc.rcConyugeEntidadNac);
+    g('rc-cony-pais',rc.rcConyugePaisNac||'México');
+
+    g('rc-pa-nombre',rc.rcPadreNombre);
+    g('rc-pa-estado',rc.rcPadreEstado||'VIVE');
+    g('rc-pa-nacionalidad',rc.rcPadreNacionalidad||'Mexicana');
+    g('rc-pa-fecnac',fechaPlano(rc.rcPadreFechaNacimiento));
+    g('rc-pa-sexo',rc.rcPadreSexo||'HOMBRE');
+    g('rc-pa-localidad',rc.rcPadreLocalidadNac);
+    g('rc-pa-municipio',rc.rcPadreMunicipioNac);
+    g('rc-pa-entidad',rc.rcPadreEntidadNac);
+    g('rc-pa-pais',rc.rcPadrePaisNac||'México');
+
+    g('rc-ma-nombre',rc.rcMadreNombre);
+    g('rc-ma-estado',rc.rcMadreEstado||'VIVE');
+    g('rc-ma-nacionalidad',rc.rcMadreNacionalidad||'Mexicana');
+    g('rc-ma-fecnac',fechaPlano(rc.rcMadreFechaNacimiento));
+    g('rc-ma-sexo',rc.rcMadreSexo||'MUJER');
+    g('rc-ma-localidad',rc.rcMadreLocalidadNac);
+    g('rc-ma-municipio',rc.rcMadreMunicipioNac);
+    g('rc-ma-entidad',rc.rcMadreEntidadNac);
+    g('rc-ma-pais',rc.rcMadrePaisNac||'México');
+
+    g('rc-fallec-fecha',fechaPlano(rc.rcFechaDefuncion));
+    g('rc-fallec-hora',rc.rcHoraDefuncion);
+    _rcLugarFallecimientoSet(rc.rcLugarFallecimiento);
+    g('rc-fallec-certificado',rc.rcNumeroCertificado);
+    $('rc-destino-inhumacion').checked=rc.rcDestinoInhumacion==='SI';
+    $('rc-destino-cremacion').checked=rc.rcDestinoCremacion==='SI';
+    $('rc-destino-traslado').checked=rc.rcDestinoTraslado==='SI';
+    g('rc-traslado-destino',rc.rcTrasladoDestino);
+    g('rc-traslado-municipio',rc.rcTrasladoMunicipio);
+    g('rc-fallec-panteon',rc.rcNombrePanteon);
+    g('rc-fallec-panteon-ubicacion',rc.rcPanteonUbicacion);
+    g('rc-fallec-fecinhum',fechaPlano(rc.rcFechaInhumacion));
+    g('rc-fallec-horinhum',rc.rcHoraInhumacion);
+
+    g('rc-decl-nombre',rc.rcDeclaranteNombre);
+    g('rc-decl-parentesco',rc.rcDeclaranteParentesco||'NINGUNO');
+    g('rc-decl-nacionalidad',rc.rcDeclaranteNacionalidad||'Mexicana');
+    g('rc-decl-edocivil',rc.rcDeclaranteEstadoCivil);
+    g('rc-decl-localidad',rc.rcDeclaranteLocalidadNac);
+    g('rc-decl-municipio',rc.rcDeclaranteMunicipioNac);
+    g('rc-decl-entidad',rc.rcDeclaranteEntidadNac);
+    g('rc-decl-pais',rc.rcDeclarantePaisNac||'México');
+    g('rc-decl-domcalle',rc.rcDeclaranteDomCalle);
+    g('rc-decl-domnumero',rc.rcDeclaranteDomNumero);
+    g('rc-decl-domcolonia',rc.rcDeclaranteDomColonia);
+    g('rc-decl-domlocalidad',rc.rcDeclaranteDomLocalidad);
+    g('rc-decl-dommunicipio',rc.rcDeclaranteDomMunicipio);
+    g('rc-decl-domentidad',rc.rcDeclaranteDomEntidad);
+    g('rc-decl-dompais',rc.rcDeclaranteDomPais||'México');
+    g('rc-decl-fecnac',fechaPlano(rc.rcDeclaranteFechaNacimiento));
+    g('rc-decl-telefono',rc.rcDeclaranteTelefono);
+
+    ['test1','test2'].forEach(p=>{
+      const campo=p==='test1'?'Testigo1':'Testigo2';
+      g(`rc-${p}-curp`,rc[`rc${campo}Curp`]);
+      g(`rc-${p}-nombre`,rc[`rc${campo}Nombre`]);
+      g(`rc-${p}-telefono`,rc[`rc${campo}Telefono`]);
+      g(`rc-${p}-fecnac`,fechaPlano(rc[`rc${campo}FechaNacimiento`]));
+      g(`rc-${p}-sexo`,rc[`rc${campo}Sexo`]);
+      g(`rc-${p}-localidad`,rc[`rc${campo}LocalidadNac`]);
+      g(`rc-${p}-municipio`,rc[`rc${campo}MunicipioNac`]);
+      g(`rc-${p}-entidad`,rc[`rc${campo}EntidadNac`]);
+      g(`rc-${p}-pais`,rc[`rc${campo}PaisNac`]||'México');
+      g(`rc-${p}-edocivil`,rc[`rc${campo}EstadoCivil`]);
+      g(`rc-${p}-parentesco`,rc[`rc${campo}Parentesco`]||'NINGUNO');
+      g(`rc-${p}-nacionalidad`,rc[`rc${campo}Nacionalidad`]||'Mexicana');
+      g(`rc-${p}-domcalle`,rc[`rc${campo}DomCalle`]);
+      g(`rc-${p}-domnumero`,rc[`rc${campo}DomNumero`]);
+      g(`rc-${p}-domcolonia`,rc[`rc${campo}DomColonia`]);
+      g(`rc-${p}-domlocalidad`,rc[`rc${campo}DomLocalidad`]);
+      g(`rc-${p}-dommunicipio`,rc[`rc${campo}DomMunicipio`]);
+      g(`rc-${p}-domentidad`,rc[`rc${campo}DomEntidad`]);
+      g(`rc-${p}-dompais`,rc[`rc${campo}DomPais`]||'México');
+    });
+
+    rcPoblarFunerarios(rc.rcFunerarioAsiste);
+    g('rc-atencion-medica',rc.rcAtencionMedica);
+    g('rc-situacion-laboral',rc.rcSituacionLaboral);
+    g('rc-situacion-laboral-otro',rc.rcSituacionLaboralOtro);
+    g('rc-escolaridad',rc.rcEscolaridad);
+    g('rc-escolaridad-ultimogrado',rc.rcEscolaridadUltimoGrado);
+    g('rc-posicion-trabajo',rc.rcPosicionTrabajo);
+  }else{
+    // Sin registro RC todavía: autollenar lo que coincide con la Pestaña 1.
+    // La lógica vive en rcAplicarPrecargaCert porque también la usa certTab
+    // al entrar a esta pestaña (sin pasar por rcInit — ver ahí el porqué).
+    rcAplicarPrecargaCert(folio);
+  }
+
+  rcToggleConyuge();
+  rcToggleVivoRC('cony');rcToggleVivoRC('pa');rcToggleVivoRC('ma');
+  rcToggleEscolaridad();rcToggleSituacionOtro();
+  const muestraTraslado=$('rc-destino-traslado').checked?'block':'none';
+  $('rc-blq-traslado-destino').style.display=muestraTraslado;
+  $('rc-blq-traslado-municipio').style.display=muestraTraslado;
+  rcCalcEdad('fi');rcCalcEdad('decl');rcCalcEdad('test1');rcCalcEdad('test2');
+}
+async function guardarSolicitudRC(){
+  const folio=$('mo-certificar').dataset.folio;
+  if(!folio){toast('⚠ Folio no encontrado');return}
+  const g=id=>($(id)||{value:''}).value;
+  const chk=id=>($(id)||{checked:false}).checked;
+  const casado=g('rc-fi-edocivil')==='CASADO';
+  const conyugeVive=casado&&g('rc-cony-estado')==='VIVE';
+  const padreVive=g('rc-pa-estado')==='VIVE';
+  const madreVive=g('rc-ma-estado')==='VIVE';
+
+  const datos={
+    folio,
+    rcFinadoCurp:g('rc-fi-curp').toUpperCase(),
+    rcFinadoNombres:g('rc-fi-nombres'),rcFinadoApellidoPaterno:g('rc-fi-ap1'),rcFinadoApellidoMaterno:g('rc-fi-ap2'),
+    rcFinadoFechaNacimiento:g('rc-fi-fecnac'),rcFinadoEdad:g('rc-fi-edad'),
+    rcFinadoNacionalidad:g('rc-fi-nacionalidad'),rcFinadoSexo:g('rc-fi-sexo'),
+    rcFinadoLocalidadNac:g('rc-fi-localidad'),rcFinadoMunicipioNac:g('rc-fi-municipio'),
+    rcFinadoEntidadNac:g('rc-fi-entidad'),rcFinadoPaisNac:g('rc-fi-pais'),
+    rcFinadoDomCalle:g('rc-fi-domcalle'),rcFinadoDomNumero:g('rc-fi-domnumero'),rcFinadoDomColonia:g('rc-fi-domcolonia'),
+    rcFinadoDomLocalidad:g('rc-fi-domlocalidad'),rcFinadoDomMunicipio:g('rc-fi-dommunicipio'),
+    rcFinadoDomEntidad:g('rc-fi-domentidad'),rcFinadoDomPais:g('rc-fi-dompais'),
+    rcFinadoEstadoCivil:g('rc-fi-edocivil'),
+
+    rcConyugeNombre:casado?g('rc-cony-nombre'):'',
+    rcConyugeEstado:casado?g('rc-cony-estado'):'',
+    rcConyugeNacionalidad:conyugeVive?g('rc-cony-nacionalidad'):'',
+    rcConyugeFechaNacimiento:conyugeVive?g('rc-cony-fecnac'):'',
+    rcConyugeSexo:conyugeVive?g('rc-cony-sexo'):'',
+    rcConyugeLocalidadNac:conyugeVive?g('rc-cony-localidad'):'',
+    rcConyugeMunicipioNac:conyugeVive?g('rc-cony-municipio'):'',
+    rcConyugeEntidadNac:conyugeVive?g('rc-cony-entidad'):'',
+    rcConyugePaisNac:conyugeVive?g('rc-cony-pais'):'',
+
+    rcPadreNombre:g('rc-pa-nombre'),rcPadreEstado:g('rc-pa-estado'),
+    rcPadreNacionalidad:padreVive?g('rc-pa-nacionalidad'):'',
+    rcPadreFechaNacimiento:padreVive?g('rc-pa-fecnac'):'',
+    rcPadreSexo:padreVive?g('rc-pa-sexo'):'',
+    rcPadreLocalidadNac:padreVive?g('rc-pa-localidad'):'',
+    rcPadreMunicipioNac:padreVive?g('rc-pa-municipio'):'',
+    rcPadreEntidadNac:padreVive?g('rc-pa-entidad'):'',
+    rcPadrePaisNac:padreVive?g('rc-pa-pais'):'',
+
+    rcMadreNombre:g('rc-ma-nombre'),rcMadreEstado:g('rc-ma-estado'),
+    rcMadreNacionalidad:madreVive?g('rc-ma-nacionalidad'):'',
+    rcMadreFechaNacimiento:madreVive?g('rc-ma-fecnac'):'',
+    rcMadreSexo:madreVive?g('rc-ma-sexo'):'',
+    rcMadreLocalidadNac:madreVive?g('rc-ma-localidad'):'',
+    rcMadreMunicipioNac:madreVive?g('rc-ma-municipio'):'',
+    rcMadreEntidadNac:madreVive?g('rc-ma-entidad'):'',
+    rcMadrePaisNac:madreVive?g('rc-ma-pais'):'',
+
+    rcFechaDefuncion:g('rc-fallec-fecha'),rcHoraDefuncion:g('rc-fallec-hora'),
+    rcLugarFallecimiento:_rcLugarFallecimientoGet(),rcFallecLugarDetalle:_rcLugarFallecimientoEtiqueta(_rcLugarFallecimientoGet()),
+    rcNumeroCertificado:g('rc-fallec-certificado'),
+    rcDestinoInhumacion:chk('rc-destino-inhumacion')?'SI':'NO',
+    rcDestinoCremacion:chk('rc-destino-cremacion')?'SI':'NO',
+    rcDestinoTraslado:chk('rc-destino-traslado')?'SI':'NO',
+    rcTrasladoDestino:chk('rc-destino-traslado')?g('rc-traslado-destino'):'',
+    rcTrasladoMunicipio:chk('rc-destino-traslado')?g('rc-traslado-municipio'):'',
+    rcNombrePanteon:g('rc-fallec-panteon'),rcPanteonUbicacion:g('rc-fallec-panteon-ubicacion'),
+    rcFechaInhumacion:g('rc-fallec-fecinhum'),rcHoraInhumacion:g('rc-fallec-horinhum'),
+
+    rcDeclaranteNombre:g('rc-decl-nombre'),rcDeclaranteParentesco:g('rc-decl-parentesco'),
+    rcDeclaranteNacionalidad:g('rc-decl-nacionalidad'),rcDeclaranteEstadoCivil:g('rc-decl-edocivil'),
+    rcDeclaranteLocalidadNac:g('rc-decl-localidad'),rcDeclaranteMunicipioNac:g('rc-decl-municipio'),
+    rcDeclaranteEntidadNac:g('rc-decl-entidad'),rcDeclarantePaisNac:g('rc-decl-pais'),
+    rcDeclaranteDomCalle:g('rc-decl-domcalle'),rcDeclaranteDomNumero:g('rc-decl-domnumero'),
+    rcDeclaranteDomColonia:g('rc-decl-domcolonia'),rcDeclaranteDomLocalidad:g('rc-decl-domlocalidad'),
+    rcDeclaranteDomMunicipio:g('rc-decl-dommunicipio'),rcDeclaranteDomEntidad:g('rc-decl-domentidad'),
+    rcDeclaranteDomPais:g('rc-decl-dompais'),
+    rcDeclaranteFechaNacimiento:g('rc-decl-fecnac'),rcDeclaranteEdad:g('rc-decl-edad'),
+    rcDeclaranteTelefono:g('rc-decl-telefono'),
+
+    rcFunerariaNombre:g('rc-fun-nombre'),rcFunerariaCiudad:g('rc-fun-ciudad'),rcFunerariaTelefono:g('rc-fun-telefono'),
+    rcFunerarioAsiste:g('rc-fun-asiste')==='__OTRO__'?g('rc-fun-asiste-otro'):g('rc-fun-asiste'),
+
+    rcAtencionMedica:g('rc-atencion-medica'),
+    rcSituacionLaboral:g('rc-situacion-laboral'),
+    rcSituacionLaboralOtro:g('rc-situacion-laboral')==='OTRO'?g('rc-situacion-laboral-otro'):'',
+    rcEscolaridad:g('rc-escolaridad'),
+    rcEscolaridadUltimoGrado:g('rc-escolaridad')==='PRIMARIA_INCOMPLETA'?g('rc-escolaridad-ultimogrado'):'',
+    rcPosicionTrabajo:g('rc-posicion-trabajo')
+  };
+
+  ['test1','test2'].forEach(p=>{
+    const campo=p==='test1'?'Testigo1':'Testigo2';
+    datos[`rc${campo}Curp`]=g(`rc-${p}-curp`).toUpperCase();
+    datos[`rc${campo}Nombre`]=g(`rc-${p}-nombre`);
+    datos[`rc${campo}Telefono`]=g(`rc-${p}-telefono`);
+    datos[`rc${campo}FechaNacimiento`]=g(`rc-${p}-fecnac`);
+    datos[`rc${campo}Edad`]=g(`rc-${p}-edad`);
+    datos[`rc${campo}Sexo`]=g(`rc-${p}-sexo`);
+    datos[`rc${campo}LocalidadNac`]=g(`rc-${p}-localidad`);
+    datos[`rc${campo}MunicipioNac`]=g(`rc-${p}-municipio`);
+    datos[`rc${campo}EntidadNac`]=g(`rc-${p}-entidad`);
+    datos[`rc${campo}PaisNac`]=g(`rc-${p}-pais`);
+    datos[`rc${campo}EstadoCivil`]=g(`rc-${p}-edocivil`);
+    datos[`rc${campo}Parentesco`]=g(`rc-${p}-parentesco`);
+    datos[`rc${campo}Nacionalidad`]=g(`rc-${p}-nacionalidad`);
+    datos[`rc${campo}DomCalle`]=g(`rc-${p}-domcalle`);
+    datos[`rc${campo}DomNumero`]=g(`rc-${p}-domnumero`);
+    datos[`rc${campo}DomColonia`]=g(`rc-${p}-domcolonia`);
+    datos[`rc${campo}DomLocalidad`]=g(`rc-${p}-domlocalidad`);
+    datos[`rc${campo}DomMunicipio`]=g(`rc-${p}-dommunicipio`);
+    datos[`rc${campo}DomEntidad`]=g(`rc-${p}-domentidad`);
+    datos[`rc${campo}DomPais`]=g(`rc-${p}-dompais`);
+  });
+
+  if(!datos.rcFinadoNombres&&!datos.rcFinadoApellidoPaterno){toast('⚠ Ingresa el nombre del finado');return}
+
+  // El formato oficial exige "LETRA DE MOLDE" (mayúsculas) — se normaliza
+  // aquí para no depender de que cada quien lo escriba así.
+  Object.keys(datos).forEach(k=>{if(typeof datos[k]==='string')datos[k]=datos[k].toUpperCase()});
+
+  const arr=lRC();const idx=arr.findIndex(x=>x.folio===folio);
+  datos.creadoPor=ST.user?(ST.user.nombreCompleto||''):'';
+  datos.fechaActualizacion=new Date().toISOString();
+  if(idx>=0){datos.fechaCreacion=arr[idx].fechaCreacion;arr[idx]=datos}
+  else{datos.fechaCreacion=new Date().toISOString();arr.push(datos)}
+  sRC(arr);
+  encolar({accion:'guardarSolicitudRC',datos});
+  if(ST.online&&ST.url){
+    const ok=await sincronizarTodo(true);
+    toast(ok?'✅ Solicitud de Registro Civil guardada':'⚠ Se guardó localmente, pero no se pudo confirmar en la nube — revisa tu conexión y vuelve a intentar');
+  }else{
+    toast('💾 Guardado local (sin conexión) — se subirá cuando haya internet');
+  }
+}
+
+/* ── PESTAÑA 3: FORMATO XALAPA LLENO (PDF listo para imprimir) ──
+   Cada campo tiene un id + posición por defecto (en pulgadas, hoja oficio
+   8.5×14) estimada sobre la imagen real del formato. Esa posición se
+   puede RECALIBRAR a mano desde el mapeador visual (clic sobre la imagen)
+   — la calibración se guarda en localStorage y se sincroniza al servidor
+   (PropertiesService, un solo JSON) para que cualquier dispositivo que
+   genere el PDF use la misma calibración. rcPos(id) siempre devuelve la
+   calibrada si existe, si no la posición por defecto. */
+const RC_POS_DEFAULT=[
+  {id:'fi_curp',label:'Finado · CURP',page:1,x:1.3,y:1.52},
+  {id:'fi_sexo_h',label:'Finado · Sexo (X si Hombre)',page:1,x:7.08,y:1.52},
+  {id:'fi_sexo_m',label:'Finado · Sexo (X si Mujer)',page:1,x:7.65,y:1.52},
+  {id:'fi_nombres',label:'Finado · Nombre(s)',page:1,x:1.3,y:1.83},
+  {id:'fi_ap1',label:'Finado · Apellido Paterno',page:1,x:3.35,y:1.83},
+  {id:'fi_ap2',label:'Finado · Apellido Materno',page:1,x:5.65,y:1.83},
+  {id:'fi_fecnac_dia',label:'Finado · Fecha Nac. (día)',page:1,x:2.35,y:2.10},
+  {id:'fi_fecnac_mes',label:'Finado · Fecha Nac. (mes)',page:1,x:2.68,y:2.10},
+  {id:'fi_fecnac_anio',label:'Finado · Fecha Nac. (año)',page:1,x:3.05,y:2.10},
+  {id:'fi_edad',label:'Finado · Edad',page:1,x:4.15,y:2.10},
+  {id:'fi_nacionalidad',label:'Finado · Nacionalidad',page:1,x:5.65,y:2.10},
+  {id:'fi_localidad',label:'Finado · Lugar Nac. (localidad)',page:1,x:1.5,y:2.40},
+  {id:'fi_municipio',label:'Finado · Lugar Nac. (municipio)',page:1,x:3.4,y:2.40},
+  {id:'fi_entidad',label:'Finado · Lugar Nac. (entidad)',page:1,x:5.1,y:2.40},
+  {id:'fi_pais',label:'Finado · Lugar Nac. (país)',page:1,x:7.2,y:2.40},
+  {id:'fi_domicilio',label:'Finado · Domicilio (calle,no,colonia)',page:1,x:1.9,y:2.72},
+  {id:'fi_dom_localidad',label:'Finado · Domicilio (localidad)',page:1,x:1.5,y:3.02},
+  {id:'fi_dom_municipio',label:'Finado · Domicilio (municipio)',page:1,x:3.4,y:3.02},
+  {id:'fi_dom_entidad',label:'Finado · Domicilio (entidad)',page:1,x:5.1,y:3.02},
+  {id:'fi_dom_pais',label:'Finado · Domicilio (país)',page:1,x:7.2,y:3.02},
+  {id:'fi_edocivil_soltero',label:'Finado · Estado Civil (X si Soltero)',page:1,x:3.05,y:3.26},
+  {id:'fi_edocivil_casado',label:'Finado · Estado Civil (X si Casado)',page:1,x:4.1,y:3.26},
+  {id:'cony_nombre',label:'Esposo(a) · Nombre',page:1,x:2.9,y:3.60},
+  {id:'cony_nacionalidad',label:'Esposo(a) · Nacionalidad',page:1,x:7.0,y:3.60},
+  {id:'cony_fecnac_dia',label:'Esposo(a) · Fecha Nac. (día)',page:1,x:2.55,y:3.84},
+  {id:'cony_fecnac_mes',label:'Esposo(a) · Fecha Nac. (mes)',page:1,x:2.85,y:3.84},
+  {id:'cony_fecnac_anio',label:'Esposo(a) · Fecha Nac. (año)',page:1,x:3.15,y:3.84},
+  {id:'cony_sexo',label:'Esposo(a) · Sexo (H/M)',page:1,x:4.9,y:3.84},
+  {id:'cony_localidad',label:'Esposo(a) · Lugar Nac. (localidad)',page:1,x:1.5,y:4.11},
+  {id:'cony_municipio',label:'Esposo(a) · Lugar Nac. (municipio)',page:1,x:3.4,y:4.11},
+  {id:'cony_entidad',label:'Esposo(a) · Lugar Nac. (entidad)',page:1,x:5.1,y:4.11},
+  {id:'cony_pais',label:'Esposo(a) · Lugar Nac. (país)',page:1,x:7.2,y:4.11},
+  {id:'pa_nombre',label:'Padre · Nombre',page:1,x:2.9,y:4.40},
+  {id:'pa_nacionalidad',label:'Padre · Nacionalidad',page:1,x:7.0,y:4.40},
+  {id:'pa_fecnac_dia',label:'Padre · Fecha Nac. (día)',page:1,x:2.55,y:4.64},
+  {id:'pa_fecnac_mes',label:'Padre · Fecha Nac. (mes)',page:1,x:2.85,y:4.64},
+  {id:'pa_fecnac_anio',label:'Padre · Fecha Nac. (año)',page:1,x:3.15,y:4.64},
+  {id:'pa_sexo',label:'Padre · Sexo',page:1,x:4.9,y:4.64},
+  {id:'pa_localidad',label:'Padre · Lugar Nac. (localidad)',page:1,x:1.5,y:4.90},
+  {id:'pa_municipio',label:'Padre · Lugar Nac. (municipio)',page:1,x:3.4,y:4.90},
+  {id:'pa_entidad',label:'Padre · Lugar Nac. (entidad)',page:1,x:5.1,y:4.90},
+  {id:'pa_pais',label:'Padre · Lugar Nac. (país)',page:1,x:7.2,y:4.90},
+  {id:'ma_nombre',label:'Madre · Nombre',page:1,x:2.9,y:5.19},
+  {id:'ma_nacionalidad',label:'Madre · Nacionalidad',page:1,x:7.0,y:5.19},
+  {id:'ma_fecnac_dia',label:'Madre · Fecha Nac. (día)',page:1,x:2.55,y:5.42},
+  {id:'ma_fecnac_mes',label:'Madre · Fecha Nac. (mes)',page:1,x:2.85,y:5.42},
+  {id:'ma_fecnac_anio',label:'Madre · Fecha Nac. (año)',page:1,x:3.15,y:5.42},
+  {id:'ma_sexo',label:'Madre · Sexo',page:1,x:4.9,y:5.42},
+  {id:'ma_localidad',label:'Madre · Lugar Nac. (localidad)',page:1,x:1.5,y:5.68},
+  {id:'ma_municipio',label:'Madre · Lugar Nac. (municipio)',page:1,x:3.4,y:5.68},
+  {id:'ma_entidad',label:'Madre · Lugar Nac. (entidad)',page:1,x:5.1,y:5.68},
+  {id:'ma_pais',label:'Madre · Lugar Nac. (país)',page:1,x:7.2,y:5.68},
+  {id:'decl_nombre',label:'Declarante · Nombre',page:1,x:2.4,y:6.15},
+  {id:'decl_edad',label:'Declarante · Edad',page:1,x:7.1,y:6.15},
+  {id:'decl_parentesco',label:'Declarante · Parentesco',page:1,x:1.9,y:6.38},
+  {id:'decl_nacionalidad',label:'Declarante · Nacionalidad',page:1,x:4.3,y:6.38},
+  {id:'decl_edocivil',label:'Declarante · Estado Civil',page:1,x:6.5,y:6.38},
+  {id:'decl_localidad',label:'Declarante · Lugar Nac. (localidad)',page:1,x:1.5,y:6.62},
+  {id:'decl_municipio',label:'Declarante · Lugar Nac. (municipio)',page:1,x:3.4,y:6.62},
+  {id:'decl_entidad',label:'Declarante · Lugar Nac. (entidad)',page:1,x:5.1,y:6.62},
+  {id:'decl_pais',label:'Declarante · Lugar Nac. (país)',page:1,x:7.2,y:6.62},
+  {id:'decl_calle',label:'Declarante · Domicilio (calle)',page:1,x:1.7,y:6.90},
+  {id:'decl_numero',label:'Declarante · Domicilio (número)',page:1,x:4.3,y:6.90},
+  {id:'decl_colonia',label:'Declarante · Domicilio (colonia)',page:1,x:5.9,y:6.90},
+  {id:'decl_dom_localidad',label:'Declarante · Domicilio (localidad)',page:1,x:1.5,y:7.12},
+  {id:'decl_dom_municipio',label:'Declarante · Domicilio (municipio)',page:1,x:3.4,y:7.12},
+  {id:'decl_dom_entidad',label:'Declarante · Domicilio (entidad)',page:1,x:5.1,y:7.12},
+  {id:'decl_dom_pais',label:'Declarante · Domicilio (país)',page:1,x:7.2,y:7.12},
+  {id:'decl_fecnac_dia',label:'Declarante · Fecha Nac. (día)',page:1,x:2.55,y:7.35},
+  {id:'decl_fecnac_mes',label:'Declarante · Fecha Nac. (mes)',page:1,x:2.85,y:7.35},
+  {id:'decl_fecnac_anio',label:'Declarante · Fecha Nac. (año)',page:1,x:3.15,y:7.35},
+  {id:'decl_telefono',label:'Declarante · Teléfono',page:1,x:5.9,y:7.35},
+  {id:'fallec_fecha_dia',label:'Fallecimiento · Fecha (día)',page:1,x:2.6,y:7.78},
+  {id:'fallec_fecha_mes',label:'Fallecimiento · Fecha (mes)',page:1,x:3.15,y:7.78},
+  {id:'fallec_fecha_anio',label:'Fallecimiento · Fecha (año)',page:1,x:3.7,y:7.78},
+  {id:'fallec_hora',label:'Fallecimiento · Hora',page:1,x:6.1,y:7.78},
+  {id:'fallec_lugar',label:'Fallecimiento · Lugar',page:1,x:2.5,y:8.02},
+  {id:'fallec_certificado',label:'Fallecimiento · No. de Certificado',page:1,x:6.9,y:8.02},
+  {id:'fallec_inhumacion',label:'Destino · X Inhumación',page:1,x:2.3,y:8.24},
+  {id:'fallec_cremacion',label:'Destino · X Cremación',page:1,x:3.4,y:8.24},
+  {id:'fallec_traslado',label:'Destino · X Traslado',page:1,x:4.55,y:8.24},
+  {id:'fallec_traslado_a',label:'Destino · Traslado a, localidad (texto)',page:1,x:4.9,y:8.24},
+  {id:'fallec_traslado_municipio',label:'Destino · Traslado a, municipio (texto, renglón de abajo)',page:1,x:2.5,y:8.35},
+  {id:'fallec_panteon',label:'Fallecimiento · Nombre del Panteón',page:1,x:2.0,y:8.45},
+  {id:'fallec_fecha_inhum',label:'Fallecimiento · Fecha de Inhumación (agregado, no está en el formato)',page:1,x:5.3,y:8.45},
+  {id:'fallec_hora_inhum',label:'Fallecimiento · Hora de Inhumación (agregado, no está en el formato)',page:1,x:6.9,y:8.45},
+  {id:'fallec_ubicacion',label:'Fallecimiento · Ubicación del Panteón',page:1,x:1.6,y:8.65},
+  {id:'t1_curp',label:'Testigo 1 · CURP',page:1,x:1.3,y:8.98},
+  {id:'t1_telefono',label:'Testigo 1 · Teléfono',page:1,x:6.9,y:8.98},
+  {id:'t1_nombre',label:'Testigo 1 · Nombre',page:1,x:2.9,y:9.18},
+  {id:'t1_fecnac_dia',label:'Testigo 1 · Fecha Nac. (día)',page:1,x:2.55,y:9.42},
+  {id:'t1_fecnac_mes',label:'Testigo 1 · Fecha Nac. (mes)',page:1,x:2.85,y:9.42},
+  {id:'t1_fecnac_anio',label:'Testigo 1 · Fecha Nac. (año)',page:1,x:3.15,y:9.42},
+  {id:'t1_edad',label:'Testigo 1 · Edad',page:1,x:4.4,y:9.42},
+  {id:'t1_sexo',label:'Testigo 1 · Sexo',page:1,x:6.0,y:9.42},
+  {id:'t1_localidad',label:'Testigo 1 · Lugar Nac. (localidad)',page:1,x:1.5,y:9.66},
+  {id:'t1_municipio',label:'Testigo 1 · Lugar Nac. (municipio)',page:1,x:3.4,y:9.66},
+  {id:'t1_entidad',label:'Testigo 1 · Lugar Nac. (entidad)',page:1,x:5.1,y:9.66},
+  {id:'t1_pais',label:'Testigo 1 · Lugar Nac. (país)',page:1,x:7.2,y:9.66},
+  {id:'t1_edocivil',label:'Testigo 1 · Estado Civil',page:1,x:1.9,y:9.90},
+  {id:'t1_parentesco',label:'Testigo 1 · Parentesco',page:1,x:4.0,y:9.90},
+  {id:'t1_nacionalidad',label:'Testigo 1 · Nacionalidad',page:1,x:5.8,y:9.90},
+  {id:'t1_domicilio',label:'Testigo 1 · Domicilio (calle,no,colonia)',page:1,x:1.9,y:10.10},
+  {id:'t1_dom_localidad',label:'Testigo 1 · Domicilio (localidad)',page:1,x:1.5,y:10.34},
+  {id:'t1_dom_municipio',label:'Testigo 1 · Domicilio (municipio)',page:1,x:3.4,y:10.34},
+  {id:'t1_dom_entidad',label:'Testigo 1 · Domicilio (entidad)',page:1,x:5.1,y:10.34},
+  {id:'t1_dom_pais',label:'Testigo 1 · Domicilio (país)',page:1,x:7.2,y:10.34},
+  {id:'t2_curp',label:'Testigo 2 · CURP',page:1,x:1.3,y:10.73},
+  {id:'t2_telefono',label:'Testigo 2 · Teléfono',page:1,x:6.9,y:10.73},
+  {id:'t2_nombre',label:'Testigo 2 · Nombre',page:1,x:2.9,y:10.93},
+  {id:'t2_fecnac_dia',label:'Testigo 2 · Fecha Nac. (día)',page:1,x:2.55,y:11.17},
+  {id:'t2_fecnac_mes',label:'Testigo 2 · Fecha Nac. (mes)',page:1,x:2.85,y:11.17},
+  {id:'t2_fecnac_anio',label:'Testigo 2 · Fecha Nac. (año)',page:1,x:3.15,y:11.17},
+  {id:'t2_edad',label:'Testigo 2 · Edad',page:1,x:4.4,y:11.17},
+  {id:'t2_sexo',label:'Testigo 2 · Sexo',page:1,x:6.0,y:11.17},
+  {id:'t2_localidad',label:'Testigo 2 · Lugar Nac. (localidad)',page:1,x:1.5,y:11.41},
+  {id:'t2_municipio',label:'Testigo 2 · Lugar Nac. (municipio)',page:1,x:3.4,y:11.41},
+  {id:'t2_entidad',label:'Testigo 2 · Lugar Nac. (entidad)',page:1,x:5.1,y:11.41},
+  {id:'t2_pais',label:'Testigo 2 · Lugar Nac. (país)',page:1,x:7.2,y:11.41},
+  {id:'t2_edocivil',label:'Testigo 2 · Estado Civil',page:1,x:1.9,y:11.65},
+  {id:'t2_parentesco',label:'Testigo 2 · Parentesco',page:1,x:4.0,y:11.65},
+  {id:'t2_nacionalidad',label:'Testigo 2 · Nacionalidad',page:1,x:5.8,y:11.65},
+  {id:'t2_domicilio',label:'Testigo 2 · Domicilio (calle,no,colonia)',page:1,x:1.9,y:11.85},
+  {id:'t2_dom_localidad',label:'Testigo 2 · Domicilio (localidad)',page:1,x:1.5,y:12.09},
+  {id:'t2_dom_municipio',label:'Testigo 2 · Domicilio (municipio)',page:1,x:3.4,y:12.09},
+  {id:'t2_dom_entidad',label:'Testigo 2 · Domicilio (entidad)',page:1,x:5.1,y:12.09},
+  {id:'t2_dom_pais',label:'Testigo 2 · Domicilio (país)',page:1,x:7.2,y:12.09},
+  {id:'fun_nombre',label:'Funeraria · Nombre',page:1,x:2.0,y:12.55},
+  {id:'fun_telefono',label:'Funeraria · Teléfono',page:1,x:7.0,y:12.55},
+  {id:'fun_ciudad',label:'Funeraria · Ciudad',page:1,x:1.5,y:12.75},
+  {id:'fun_asiste',label:'Funeraria · Funerario que Asiste',page:1,x:4.8,y:12.95},
+  {id:'rev_atencion_si',label:'Reverso · Atención Médica (X Sí)',page:2,x:4.33,y:0.72},
+  {id:'rev_atencion_no',label:'Reverso · Atención Médica (X No)',page:2,x:4.94,y:0.72},
+  {id:'rev_atencion_nosabe',label:'Reverso · Atención Médica (X No se sabe)',page:2,x:5.55,y:0.72},
+  {id:'rev_sit_a',label:'Reverso · Situación (X Tenía trabajo)',page:2,x:1.05,y:1.31},
+  {id:'rev_sit_b',label:'Reverso · Situación (X Estudiaba)',page:2,x:1.05,y:1.47},
+  {id:'rev_sit_c',label:'Reverso · Situación (X Labores domésticas)',page:2,x:3.55,y:1.31},
+  {id:'rev_sit_d',label:'Reverso · Situación (X Incapacitado)',page:2,x:3.55,y:1.47},
+  {id:'rev_sit_e',label:'Reverso · Situación (X Jubilado/pensionado)',page:2,x:6.55,y:1.31},
+  {id:'rev_sit_f',label:'Reverso · Situación (X Otro)',page:2,x:6.55,y:1.47},
+  {id:'rev_sit_otro_txt',label:'Reverso · Situación "Otro" (texto)',page:2,x:6.85,y:1.47},
+  {id:'rev_esc_a',label:'Reverso · Escolaridad (X Sin escolaridad)',page:2,x:4.13,y:1.90},
+  {id:'rev_esc_b',label:'Reverso · Escolaridad (X Primaria completa)',page:2,x:4.13,y:2.06},
+  {id:'rev_esc_c',label:'Reverso · Escolaridad (X Primaria incompleta)',page:2,x:4.13,y:2.22},
+  {id:'rev_esc_ultimogrado',label:'Reverso · Escolaridad (último grado)',page:2,x:2.63,y:2.22},
+  {id:'rev_esc_d',label:'Reverso · Escolaridad (X Secundaria)',page:2,x:7.07,y:1.90},
+  {id:'rev_esc_e',label:'Reverso · Escolaridad (X Preparatoria)',page:2,x:7.07,y:2.06},
+  {id:'rev_esc_f',label:'Reverso · Escolaridad (X Profesional)',page:2,x:7.07,y:2.22},
+  {id:'rev_pos_a',label:'Reverso · Posición (X Obrero)',page:2,x:1.05,y:2.91},
+  {id:'rev_pos_b',label:'Reverso · Posición (X Empleado)',page:2,x:1.05,y:3.07},
+  {id:'rev_pos_c',label:'Reverso · Posición (X Jornalero/peón)',page:2,x:3.48,y:2.91},
+  {id:'rev_pos_d',label:'Reverso · Posición (X Trab. por su cuenta)',page:2,x:3.48,y:3.07},
+  {id:'rev_pos_e',label:'Reverso · Posición (X Patrón/empresario)',page:2,x:6.58,y:2.91},
+  {id:'rev_pos_f',label:'Reverso · Posición (X Trab. no remunerado)',page:2,x:6.58,y:3.07}
+];
+const RCMAPK='f360_rc_mapeo_v1';
+function lRCMap(){return JSON.parse(localStorage.getItem(RCMAPK)||'{}')}
+function sRCMap(m){localStorage.setItem(RCMAPK,JSON.stringify(m))}
+function rcPos(id){
+  const override=lRCMap()[id];
+  if(override)return override;
+  const def=RC_POS_DEFAULT.find(p=>p.id===id);
+  return def?{page:def.page,x:def.x,y:def.y}:null;
+}
+async function rcSincronizarMapeo(){
+  if(!ST.url||!ST.online)return;
+  try{
+    const r=await api({accion:'obtenerMapeoRC',auth:ST.authCred});
+    // La nube es la fuente de verdad de la calibración compartida — antes
+    // ganaba lo que ya hubiera guardado ESTE celular, así que un punto
+    // viejo/local nunca se enteraba de una corrección hecha desde otro
+    // dispositivo. Ahora gana lo de la nube; lo local solo rellena algún
+    // campo que la nube todavía no tenga (p. ej. una calibración a medias
+    // que aún no se ha guardado).
+    if(r.ok&&r.mapeo)sRCMap(Object.assign({},lRCMap(),r.mapeo));
+  }catch(e){}
+}
+async function rcGuardarMapeoEnNube(){
+  if(!ST.url||!ST.online)return false;
+  try{
+    const r=await api({accion:'guardarMapeoRC',mapeo:lRCMap(),auth:ST.authCred});
+    // El servidor fusiona (nunca sobreescribe) y regresa el resultado ya
+    // combinado con lo que hayan calibrado otros dispositivos — se adopta
+    // aquí para que este mismo dispositivo también quede al día.
+    if(r.ok&&r.mapeo)sRCMap(r.mapeo);
+    return !!r.ok;
+  }catch(e){return false}
+}
+
+/* ── MAPEADOR VISUAL: clic sobre la imagen para calibrar cada campo ── */
+let MAP_STATE={pagina:1,idx:0};
+function _mapCamposPagina(p){return RC_POS_DEFAULT.filter(c=>c.page===p)}
+async function abrirMapeoRC(){
+  await rcSincronizarMapeo();
+  MAP_STATE={pagina:1,idx:0};
+  mapCambiarPagina(1);
+  $('mo-mapeo-rc').classList.add('show');
+}
+function mapCambiarPagina(p){
+  MAP_STATE.pagina=p;MAP_STATE.idx=0;
+  $('map-tab-1').classList.toggle('bg',p===1);$('map-tab-1').classList.toggle('bo',p!==1);
+  $('map-tab-2').classList.toggle('bg',p===2);$('map-tab-2').classList.toggle('bo',p!==2);
+  $('map-img').src=p===1?'./assets/formatos/rc-xalapa-p1.png':'./assets/formatos/rc-xalapa-p2.png';
+  const campos=_mapCamposPagina(p);
+  $('map-campo-select').innerHTML=campos.map((c,i)=>`<option value="${i}">${c.label}</option>`).join('');
+  $('map-campo-select').value=0;
+  mapRenderMarcadores();
+}
+function mapSeleccionarCampo(i){MAP_STATE.idx=+i;mapRenderMarcadores()}
+function mapCampoAnterior(){
+  const campos=_mapCamposPagina(MAP_STATE.pagina);
+  MAP_STATE.idx=(MAP_STATE.idx-1+campos.length)%campos.length;
+  $('map-campo-select').value=MAP_STATE.idx;
+  mapRenderMarcadores();
+}
+function mapCampoSiguiente(){
+  const campos=_mapCamposPagina(MAP_STATE.pagina);
+  MAP_STATE.idx=(MAP_STATE.idx+1)%campos.length;
+  $('map-campo-select').value=MAP_STATE.idx;
+  mapRenderMarcadores();
+}
+function mapBorrarCampoActual(){
+  const campos=_mapCamposPagina(MAP_STATE.pagina);
+  const campo=campos[MAP_STATE.idx];
+  const m=lRCMap();delete m[campo.id];sRCMap(m);
+  mapRenderMarcadores();
+  toast('Punto borrado, vuelve al valor por defecto');
+}
+async function mapRestablecerTodo(){
+  if(!confirm('¿Borrar TODA la calibración (en este dispositivo Y en la nube, para todos) y volver a las posiciones estimadas de fábrica?'))return;
+  sRCMap({});
+  mapRenderMarcadores();
+  // A diferencia de Guardar (que fusiona), restablecer sí tiene que borrar
+  // de verdad en el servidor — por eso usa su propia acción en vez de
+  // guardarMapeoRC con un objeto vacío (fusionar un {} no borra nada).
+  if(ST.url&&ST.online){
+    try{await api({accion:'reiniciarMapeoRC',auth:ST.authCred})}catch(e){}
+  }
+  toast('✅ Calibración restablecida en todos los dispositivos');
+}
+async function mapGuardar(){
+  const ok=await rcGuardarMapeoEnNube();
+  mapRenderMarcadores();
+  toast(ok?'✅ Calibración guardada para todos los dispositivos':'⚠ Sin conexión — se guardó solo en este dispositivo');
+}
+function _mapEventToInches(e){
+  const img=$('map-img');
+  const rect=img.getBoundingClientRect();
+  const clientX=e.touches&&e.touches[0]?e.touches[0].clientX:e.clientX;
+  const clientY=e.touches&&e.touches[0]?e.touches[0].clientY:e.clientY;
+  const fracX=Math.min(1,Math.max(0,(clientX-rect.left)/rect.width));
+  const fracY=Math.min(1,Math.max(0,(clientY-rect.top)/rect.height));
+  return{x:+(fracX*8.5).toFixed(3),y:+(fracY*14).toFixed(3)};
+}
+function mapRenderMarcadores(){
+  const campos=_mapCamposPagina(MAP_STATE.pagina);
+  const mapa=lRCMap();
+  $('map-marcadores').innerHTML=campos.map((c,i)=>{
+    const pos=rcPos(c.id);
+    const calibrado=!!mapa[c.id];
+    const activo=i===MAP_STATE.idx;
+    const left=(pos.x/8.5*100).toFixed(2),top=(pos.y/14*100).toFixed(2);
+    const color=activo?'#22c55e':(calibrado?'#ef4444':'#94a3b8');
+    const tam=activo?14:9;
+    return `<div style="position:absolute;left:${left}%;top:${top}%;width:${tam}px;height:${tam}px;background:${color};border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 1px rgba(0,0,0,.5)" title="${c.label}"></div>`;
+  }).join('');
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const wrap=$('map-img-wrap');
+  if(!wrap)return;
+  wrap.addEventListener('click',e=>{
+    const campos=_mapCamposPagina(MAP_STATE.pagina);
+    const campo=campos[MAP_STATE.idx];
+    if(!campo)return;
+    const pos=_mapEventToInches(e);
+    const m=lRCMap();
+    m[campo.id]={page:MAP_STATE.pagina,x:pos.x,y:pos.y};
+    sRCMap(m);
+    mapRenderMarcadores();
+    mapCampoSiguiente();
+  });
+});
+
+function _rcEtiquetaParentesco(v){
+  const map={NINGUNO:'Ninguno',CONYUGE:'Esposo(a)',HIJO:'Hijo(a)',PADRE:'Padre',MADRE:'Madre',
+    HERMANO:'Hermano(a)',ABUELO:'Abuelo(a)',NIETO:'Nieto(a)',TIO:'Tío(a)',SOBRINO:'Sobrino(a)',
+    PRIMO:'Primo(a)',CUNADO:'Cuñado(a)',SUEGRO:'Suegro(a)',YERNO_NUERA:'Yerno/Nuera'};
+  return map[v]||v||'';
+}
+function _rcEtiquetaEdoCivil(v){
+  return {SOLTERO:'Soltero(a)',CASADO:'Casado(a)'}[v]||v||'';
+}
+// El formato de Registro Civil exige el nombre completo de la entidad
+// federativa — nunca abreviado. Documentos oficiales (INE, actas) a veces
+// imprimen la entidad abreviada ("VER", "Ver.", "Gro."...); esto expande esa
+// abreviatura al nombre completo, tanto al leer un documento con IA como al
+// imprimir el formato (por si quedó abreviada de antes, a mano o por otra
+// vía). Si no coincide con ninguna abreviatura conocida, regresa el texto
+// tal cual — nunca inventa ni "corrige" un nombre de estado que no reconoce.
+const _ENTIDADES_MX_ABREV={
+  AGS:'Aguascalientes',AGU:'Aguascalientes',
+  BC:'Baja California',BCN:'Baja California',
+  BCS:'Baja California Sur',
+  CAMP:'Campeche',CAM:'Campeche',
+  COAH:'Coahuila',COA:'Coahuila',
+  COL:'Colima',
+  CHIS:'Chiapas',CHP:'Chiapas',
+  CHIH:'Chihuahua',CHH:'Chihuahua',
+  CDMX:'Ciudad de México',DF:'Ciudad de México',DDF:'Ciudad de México',
+  DGO:'Durango',DUR:'Durango',
+  GTO:'Guanajuato',GUA:'Guanajuato',
+  GRO:'Guerrero',
+  HGO:'Hidalgo',HID:'Hidalgo',
+  JAL:'Jalisco',
+  MEX:'México',EDOMEX:'México',
+  MICH:'Michoacán',MIC:'Michoacán',
+  MOR:'Morelos',
+  NAY:'Nayarit',
+  NL:'Nuevo León',NLE:'Nuevo León',
+  OAX:'Oaxaca',
+  PUE:'Puebla',
+  QRO:'Querétaro',QUE:'Querétaro',
+  QROO:'Quintana Roo',QR:'Quintana Roo',ROO:'Quintana Roo',
+  SLP:'San Luis Potosí',
+  SIN:'Sinaloa',
+  SON:'Sonora',
+  TAB:'Tabasco',
+  TAMPS:'Tamaulipas',TAM:'Tamaulipas',
+  TLAX:'Tlaxcala',TLA:'Tlaxcala',
+  VER:'Veracruz',
+  YUC:'Yucatán',
+  ZAC:'Zacatecas'
+};
+function _expandirEntidad(v){
+  v=(v==null?'':String(v)).trim();
+  if(!v)return v;
+  const clave=v.toUpperCase().replace(/\./g,'').replace(/\s+/g,'');
+  return _ENTIDADES_MX_ABREV[clave]||v;
+}
+function _rcFecha(v){
+  const s=fechaPlano(v);
+  const m=s?String(s).match(/^(\d{4})-(\d{2})-(\d{2})/):null;
+  return m?{dia:m[3],mes:m[2],anio:m[1]}:{dia:'',mes:'',anio:''};
+}
+async function _cargarImagenDataURL(url){
+  const resp=await fetch(url);
+  const blob=await resp.blob();
+  return await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=reject;
+    reader.readAsDataURL(blob);
+  });
+}
+// Arma la lista de "marcas" (id + texto) a imprimir sobre el formato, a
+// partir de los datos guardados en Pestaña 2. Separado de las coordenadas
+// a propósito: esta función nunca cambia por una recalibración, solo
+// rcPos(id) cambia.
+function _rcArmarMarcas(rc){
+  const marcas=[];
+  const t=(id,txt)=>{if(txt!==undefined&&txt!==null&&String(txt).trim()!=='')marcas.push({id,txt:String(txt)})};
+  const x=id=>marcas.push({id,txt:'X'});
+
+  const fnac=_rcFecha(rc.rcFinadoFechaNacimiento);
+  t('fi_curp',rc.rcFinadoCurp);
+  if(rc.rcFinadoSexo==='HOMBRE')x('fi_sexo_h');
+  if(rc.rcFinadoSexo==='MUJER')x('fi_sexo_m');
+  t('fi_nombres',rc.rcFinadoNombres);t('fi_ap1',rc.rcFinadoApellidoPaterno);t('fi_ap2',rc.rcFinadoApellidoMaterno);
+  t('fi_fecnac_dia',fnac.dia);t('fi_fecnac_mes',fnac.mes);t('fi_fecnac_anio',fnac.anio);
+  t('fi_edad',rc.rcFinadoEdad);t('fi_nacionalidad',rc.rcFinadoNacionalidad);
+  t('fi_localidad',rc.rcFinadoLocalidadNac);t('fi_municipio',rc.rcFinadoMunicipioNac);t('fi_entidad',_expandirEntidad(rc.rcFinadoEntidadNac));t('fi_pais',rc.rcFinadoPaisNac);
+  t('fi_domicilio',[rc.rcFinadoDomCalle,rc.rcFinadoDomNumero,rc.rcFinadoDomColonia].filter(Boolean).join(', '));
+  t('fi_dom_localidad',rc.rcFinadoDomLocalidad);t('fi_dom_municipio',rc.rcFinadoDomMunicipio);t('fi_dom_entidad',_expandirEntidad(rc.rcFinadoDomEntidad));t('fi_dom_pais',rc.rcFinadoDomPais);
+  if(rc.rcFinadoEstadoCivil==='SOLTERO')x('fi_edocivil_soltero');
+  if(rc.rcFinadoEstadoCivil==='CASADO')x('fi_edocivil_casado');
+
+  if(rc.rcFinadoEstadoCivil==='CASADO'){
+    const cnac=_rcFecha(rc.rcConyugeFechaNacimiento);
+    t('cony_nombre',rc.rcConyugeEstado==='FINADO'?`${rc.rcConyugeNombre||''} (finado)`.trim():rc.rcConyugeNombre);
+    t('cony_nacionalidad',rc.rcConyugeNacionalidad);
+    t('cony_fecnac_dia',cnac.dia);t('cony_fecnac_mes',cnac.mes);t('cony_fecnac_anio',cnac.anio);
+    t('cony_sexo',rc.rcConyugeSexo);
+    t('cony_localidad',rc.rcConyugeLocalidadNac);t('cony_municipio',rc.rcConyugeMunicipioNac);t('cony_entidad',_expandirEntidad(rc.rcConyugeEntidadNac));t('cony_pais',rc.rcConyugePaisNac);
+  }
+
+  const panac=_rcFecha(rc.rcPadreFechaNacimiento);
+  t('pa_nombre',rc.rcPadreEstado==='FINADO'?`${rc.rcPadreNombre||''} (finado)`.trim():rc.rcPadreNombre);
+  t('pa_nacionalidad',rc.rcPadreNacionalidad);
+  t('pa_fecnac_dia',panac.dia);t('pa_fecnac_mes',panac.mes);t('pa_fecnac_anio',panac.anio);
+  t('pa_sexo',rc.rcPadreSexo);
+  t('pa_localidad',rc.rcPadreLocalidadNac);t('pa_municipio',rc.rcPadreMunicipioNac);t('pa_entidad',_expandirEntidad(rc.rcPadreEntidadNac));t('pa_pais',rc.rcPadrePaisNac);
+
+  const manac=_rcFecha(rc.rcMadreFechaNacimiento);
+  t('ma_nombre',rc.rcMadreEstado==='FINADO'?`${rc.rcMadreNombre||''} (finada)`.trim():rc.rcMadreNombre);
+  t('ma_nacionalidad',rc.rcMadreNacionalidad);
+  t('ma_fecnac_dia',manac.dia);t('ma_fecnac_mes',manac.mes);t('ma_fecnac_anio',manac.anio);
+  t('ma_sexo',rc.rcMadreSexo);
+  t('ma_localidad',rc.rcMadreLocalidadNac);t('ma_municipio',rc.rcMadreMunicipioNac);t('ma_entidad',_expandirEntidad(rc.rcMadreEntidadNac));t('ma_pais',rc.rcMadrePaisNac);
+
+  const declnac=_rcFecha(rc.rcDeclaranteFechaNacimiento);
+  t('decl_nombre',rc.rcDeclaranteNombre);t('decl_edad',rc.rcDeclaranteEdad);
+  t('decl_parentesco',_rcEtiquetaParentesco(rc.rcDeclaranteParentesco));
+  t('decl_nacionalidad',rc.rcDeclaranteNacionalidad);
+  t('decl_edocivil',_rcEtiquetaEdoCivil(rc.rcDeclaranteEstadoCivil));
+  t('decl_localidad',rc.rcDeclaranteLocalidadNac);t('decl_municipio',rc.rcDeclaranteMunicipioNac);t('decl_entidad',_expandirEntidad(rc.rcDeclaranteEntidadNac));t('decl_pais',rc.rcDeclarantePaisNac);
+  t('decl_calle',rc.rcDeclaranteDomCalle);t('decl_numero',rc.rcDeclaranteDomNumero);t('decl_colonia',rc.rcDeclaranteDomColonia);
+  t('decl_dom_localidad',rc.rcDeclaranteDomLocalidad);t('decl_dom_municipio',rc.rcDeclaranteDomMunicipio);t('decl_dom_entidad',_expandirEntidad(rc.rcDeclaranteDomEntidad));t('decl_dom_pais',rc.rcDeclaranteDomPais);
+  t('decl_fecnac_dia',declnac.dia);t('decl_fecnac_mes',declnac.mes);t('decl_fecnac_anio',declnac.anio);
+  t('decl_telefono',rc.rcDeclaranteTelefono);
+
+  const ffec=_rcFecha(rc.rcFechaDefuncion);
+  t('fallec_fecha_dia',ffec.dia);t('fallec_fecha_mes',ffec.mes);t('fallec_fecha_anio',ffec.anio);
+  t('fallec_hora',rc.rcHoraDefuncion);
+  t('fallec_lugar',rc.rcFallecLugarDetalle);t('fallec_certificado',rc.rcNumeroCertificado);
+  if(rc.rcDestinoInhumacion==='SI')x('fallec_inhumacion');
+  if(rc.rcDestinoCremacion==='SI')x('fallec_cremacion');
+  if(rc.rcDestinoTraslado==='SI'){x('fallec_traslado');t('fallec_traslado_a',rc.rcTrasladoDestino);t('fallec_traslado_municipio',rc.rcTrasladoMunicipio);}
+  t('fallec_panteon',rc.rcNombrePanteon);t('fallec_ubicacion',rc.rcPanteonUbicacion);
+  // Fecha/hora de inhumación no existen como blanco impreso en el formato
+  // oficial — se agregan aparte, después del nombre del panteón, y solo si
+  // se capturaron (si no, se deja el espacio en blanco, sin etiqueta).
+  if(rc.rcFechaInhumacion){
+    const fi=_rcFecha(rc.rcFechaInhumacion);
+    t('fallec_fecha_inhum',`Fecha Inhum: ${fi.dia}/${fi.mes}/${fi.anio}`);
+  }
+  if(rc.rcHoraInhumacion)t('fallec_hora_inhum',`Hora: ${rc.rcHoraInhumacion}`);
+
+  ['1','2'].forEach(n=>{
+    const p='Testigo'+n,pre='t'+n;
+    const tnac=_rcFecha(rc[`rc${p}FechaNacimiento`]);
+    t(`${pre}_curp`,rc[`rc${p}Curp`]);t(`${pre}_telefono`,rc[`rc${p}Telefono`]);
+    t(`${pre}_nombre`,rc[`rc${p}Nombre`]);
+    t(`${pre}_fecnac_dia`,tnac.dia);t(`${pre}_fecnac_mes`,tnac.mes);t(`${pre}_fecnac_anio`,tnac.anio);
+    t(`${pre}_edad`,rc[`rc${p}Edad`]);t(`${pre}_sexo`,rc[`rc${p}Sexo`]);
+    t(`${pre}_localidad`,rc[`rc${p}LocalidadNac`]);t(`${pre}_municipio`,rc[`rc${p}MunicipioNac`]);t(`${pre}_entidad`,_expandirEntidad(rc[`rc${p}EntidadNac`]));t(`${pre}_pais`,rc[`rc${p}PaisNac`]);
+    t(`${pre}_edocivil`,_rcEtiquetaEdoCivil(rc[`rc${p}EstadoCivil`]));
+    t(`${pre}_parentesco`,_rcEtiquetaParentesco(rc[`rc${p}Parentesco`]));
+    t(`${pre}_nacionalidad`,rc[`rc${p}Nacionalidad`]);
+    t(`${pre}_domicilio`,[rc[`rc${p}DomCalle`],rc[`rc${p}DomNumero`],rc[`rc${p}DomColonia`]].filter(Boolean).join(', '));
+    t(`${pre}_dom_localidad`,rc[`rc${p}DomLocalidad`]);t(`${pre}_dom_municipio`,rc[`rc${p}DomMunicipio`]);t(`${pre}_dom_entidad`,_expandirEntidad(rc[`rc${p}DomEntidad`]));t(`${pre}_dom_pais`,rc[`rc${p}DomPais`]);
+  });
+
+  t('fun_nombre',rc.rcFunerariaNombre);t('fun_telefono',rc.rcFunerariaTelefono);
+  t('fun_ciudad',rc.rcFunerariaCiudad);t('fun_asiste',rc.rcFunerarioAsiste);
+
+  if(rc.rcAtencionMedica==='SI')x('rev_atencion_si');
+  if(rc.rcAtencionMedica==='NO')x('rev_atencion_no');
+  if(rc.rcAtencionMedica==='NO_SE_SABE')x('rev_atencion_nosabe');
+
+  const sit={TENIA_TRABAJO:'rev_sit_a',ESTUDIABA:'rev_sit_b',LABORES_DOMESTICAS:'rev_sit_c',
+    INCAPACITADO:'rev_sit_d',JUBILADO_PENSIONADO:'rev_sit_e',OTRO:'rev_sit_f'}[rc.rcSituacionLaboral];
+  if(sit)x(sit);
+  if(rc.rcSituacionLaboral==='OTRO')t('rev_sit_otro_txt',rc.rcSituacionLaboralOtro);
+
+  const esc={SIN_ESCOLARIDAD:'rev_esc_a',PRIMARIA_COMPLETA:'rev_esc_b',PRIMARIA_INCOMPLETA:'rev_esc_c',
+    SECUNDARIA:'rev_esc_d',PREPARATORIA:'rev_esc_e',PROFESIONAL:'rev_esc_f'}[rc.rcEscolaridad];
+  if(esc)x(esc);
+  if(rc.rcEscolaridad==='PRIMARIA_INCOMPLETA')t('rev_esc_ultimogrado',rc.rcEscolaridadUltimoGrado);
+
+  const pos={OBRERO:'rev_pos_a',EMPLEADO:'rev_pos_b',JORNALERO_PEON:'rev_pos_c',
+    TRABAJADOR_CUENTA_PROPIA:'rev_pos_d',PATRON_EMPRESARIO:'rev_pos_e',TRABAJADOR_NO_REMUNERADO:'rev_pos_f'}[rc.rcPosicionTrabajo];
+  if(pos)x(pos);
+
+  return marcas;
+}
+async function descargarFormatoRC(){
+  const folio=$('mo-certificar').dataset.folio;
+  if(!folio){toast('⚠ Folio no encontrado');return}
+  const rc=lRC().find(x=>x.folio===folio);
+  if(!rc){toast('⚠ Guarda primero la Pestaña 2 de este folio');return}
+  toast('📄 Generando PDF…',2500);
+  try{
+    const[imgFrente,imgReverso]=await Promise.all([
+      _cargarImagenDataURL('./assets/formatos/rc-xalapa-p1.png'),
+      _cargarImagenDataURL('./assets/formatos/rc-xalapa-p2.png')
+    ]);
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF({unit:'in',format:'legal'});
+    pdf.addImage(imgFrente,'PNG',0,0,8.5,14);
+    pdf.setFont('helvetica','normal');pdf.setFontSize(9);
+    pdf.addPage('legal');
+    pdf.addImage(imgReverso,'PNG',0,0,8.5,14);
+    pdf.setPage(1);
+
+    _rcArmarMarcas(rc).forEach(m=>{
+      const pos=rcPos(m.id);
+      if(!pos)return;
+      pdf.setPage(pos.page);
+      if(pos.page===2)pdf.setFontSize(11);else pdf.setFontSize(9);
+      pdf.text(m.txt,pos.x,pos.y);
+    });
+
+    pdf.save(`RegistroCivil_${folio}.pdf`);
+    toast('✅ PDF generado');
+  }catch(e){
+    toast('❌ Error generando el PDF: '+e.message);
+  }
+}
+/* ── INIT ── */
+document.addEventListener('DOMContentLoaded',()=>{
+  setOnline(navigator.onLine);
+  setTimeout(()=>{$('loader').style.display='none'},600);
+  if(!navigator.onLine){const note=$('offline-login-note');if(note)note.textContent='Sin internet — puedes iniciar sesión igual si ya usaste este dispositivo antes';}
+  checkSession();
+});
+</script>
+</body>
+</html>
