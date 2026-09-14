@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-title" content="Funeral360"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="theme-color" content="#0f172a"/>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="apple-touch-icon" href="./icons/icon-192.png"/>
+<link rel="icon" href="./icons/icon-192.png"/>
 <title>Funeral360 — Certificación de Defunciones</title>
 <style>
 :root{
@@ -3176,6 +3179,15 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(!navigator.onLine){const note=$('offline-login-note');if(note)note.textContent='Sin internet — puedes iniciar sesión igual si ya usaste este dispositivo antes';}
   checkSession();
 });
+
+// Registra el Service Worker propio de Funeral360 (sw-f360.js, independiente
+// del de la app de Huerta) — sin esto el navegador no ofrece "Instalar app"
+// con su propio ícono, y tampoco funciona el modo sin conexión.
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('./sw-f360.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
