@@ -10,9 +10,12 @@
 // y el Service Worker terminaba de instalarse igual, pero con la caché
 // vacía. La próxima vez que el celular estuviera de verdad sin conexión,
 // no había nada guardado que servir — la app simplemente no cargaba.
-// Se sube de versión (como en v3) para forzar que cualquier celular con esa
-// caché vacía/vieja la reemplace por una completa en cuanto tenga señal.
-const CACHE_NAME = 'huerta-ods-v4';
+// v5: con conexión lenta/inestable, abrir /funeral360/ (o cualquier otra
+// subcarpeta) podía terminar mostrando la app de Huerta por error — ver el
+// comentario junto a "carpeta" más abajo. Se sube de versión otra vez para
+// que cualquier celular con la caché vieja tome esta corrección en cuanto
+// tenga señal.
+const CACHE_NAME = 'huerta-ods-v5';
 
 // Lo mínimo para que la app "abra" sin conexión: la página principal, el
 // manifest y los íconos (para que además siga viéndose como app instalada).
@@ -122,8 +125,20 @@ self.addEventListener('fetch', function(event) {
         // Ni siquiera esta URL exacta está en caché: como es una SPA, para
         // cualquier navegación (abrir la app, un acceso directo, etc.) sirve
         // el index.html guardado en vez de dejar la pantalla en blanco.
+        // IMPORTANTE: este Service Worker cubre TODO lo que esté bajo su
+        // carpeta (scope), incluidas subcarpetas con su propia mini-app
+        // (ej. /funeral360/) — antes esto siempre caía al index.html de LA
+        // RAÍZ sin importar qué se hubiera pedido, así que con una conexión
+        // lenta o inestable /funeral360/ podía terminar mostrando por error
+        // la app de Huerta. Ahora primero intenta el index.html de la MISMA
+        // carpeta que se pidió, y solo si ni eso está en caché cae al de la
+        // raíz (mejor una app "vieja" que una pantalla en blanco).
         if (event.request.mode === 'navigate') {
-          return caches.match(self.registration.scope + 'index.html');
+          const reqUrl = new URL(event.request.url);
+          const carpeta = reqUrl.pathname.substring(0, reqUrl.pathname.lastIndexOf('/') + 1);
+          return caches.match(reqUrl.origin + carpeta + 'index.html').then(function(indexCercano) {
+            return indexCercano || caches.match(self.registration.scope + 'index.html');
+          });
         }
       });
     })
