@@ -212,6 +212,7 @@ button:active{transform:scale(.97)}
 
 <div id="loader"><div class="spin"></div><div style="color:var(--text2);font-size:13px">Cargando Funeral360…</div></div>
 <div id="offbar">Sin conexión — Modo offline activo</div>
+<div id="pendbar">⏳ Este dispositivo está pendiente de autorización — puedes consultar información, pero tus cambios NO se guardan en la nube hasta que un administrador lo autorice desde la app de Huerta → Configuración → Dispositivos autorizados</div>
 
 <!-- ═══ LOGIN ═══ -->
 <div id="login">
@@ -279,6 +280,7 @@ button:active{transform:scale(.97)}
 <div class="page act" id="page-certs">
   <div class="card">
     <div class="st">Certificaciones</div>
+    <p style="font-size:11px;color:var(--text3);margin-top:-4px">Aquí aparecen los mismos folios de la app de Huerta — crea uno rápido si el que buscas todavía no existe como orden.</p>
     <button class="bg" style="width:100%;margin-bottom:12px" onclick="abrirNuevoFolio()">➕ Nuevo Folio</button>
     <div class="f"><input id="certs-buscar" type="text" placeholder="Buscar por folio o nombre del finado…" oninput="renderListaFolios()"/></div>
     <div id="lista-folios"><p style="font-size:12px;color:var(--text3)">Cargando…</p></div>
@@ -315,7 +317,7 @@ button:active{transform:scale(.97)}
 <div class="page" id="page-config">
   <div class="card">
     <div class="st">Datos de la Funeraria</div>
-    <p style="font-size:12px;color:var(--text2)">Funeral360 es un software genérico — estos datos son los de TU funeraria y alimentan el PDF que se manda al médico y el Grupo 6 de la Solicitud de Registro Civil.</p>
+    <p style="font-size:12px;color:var(--text2)">Funeral360 es un software genérico — no trae ningún nombre de funeraria escrito de fábrica. Estos datos se guardan solo en este dispositivo y alimentan el PDF que se manda al médico y el Grupo 6 de la Solicitud de Registro Civil.</p>
     <div class="f"><label class="lbl">Nombre de la Funeraria</label><input id="cf-nombre" type="text"/></div>
     <div class="g2">
       <div class="f"><label class="lbl">Ciudad</label><input id="cf-ciudad" type="text"/></div>
@@ -330,7 +332,7 @@ button:active{transform:scale(.97)}
 <div class="page" id="page-nube">
   <div class="card">
     <div class="st">Sincronización en la Nube</div>
-    <p style="font-size:12px;color:var(--text2)">Pega aquí la URL de TU backend de Funeral360 (un Apps Script propio, desplegado como Aplicación Web — ver instrucciones al inicio de Codigo.gs). Sin esto, la app funciona solo localmente en este dispositivo.</p>
+    <p style="font-size:12px;color:var(--text2)">Funeral360 usa el mismo backend (Apps Script + Google Sheet) que la app de Huerta — los folios, certificaciones y colaboradores se comparten entre las dos. La URL ya viene configurada; solo pégala aquí si necesitas apuntar a otra distinta.</p>
     <div class="f"><label class="lbl">URL de Apps Script</label><input id="sc-url" type="text" placeholder="https://script.google.com/macros/s/.../exec"/></div>
     <div style="display:flex;gap:8px">
       <button class="bg" style="flex:1" onclick="guardarUrl()">💾 Guardar</button>
@@ -907,16 +909,24 @@ button:active{transform:scale(.97)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 /* ═══════════════════ FUNERAL360 — Módulo de Certificación ═══════════════════
-   by Omnia T3chnology. Backend propio e independiente — ver Codigo.gs. */
-const EK='f360_emp_v1', UK='f360_url_v1', SK='f360_sync_v1', QK='f360_q_v1',
-      FOLK='f360_folios_v1', CERK='f360_certificaciones_v1', RCK='f360_solicitudes_rc_v1',
+   by Omnia T3chnology. Usa el MISMO backend (Apps Script + Google Sheet) y
+   las mismas claves de localStorage que la app de Huerta a propósito — los
+   folios, colaboradores, certificaciones y el mapeo del formato de Registro
+   Civil se comparten entre las dos apps sin necesidad de tocar Codigo.gs. */
+const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2',
+      CERK='huerta_certificaciones_v1', RCK='huerta_solicitudes_rc_v1',
       CFGK='f360_config_funeraria_v1';
-const SESK='f360_session_v1', AUTHK='f360_authcred_v1';
-const ACTIVITY_KEY='f360_last_activity';
+const SESK='huerta_session_v1', AUTHK='huerta_authcred_v1', EPK='huerta_session_epoch';
+const DIDK='huerta_device_id_v1', DNK='huerta_device_nombre_v1';
+const ACTIVITY_KEY='huerta_last_activity';
 const SESSION_IDLE_MS=10*60*1000; // 10 minutos
 let lastActivityTs=Date.now();
 
-let ST={user:null,authCred:null,online:navigator.onLine,url:localStorage.getItem(UK)||'',page:'certs',folios:[],emps:[],q:JSON.parse(localStorage.getItem(QK)||'[]'),pin:'',loginTab:'pin'};
+// Backend compartido con la app de Huerta (Codigo.gs, un solo libro). Se
+// puede sobreescribir por dispositivo desde Sincronización Nube.
+const DEFAULT_APPS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwYAzofFgAYk9QP7xJBkFfF0JBcxjf_e7DCwvQArfzdy1N6XZaIHre2jmsI6NOUHEPnaw/exec";
+
+let ST={user:null,authCred:null,online:navigator.onLine,url:localStorage.getItem(UK)||DEFAULT_APPS_SCRIPT_URL,page:'certs',folios:[],emps:[],q:JSON.parse(localStorage.getItem(QK)||'[]'),pin:'',loginTab:'pin',dispositivoPendiente:false};
 
 const $=id=>document.getElementById(id);
 const fechaPlano=v=>{
@@ -926,6 +936,37 @@ const fechaPlano=v=>{
   return m?m[1]:s;
 };
 function toast(m,d=2800){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),d)}
+
+/* ── IDENTIDAD DE ESTE DISPOSITIVO (control de acceso por equipo del backend
+   de Huerta — un dispositivo nuevo queda "pendiente" hasta que un admin lo
+   autorice desde la app de Huerta → Configuración → Dispositivos autorizados) ── */
+function obtenerDeviceIdApp(){
+  let id=localStorage.getItem(DIDK);
+  if(!id){
+    id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():('dev-'+Date.now()+'-'+Math.random().toString(16).slice(2));
+    localStorage.setItem(DIDK,id);
+  }
+  return id;
+}
+function nombreDispositivoSugerido(){
+  const guardado=localStorage.getItem(DNK);
+  if(guardado)return guardado;
+  const ua=navigator.userAgent||'';
+  let so='Equipo';
+  if(/Android/i.test(ua))so='Android';
+  else if(/iPhone|iPad|iPod/i.test(ua))so='iPhone/iPad';
+  else if(/Windows/i.test(ua))so='Windows';
+  else if(/Macintosh/i.test(ua))so='Mac';
+  else if(/Linux/i.test(ua))so='Linux';
+  let nav='';
+  if(/Edg\//i.test(ua))nav='Edge';
+  else if(/Chrome\//i.test(ua))nav='Chrome';
+  else if(/Firefox\//i.test(ua))nav='Firefox';
+  else if(/Safari\//i.test(ua))nav='Safari';
+  const nombre=`${so}${nav?' · '+nav:''} (Funeral360)`;
+  localStorage.setItem(DNK,nombre);
+  return nombre;
+}
 
 /* ── CONEXIÓN ── */
 function setOnline(v){
@@ -941,13 +982,21 @@ window.addEventListener('offline',()=>setOnline(false));
 /* ── API ── */
 async function api(body){
   if(!ST.url) throw new Error('URL no configurada');
-  const r=await fetch(ST.url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(body)});
+  // miDispositivoId/miDispositivoNombre van en toda llamada — el backend de
+  // Huerta los usa para el control de acceso por equipo (ver Codigo.gs).
+  const conDevice=Object.assign({miDispositivoId:obtenerDeviceIdApp(),miDispositivoNombre:nombreDispositivoSugerido()},body);
+  const r=await fetch(ST.url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(conDevice)});
   return r.json();
 }
+function _actualizarBannerDispositivo(pendiente){
+  ST.dispositivoPendiente=pendiente;
+  const b=$('pendbar');
+  if(b)b.style.display=pendiente?'block':'none';
+}
 
-/* ── ALMACENAMIENTO LOCAL ── */
-function lFolios(){return JSON.parse(localStorage.getItem(FOLK)||'[]')}
-function sFolios(d){localStorage.setItem(FOLK,JSON.stringify(d));ST.folios=d}
+/* ── ALMACENAMIENTO LOCAL (mismas claves que la app de Huerta) ── */
+function lFolios(){return JSON.parse(localStorage.getItem(DB)||'[]')}
+function sFolios(d){localStorage.setItem(DB,JSON.stringify(d));ST.folios=d}
 function lEmp(){return JSON.parse(localStorage.getItem(EK)||'[]')}
 function sEmp(d){localStorage.setItem(EK,JSON.stringify(d));ST.emps=d}
 function lConfigFuneraria(){try{return JSON.parse(localStorage.getItem(CFGK)||'{}')}catch(e){return{}}}
@@ -975,7 +1024,7 @@ document.addEventListener('keydown', function(e){
   else if(e.key==='Enter'){e.preventDefault();doLogin();}
 });
 // El servidor guarda PIN/contraseña hasheados ("h1:<salt>:<hash>", ver
-// Codigo.gs) — la copia local de Colaboradores (usada para el login sin
+// Codigo.gs) — la copia local de Colaboradores (respaldo de login sin
 // conexión) recibe esos mismos valores hasheados.
 async function _sha256Hex(str){
   const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -994,8 +1043,10 @@ async function doLogin(){
   if(!pin&&!user){toast('Ingresa PIN o usuario');return}
   $('l-status').textContent='Validando…';
 
-  // Local first (permite iniciar sesión sin conexión si este dispositivo ya
-  // sincronizó alguna vez).
+  // Usa las mismas credenciales que ya tengas en la app de Huerta (misma
+  // hoja de Colaboradores). Local first: permite iniciar sesión sin
+  // conexión si este dispositivo ya sincronizó alguna vez (con esta app o
+  // con la de Huerta, si comparten navegador).
   const emps=lEmp();
   let local=null;
   for(const e of emps){
@@ -1010,7 +1061,16 @@ async function doLogin(){
     try{
       const authCred=pin?{pin}:{usuario:user,contrasena:pass};
       const r=await api(Object.assign({accion:'validarAcceso'},authCred));
-      if(r.ok){startSession(r.colaborador, authCred);return}
+      if(r.ok){
+        if(r.estadoDispositivo==='revocado'){
+          $('l-status').textContent='Este dispositivo fue revocado por un administrador.';
+          ST.pin='';updDots();
+          return;
+        }
+        startSession(r.colaborador, authCred);
+        _actualizarBannerDispositivo(r.estadoDispositivo==='pendiente');
+        return;
+      }
     }catch(e){}
   }
 
@@ -1030,7 +1090,6 @@ function startSession(col,authCred,esNueva=true){
   $('l-status').textContent='';ST.pin='';updDots();
   aplicarPermisosUI();
   navTo('certs');
-  cargarConfigFunerariaDeNube();
   _refrescarTrasSync();
   _iniciarSyncPeriodico();
   _iniciarControlInactividad();
@@ -1100,7 +1159,8 @@ function _cerrarSesionLocal(){
   $('login').style.display='flex';$('app').style.display='none';ST.pin='';updDots()
 }
 
-/* ── PERMISOS POR ROL ── (ADMINISTRADOR: acceso total; el resto solo certifica) */
+/* ── PERMISOS POR ROL ── (mismo criterio que la app de Huerta: ADMINISTRADOR
+   ve todo; el resto solo certifica) */
 function esAdmin(){
   const p = String(ST.user && ST.user.puesto || '').trim().toUpperCase();
   return p === 'ADMIN' || p.includes('ADMINISTRADOR');
@@ -1136,7 +1196,9 @@ function toggleSB(){$('sb').classList.toggle('open');$('sov').classList.toggle('
 function closeSB(){$('sb').classList.remove('open');$('sov').classList.remove('show')}
 function closeMo(id){$(id).classList.remove('show')}
 
-/* ── FOLIOS (expediente mínimo para poder certificar — sin lista de ODS) ── */
+/* ── FOLIOS ── (comparten la hoja OrdenesTrabajo con la app de Huerta: aquí
+   aparecen las órdenes que ya existan ahí, y "Nuevo Folio" crea una mínima
+   para poder certificar aunque todavía no exista como orden completa) */
 function genFolio(){
   const y=new Date().getFullYear().toString().slice(-2);
   const prefijo=`F360-${y}-`;
@@ -1154,13 +1216,13 @@ function abrirNuevoFolio(){
   $('nf-folio').value=genFolio();
   $('mo-nuevo-folio').classList.add('show');
 }
-function guardarNuevoFolio(){
+async function guardarNuevoFolio(){
   const folio=$('nf-folio').value.trim();
   const fallecido=$('nf-fallecido').value.trim();
   if(!folio||!fallecido){toast('⚠ Folio y nombre del finado son obligatorios');return}
   if(lFolios().some(f=>f.folio===folio)){toast('⚠ Ya existe un folio con ese identificador');return}
   const datos={
-    folio,fallecido,
+    folio,fallecido,estatus:'ACTIVA',
     contratante:$('nf-contratante').value.trim(),
     telefono:$('nf-telefono').value.trim(),
     direccionCalle:$('nf-calle').value.trim(),
@@ -1168,23 +1230,28 @@ function guardarNuevoFolio(){
     direccionLocalidad:$('nf-localidad').value.trim(),
     direccionMunicipio:$('nf-municipio').value.trim(),
     creadoPor:ST.user?(ST.user.nombreCompleto||ST.user.nombre||''):'',
-    fechaCreacion:new Date().toISOString()
+    fechaCreacion:new Date().toISOString(),fechaActualizacion:new Date().toISOString()
   };
-  const arr=lFolios();arr.push(datos);sFolios(arr);
-  encolar({accion:'guardarFolio',datos});
+  const arr=lFolios();arr.unshift(datos);sFolios(arr);
+  encolar({accion:'guardarODS',datos});
   closeMo('mo-nuevo-folio');
   renderListaFolios();
-  if(ST.online&&ST.url)sincronizarTodo(true);
+  if(ST.online&&ST.url){
+    try{
+      const r=await api({accion:'guardarODS',datos});
+      if(!r.ok)toast('⚠ '+(r.mensaje||'No se pudo guardar en la nube — se reintentará al sincronizar'));
+    }catch(e){}
+  }
   abrirCertificar(folio);
 }
 function renderListaFolios(){
   const host=$('lista-folios');if(!host)return;
   const q=(($('certs-buscar')||{value:''}).value||'').trim().toLowerCase();
-  let folios=lFolios().slice().sort((a,b)=>new Date(b.fechaCreacion||0)-new Date(a.fechaCreacion||0));
+  let folios=lFolios().slice().sort((a,b)=>new Date(b.fechaActualizacion||b.fechaCreacion||0)-new Date(a.fechaActualizacion||a.fechaCreacion||0));
   if(q)folios=folios.filter(f=>(f.folio||'').toLowerCase().includes(q)||(f.fallecido||'').toLowerCase().includes(q)||(f.contratante||'').toLowerCase().includes(q));
-  if(!folios.length){host.innerHTML='<p style="font-size:12px;color:var(--text3)">Sin folios todavía. Crea uno con "➕ Nuevo Folio".</p>';return}
+  if(!folios.length){host.innerHTML='<p style="font-size:12px;color:var(--text3)">Sin folios todavía. Crea uno con "➕ Nuevo Folio", o sincroniza para traer los de la app de Huerta.</p>';return}
   const cert=lCert(),rc=lRC();
-  host.innerHTML=folios.map(f=>{
+  host.innerHTML=folios.slice(0,300).map(f=>{
     const tieneCert=cert.some(c=>c.folio===f.folio);
     const tieneRC=rc.some(c=>c.folio===f.folio);
     return `<div class="card" style="padding:10px 12px;margin-bottom:8px">
@@ -1197,10 +1264,11 @@ function renderListaFolios(){
         <button class="bg bsm" onclick="abrirCertificar('${f.folio}')">📝 Certificar</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('')+(folios.length>300?`<p style="font-size:11px;color:var(--text3)">Mostrando los 300 más recientes de ${folios.length} — usa el buscador para encontrar uno anterior.</p>`:'');
 }
 
-/* ── COLABORADORES (login PIN / usuario+contraseña) ── */
+/* ── COLABORADORES ── (misma hoja de Huerta: quien se da de alta aquí puede
+   entrar también a la app de Huerta, y viceversa) */
 function registrarColab(){
   const id=($('c-id')||{value:''}).value.trim();
   const nom=($('c-nom')||{value:''}).value.trim();
@@ -1235,7 +1303,8 @@ function renderColab(){
   </div>`).join(''):'<div style="color:var(--text3);font-size:13px">Sin colaboradores.</div>';
 }
 
-/* ── DATOS DE LA FUNERARIA (Funeral360 es genérico — nada viene fijo) ── */
+/* ── DATOS DE LA FUNERARIA (Funeral360 es genérico — se guarda solo en este
+   dispositivo; Codigo.gs no tiene una acción propia para esto) ── */
 function cargarPaginaConfig(){
   const c=lConfigFuneraria();
   $('cf-nombre').value=c.nombre||'';
@@ -1243,7 +1312,7 @@ function cargarPaginaConfig(){
   $('cf-telefono').value=c.telefono||'';
   $('cf-direccion').value=c.direccion||'';
 }
-async function guardarConfigFuneraria(){
+function guardarConfigFuneraria(){
   const datos={
     nombre:$('cf-nombre').value.trim(),
     ciudad:$('cf-ciudad').value.trim(),
@@ -1252,16 +1321,6 @@ async function guardarConfigFuneraria(){
   };
   sConfigFuneraria(datos);
   toast('✅ Datos de la funeraria guardados en este dispositivo');
-  if(ST.online&&ST.url){
-    try{await api({accion:'guardarConfigFuneraria',datos,auth:ST.authCred});}catch(e){}
-  }
-}
-async function cargarConfigFunerariaDeNube(){
-  if(!(ST.online&&ST.url))return;
-  try{
-    const r=await api({accion:'obtenerConfigFuneraria',auth:ST.authCred});
-    if(r.ok&&r.datos&&Object.keys(r.datos).length)sConfigFuneraria(r.datos);
-  }catch(e){}
 }
 
 /* ── SINCRONIZACIÓN NUBE ── */
@@ -1296,18 +1355,56 @@ async function sincronizarTodo(silencioso=false){
   try{
     const r=await api({
       accion:'sincronizarTodo',auth:ST.authCred,
-      folios:lFolios(),colaboradores:lEmp(),certificaciones:lCert(),solicitudesRC:lRC()
+      ods:lFolios(),colaboradores:lEmp(),certificaciones:lCert(),solicitudesRC:lRC()
     });
     if(r.ok){
-      if(r.folios)sFolios(r.folios);
-      if(r.colaboradores)sEmp(r.colaboradores);
-      if(r.certificaciones)sCert(r.certificaciones);
-      if(r.solicitudesRC)sRC(r.solicitudesRC);
-      ST.q=[];localStorage.setItem(QK,'[]');
-      const now=new Date().toISOString();localStorage.setItem(SK,now);
-      const lbl=new Date(now).toLocaleString('es-MX');
+      if(r.sessionEpoch){
+        const epochLocal=localStorage.getItem(EPK);
+        if(epochLocal&&String(epochLocal)!==String(r.sessionEpoch)){
+          localStorage.setItem(EPK,String(r.sessionEpoch));
+          toast('Un administrador cerró todas las sesiones. Vuelve a iniciar sesión.');
+          _cerrarSesionLocal();
+          return false;
+        }
+        localStorage.setItem(EPK,String(r.sessionEpoch));
+      }
+      if(r.ods&&r.ods.length){
+        // La nube es la fuente autorizada tras el merge del servidor — cada
+        // folio recibido reemplaza a la copia local (así se reflejan
+        // cambios hechos en OTRO dispositivo, incluida la app de Huerta).
+        const local=lFolios(),porFolio={};
+        local.forEach(o=>{if(o.folio)porFolio[o.folio]=o});
+        r.ods.forEach(ro=>{if(ro.folio)porFolio[ro.folio]=ro});
+        sFolios(Object.values(porFolio));
+      }
+      if(r.eliminados&&r.eliminados.length){
+        const elimSet=new Set(r.eliminados);
+        sFolios(lFolios().filter(o=>!elimSet.has(o.folio)));
+      }
+      if(r.colaboradores&&r.colaboradores.length)sEmp(r.colaboradores);
+      if(r.certificaciones&&r.certificaciones.length){
+        const localCert=lCert();
+        const porFolioCert={};localCert.forEach(c=>{porFolioCert[c.folio]=c});
+        r.certificaciones.forEach(rc=>{porFolioCert[rc.folio]=rc});
+        sCert(Object.values(porFolioCert));
+      }
+      if(r.solicitudesRC&&r.solicitudesRC.length){
+        const localRC=lRC();
+        const porFolioRC={};localRC.forEach(c=>{porFolioRC[c.folio]=c});
+        r.solicitudesRC.forEach(rr=>{porFolioRC[rr.folio]=rr});
+        sRC(Object.values(porFolioRC));
+      }
+      _actualizarBannerDispositivo(!!r.dispositivoPendiente);
+      const lbl=new Date().toLocaleString('es-MX');
       const lblEl=$('lbl-sync');if(lblEl)lblEl.textContent=lbl;
       const logEl=$('sync-log');
+      if(r.dispositivoPendiente){
+        if(logEl){logEl.textContent='⏳ '+r.mensaje;logEl.style.color='var(--text3)'}
+        if(!silencioso)toast('⏳ Dispositivo pendiente de autorización — se descargó lo último, pero tus cambios locales todavía no se subieron',4500);
+        return false;
+      }
+      ST.q=[];localStorage.setItem(QK,'[]');
+      localStorage.setItem(SK,new Date().toISOString());
       if(r.erroresSync&&r.erroresSync.length){
         if(logEl){logEl.textContent='⚠ '+r.erroresSync.length+' dato(s) no se guardaron';logEl.style.color='var(--amber)'}
         toast('⚠ '+r.erroresSync.length+' dato(s) no se guardaron — vuelve a intentar');
@@ -1317,6 +1414,11 @@ async function sincronizarTodo(silencioso=false){
       if(!silencioso)toast('✅ Sincronización completa');
       return true;
     }else{
+      if(r.dispositivoRevocado){
+        toast('🚫 '+r.mensaje);
+        _cerrarSesionLocal();
+        return false;
+      }
       const detalle=r.mensaje||r.error||'El servidor respondió sin detalle del error.';
       const logEl=$('sync-log');if(logEl){logEl.textContent='❌ '+detalle;logEl.style.color='var(--red)'}
       if(!silencioso)toast('❌ '+detalle,6000);
@@ -2724,7 +2826,7 @@ const RC_POS_DEFAULT=[
   {id:'rev_pos_e',label:'Reverso · Posición (X Patrón/empresario)',page:2,x:6.58,y:2.91},
   {id:'rev_pos_f',label:'Reverso · Posición (X Trab. no remunerado)',page:2,x:6.58,y:3.07}
 ];
-const RCMAPK='f360_rc_mapeo_v1';
+const RCMAPK='huerta_rc_mapeo_v1';
 function lRCMap(){return JSON.parse(localStorage.getItem(RCMAPK)||'{}')}
 function sRCMap(m){localStorage.setItem(RCMAPK,JSON.stringify(m))}
 function rcPos(id){
