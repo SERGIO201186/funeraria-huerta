@@ -1730,7 +1730,7 @@ button:active{transform:scale(.97)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
-const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1', CERK='huerta_certificaciones_v1', RCK='huerta_solicitudes_rc_v1', PRODK='huerta_prods_v1', SUBK='huerta_last_upload_v1';
+const DB='huerta_ods_v2', EK='huerta_emp_v2', UK='huerta_url', SK='huerta_sync', QK='huerta_q_v2', ABK='huerta_abonos_v2', SOLK='huerta_solicitudes_v1', CERK='huerta_certificaciones_v1', RCK='huerta_solicitudes_rc_v1', PRODK='huerta_prods_v1', SUBK='huerta_last_upload_v1', DESCK='huerta_last_download_v1';
 // Sesión persistente (por dispositivo): guarda QUIÉN inició sesión en ESTE
 // celular y la credencial (PIN o usuario/contraseña) que se manda con cada
 // sincronización para que el servidor la valide. Es distinto del atajo de
@@ -3837,6 +3837,15 @@ async function sincronizarTodo(silencioso=false){
       accion:'sincronizarTodo',
       auth:ST.authCred,
       ods:_odsParaSubir(),
+      // Marca de SERVIDOR (no del reloj de este celular — ver
+      // localStorage[DESCK] y _tsInicioSync en Codigo.gs) de la última
+      // descarga completa que este dispositivo aplicó — el servidor la usa
+      // para mandar solo las ODS que cambiaron desde entonces, en vez del
+      // historial completo con firmas embebidas en cada sync (ver el
+      // comentario "DESCARGA INCREMENTAL" en sincronizarTodo() de
+      // Codigo.gs). Sin marca (dispositivo nuevo) el servidor manda todo,
+      // igual que siempre.
+      ultimaDescarga:localStorage.getItem(DESCK)||'',
       colaboradores:lEmp(),
       abonos:lAbonos(),
       solicitudes:lSolic(),
@@ -3920,6 +3929,14 @@ async function sincronizarTodo(silencioso=false){
         r.solicitudesRC.forEach(rr=>{porFolioRC[rr.folio]=rr});
         sRC(Object.values(porFolioRC));
       }
+      // Se guarda apenas se aplicó lo de arriba (r.ods ya se fusionó con la
+      // copia local), sin esperar a que el resto de la función termine bien
+      // — incluso si más abajo hay erroresSync (de OTROS elementos) o el
+      // dispositivo está pendiente de autorización, lo que se descargó aquí
+      // ya quedó aplicado, así que es seguro avanzar la marca para no
+      // volver a pedirlo. Usa la hora del SERVIDOR (r.servidorTs), no la de
+      // este celular — ver el comentario en Codigo.gs.
+      if(r.servidorTs)localStorage.setItem(DESCK,r.servidorTs);
       _actualizarBannerDispositivo(!!r.dispositivoPendiente);
       // Dispositivo pendiente de autorización: la nube SÍ se descargó (ya
       // aplicada arriba), pero el servidor ignoró a propósito lo que este
@@ -4026,7 +4043,7 @@ function copiarInstrucciones(){
 }
 function resetLocal(){
   if(!confirm('¿Borrar TODOS los datos locales?'))return;
-  [DB,EK,QK,SK,SUBK,ABK,SOLK,CERK,RCK,SESK,AUTHK,EPK].forEach(k=>localStorage.removeItem(k));
+  [DB,EK,QK,SK,SUBK,DESCK,ABK,SOLK,CERK,RCK,SESK,AUTHK,EPK].forEach(k=>localStorage.removeItem(k));
   ST.q=[];ST.ods=[];ST.emps=[];
   toast('🗑 Datos locales eliminados');updDash();
 }

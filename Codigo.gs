@@ -1391,6 +1391,16 @@ function _procesarLista(lista, fn, etiqueta, errores) {
   });
 }
 function sincronizarTodo(payload, estadoDispositivo) {
+  // Marca de tiempo del SERVIDOR (no del celular) para la descarga
+  // incremental de más abajo: si se usara la hora del dispositivo, un
+  // celular con el reloj adelantado (pasa más de lo que parece) mandaría en
+  // su siguiente sync una marca "del futuro" respecto al reloj del
+  // servidor — cualquier cambio de OTRO dispositivo con fechaActualizacion
+  // (puesta con la hora del servidor, ver guardarODS/guardarFirma/etc.)
+  // anterior a esa marca quedaría excluido PARA SIEMPRE de sus próximas
+  // descargas, porque la marca solo avanza. Al mandar siempre la hora del
+  // servidor, cliente y comparación quedan en el mismo reloj.
+  const _tsInicioSync = new Date().toISOString();
   const ods            = payload.ods    || [];
   const emps           = payload.colaboradores || [];
   const prevs          = payload.previsiones   || [];
@@ -1406,31 +1416,78 @@ function sincronizarTodo(payload, estadoDispositivo) {
   const soloLectura = estadoDispositivo != null && estadoDispositivo !== "autorizado";
   const errores = [];
   if (!soloLectura) {
-    // Si quien sincroniza no es Administrador, guardarColaborador() rechaza cualquier
-    // colaborador de la lista que traiga puesto de Administrador (ver ahí mismo) — así
-    // un colaborador normal no puede auto-otorgarse (ni otorgarle a nadie) ese rol
-    // coleándose en una sincronización.
-    const quienSincronizaEsAdmin = verificarAdminColaborador(payload.auth);
-    _procesarLista(ods,             guardarODS,            "ODS",             errores);
-    _procesarLista(emps,            e => guardarColaborador(e, quienSincronizaEsAdmin), "Colaborador", errores);
-    _procesarLista(prevs,           guardarPrevision,      "Previsión",       errores);
-    _procesarLista(abonos,          guardarAbono,          "Abono",           errores);
-    _procesarLista(solicitudes,     guardarSolicitud,      "Solicitud",       errores);
-    _procesarLista(certificaciones, guardarCertificacion,  "Certificación",   errores);
-    _procesarLista(solicitudesRC,   guardarSolicitudRC,    "Solicitud RC",    errores);
+    // CANDADO: antes, dos dispositivos podían sincronizar en el mismo
+    // instante (muy fácil con el auto-sync cada _SYNC_INTERVALO_MS del
+    // cliente, más quien sincroniza a mano) y sus lecturas/escrituras a las
+    // hojas (findRow → setValue/appendRow, sin ninguna atomicidad entre
+    // ambos pasos) se entrelazaban — eso producía tanto errores sueltos de
+    // Sheets ("Se ha producido un error interno, inténtalo de nuevo") como,
+    // en el peor caso, un choque de folio silencioso. Con el candado, un
+    // solo dispositivo escribe a la vez; los demás esperan su turno en vez
+    // de chocar. Si no se consigue el candado a tiempo (otro sync tardó
+    // demasiado), se avisa como error de sync — el cliente ya reintenta
+    // solo en el siguiente ciclo (ver sincronizarTodo() en index.html) sin
+    // perder nada, porque _odsParaSubir() no avanza su marca de "subida
+    // limpia" cuando hay erroresSync.
+    const lock = LockService.getScriptLock();
+    let tieneLock = false;
+    try { tieneLock = lock.tryLock(20000); } catch (e) { tieneLock = false; }
+    if (!tieneLock) {
+      errores.push("Sincronización general: el servidor estaba ocupado con otra sincronización — se reintentará en el próximo sync.");
+    } else {
+      try {
+        // Si quien sincroniza no es Administrador, guardarColaborador() rechaza cualquier
+        // colaborador de la lista que traiga puesto de Administrador (ver ahí mismo) — así
+        // un colaborador normal no puede auto-otorgarse (ni otorgarle a nadie) ese rol
+        // coleándose en una sincronización.
+        const quienSincronizaEsAdmin = verificarAdminColaborador(payload.auth);
+        _procesarLista(ods,             guardarODS,            "ODS",             errores);
+        _procesarLista(emps,            e => guardarColaborador(e, quienSincronizaEsAdmin), "Colaborador", errores);
+        _procesarLista(prevs,           guardarPrevision,      "Previsión",       errores);
+        _procesarLista(abonos,          guardarAbono,          "Abono",           errores);
+        _procesarLista(solicitudes,     guardarSolicitud,      "Solicitud",       errores);
+        _procesarLista(certificaciones, guardarCertificacion,  "Certificación",   errores);
+        _procesarLista(solicitudesRC,   guardarSolicitudRC,    "Solicitud RC",    errores);
+      } finally {
+        lock.releaseLock();
+      }
+    }
   }
 
   if (errores.length) logActividad("sincronizarTodo:errores", "", errores.join(" | "));
+
+  // DESCARGA INCREMENTAL: antes se regresaba SIEMPRE el historial completo
+  // de ODS (cada una con la firma del contratante embebida en base64) en
+  // cada sincronización, incluida la automática cada 5 minutos de cada
+  // dispositivo — con cientos de órdenes ya capturadas, esa respuesta se
+  // volvía cada vez más pesada y lenta, hasta acercarse al límite de tiempo
+  // de ejecución de Apps Script: el sync tronaba con error del lado del
+  // cliente (timeout / respuesta no-JSON) AUNQUE las escrituras de arriba ya
+  // hubieran quedado guardadas — de ahí que pareciera que "a veces falla
+  // pero igual sincronizó". Ahora, si el dispositivo manda la marca de
+  // servidor que le dimos en su última descarga completa aplicada
+  // (payload.ultimaDescarga, ver localStorage[DESCK] en index.html — misma
+  // idea que _odsParaSubir() ya usa para la subida, pero con la hora del
+  // SERVIDOR en vez de la del dispositivo, ver _tsInicioSync arriba), solo
+  // se le mandan las órdenes modificadas desde entonces; el cliente ya sabe
+  // fusionar una lista parcial con lo que tenía (ver el merge por folio en
+  // sincronizarTodo() de index.html). Un dispositivo nuevo (sin esa marca)
+  // sigue recibiendo todo, igual que antes.
+  const ultimaDescargaTs = payload.ultimaDescarga ? new Date(payload.ultimaDescarga).getTime() : 0;
 
   return {
     ok:true,
     erroresSync: errores,
     dispositivoPendiente: soloLectura,
+    // El cliente guarda esto como su nueva marca de "última descarga" (en
+    // vez de usar su propio reloj) para la siguiente sincronización — ver
+    // _tsInicioSync arriba.
+    servidorTs: _tsInicioSync,
     mensaje: soloLectura
       ? "Dispositivo pendiente de autorización — se descargó lo último de la nube, pero tus cambios locales todavía NO se han subido."
       : `Sync OK: ${ods.length} ODS, ${emps.length} colaboradores, ${prevs.length} previsiones`
         + (errores.length ? ` — ⚠ ${errores.length} elemento(s) NO se pudieron guardar` : ""),
-    ods:            obtenerODS({}).datos,
+    ods:            _odsModificadosDesde(ultimaDescargaTs),
     colaboradores: obtenerColaboradores().datos,
     // "Previsiones" es solo para la app hermana: esta app nunca manda datos
     // aquí. Si alguien borró esa pestaña a propósito, no hay que recrearla
@@ -1451,6 +1508,21 @@ function sincronizarTodo(payload, estadoDispositivo) {
   };
 }
 
+// Ver el comentario "DESCARGA INCREMENTAL" en sincronizarTodo(). tsDesde=0
+// (dispositivo nuevo o que nunca ha completado una descarga) regresa todo,
+// igual que el obtenerODS({}) de siempre.
+function _odsModificadosDesde(tsDesde) {
+  const todas = obtenerODS({}).datos;
+  if (!tsDesde) return todas;
+  return todas.filter(o => {
+    const t = o.fechaActualizacion ? new Date(o.fechaActualizacion).getTime() : 0;
+    // Sin fechaActualizacion (dato viejo de antes de que existiera esa
+    // columna) no hay forma de saber si cambió o no — se manda por
+    // seguridad, igual que ya hace _odsParaSubir() en el cliente.
+    return !t || t >= tsDesde;
+  });
+}
+
 function _previsionesSiExiste() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss.getSheetByName(SH_PREV)) return [];
@@ -1467,8 +1539,16 @@ function guardarFirma(datos) {
   const headers = headersReales(sh);
   const ciFirma = headers.indexOf("firmaContratanteB64");
   const ciFecha = headers.indexOf("firmaFecha");
+  const ciActualizacion = headers.indexOf("fechaActualizacion");
   if (ciFirma >= 0) sh.getRange(idx, ciFirma+1).setValue(datos.firmaB64 || "");
   if (ciFecha >= 0) sh.getRange(idx, ciFecha+1).setValue(new Date().toISOString());
+  // Sin esto, la firma se guardaba pero la orden no quedaba marcada como
+  // "modificada" — la descarga incremental de sincronizarTodo() (que solo
+  // manda lo que cambió desde la última sincronía de cada dispositivo, ver
+  // ahí mismo) nunca la habría considerado un cambio, y otros celulares no
+  // se habrían enterado de la firma nueva hasta que esa orden cambiara por
+  // otro motivo.
+  if (ciActualizacion >= 0) sh.getRange(idx, ciActualizacion+1).setValue(new Date().toISOString());
   logActividad("guardarFirma", datos.creadoPor||"", datos.folio);
   return { ok:true, mensaje:"Firma guardada" };
 }
@@ -1803,6 +1883,48 @@ const _ESQUEMA_EXTRACCION = {
   CERTIFICADO_DEFUNCION: { prompt: _CERTIFICADO_DEFUNCION_PROMPT, schema: _CERTIFICADO_DEFUNCION_SCHEMA }
 };
 
+// Un solo intento de llamada a Gemini — separado de extraerDatosDocumento()
+// para poder reintentar UNA vez ante fallas transitorias (ver ahí mismo).
+// "retryable:true" marca los casos donde vale la pena reintentar: 429 (límite
+// de peticiones — varios colaboradores usando la lectura automática casi al
+// mismo tiempo agota la cuota por minuto de la GEMINI_API_KEY, que es
+// compartida por toda la funeraria) y 5xx (falla temporal del lado de
+// Google), además de cualquier error de red al contactar el servicio.
+function _llamarGeminiUnaVez(url, apiKey, cuerpo) {
+  let resp;
+  try {
+    // La clave va en el encabezado x-goog-api-key (forma oficial recomendada
+    // por Google) en vez de en la URL — funciona igual con claves nuevas
+    // "AQ." y con las viejas "AIza", y no queda expuesta en registros/logs.
+    resp = UrlFetchApp.fetch(url, {
+      method: "post", contentType: "application/json",
+      headers: { "x-goog-api-key": apiKey },
+      payload: JSON.stringify(cuerpo), muteHttpExceptions: true
+    });
+  } catch (err) {
+    return { ok:false, retryable:true, error:"No se pudo contactar al servicio de IA: " + err.message };
+  }
+  const code = resp.getResponseCode();
+  let json;
+  try { json = JSON.parse(resp.getContentText()); }
+  catch (e) { return { ok:false, retryable: code >= 500, error:"Respuesta inválida del servicio de IA." }; }
+  if (code !== 200) {
+    return {
+      ok:false, retryable: code === 429 || code >= 500,
+      error: (json.error && json.error.message) || ("Error del servicio de IA (" + code + ").")
+    };
+  }
+  try {
+    const texto = json.candidates[0].content.parts[0].text;
+    return { ok:true, datos: JSON.parse(texto) };
+  } catch (e) {
+    // El modelo no devolvió el JSON esperado (ej. la imagen fue bloqueada
+    // por el filtro de seguridad y candidates[0] no trae texto) — reintentar
+    // una vez sirve porque no siempre es reproducible con la misma imagen.
+    return { ok:false, retryable:true, error:"No se pudo interpretar la respuesta de IA." };
+  }
+}
+
 // payload: {tipoDocumento, base64, mimeType}
 function extraerDatosDocumento(payload) {
   const tipoDocumento = payload && payload.tipoDocumento;
@@ -1821,31 +1943,20 @@ function extraerDatosDocumento(payload) {
     ] }],
     generationConfig: { responseMimeType: "application/json", responseSchema: cfg.schema }
   };
-  let resp;
-  try {
-    // La clave va en el encabezado x-goog-api-key (forma oficial recomendada
-    // por Google) en vez de en la URL — funciona igual con claves nuevas
-    // "AQ." y con las viejas "AIza", y no queda expuesta en registros/logs.
-    resp = UrlFetchApp.fetch(url, {
-      method: "post", contentType: "application/json",
-      headers: { "x-goog-api-key": apiKey },
-      payload: JSON.stringify(cuerpo), muteHttpExceptions: true
-    });
-  } catch (err) {
-    return { ok:false, error:"No se pudo contactar al servicio de IA: " + err.message };
+  // Antes, cualquier falla (típicamente 429 por límite de cuota compartida
+  // entre todo el personal, o una respuesta rara de Gemini) se mostraba de
+  // inmediato como "no se pudo leer", aunque reintentando la MISMA imagen
+  // segundos después casi siempre funcionaba — eso es justo lo que se veía
+  // como "a veces sí lee, a veces no" con la misma foto. Ahora, ante un
+  // error marcado como reintentable, se espera un poco y se intenta una vez
+  // más antes de rendirse.
+  let resultado = _llamarGeminiUnaVez(url, apiKey, cuerpo);
+  if (!resultado.ok && resultado.retryable) {
+    Utilities.sleep(1500);
+    resultado = _llamarGeminiUnaVez(url, apiKey, cuerpo);
   }
-  let json;
-  try { json = JSON.parse(resp.getContentText()); }
-  catch (e) { return { ok:false, error:"Respuesta inválida del servicio de IA." }; }
-  if (resp.getResponseCode() !== 200) {
-    return { ok:false, error: (json.error && json.error.message) || ("Error del servicio de IA (" + resp.getResponseCode() + ").") };
-  }
-  try {
-    const texto = json.candidates[0].content.parts[0].text;
-    return { ok:true, datos: JSON.parse(texto) };
-  } catch (e) {
-    return { ok:false, error:"No se pudo interpretar la respuesta de IA." };
-  }
+  delete resultado.retryable;
+  return resultado;
 }
 
 function getAlertEmail() {
@@ -2653,13 +2764,19 @@ function _acreditarPagoMP(tipo, folio, monto, referencia, nota) {
     let contratante = '';
     if (oIdx !== -1) {
       const ciAnticipo = oHeaders.indexOf("anticipo"), ciRestante = oHeaders.indexOf("restante"),
-            ciTotal = oHeaders.indexOf("totalGeneral"), ciContratante = oHeaders.indexOf("contratante");
+            ciTotal = oHeaders.indexOf("totalGeneral"), ciContratante = oHeaders.indexOf("contratante"),
+            ciActualizacion = oHeaders.indexOf("fechaActualizacion");
       contratante = oSh.getRange(oIdx, ciContratante + 1).getValue();
       const anticipoActual = Number(oSh.getRange(oIdx, ciAnticipo + 1).getValue()) || 0;
       const totalGeneral = Number(oSh.getRange(oIdx, ciTotal + 1).getValue()) || 0;
       const nuevoAnticipo = anticipoActual + Number(monto);
       oSh.getRange(oIdx, ciAnticipo + 1).setValue(nuevoAnticipo);
       oSh.getRange(oIdx, ciRestante + 1).setValue(Math.max(0, totalGeneral - nuevoAnticipo));
+      // Igual que en guardarFirma(): sin marcar fechaActualizacion aquí, la
+      // descarga incremental de sincronizarTodo() no se enteraría de que
+      // esta orden cambió (un pago de Mercado Pago no pasa por guardarODS/
+      // actualizarODS, que son los que normalmente la actualizan).
+      if (ciActualizacion >= 0) oSh.getRange(oIdx, ciActualizacion + 1).setValue(new Date().toISOString());
     }
     const aSh = getAbonoSh();
     aSh.appendRow(toRow(headersReales(aSh), {
