@@ -359,7 +359,8 @@ function doPost(e) {
       "guardarSolicitudRC","guardarAlertaConfig","guardarMapeoRC","reiniciarMapeoRC",
       "enviarAlertaPrueba","subirDocumento","eliminarDocumento","extraerDatosDocumento",
       "cerrarTodasLasSesiones","actualizarDispositivo","actualizarDispositivoApp",
-      "guardarConfigPagos","crearIntentoPagoMP","confirmarPagoMP","descartarPagoMP"
+      "guardarConfigPagos","crearIntentoPagoMP","confirmarPagoMP","descartarPagoMP",
+      "buscarPagoMP"
     ];
     let _estadoDispositivo = "autorizado"; // acciones públicas: no se evalúa dispositivo
     if (_colabDeSesion) {
