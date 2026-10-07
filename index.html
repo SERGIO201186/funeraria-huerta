@@ -1503,10 +1503,10 @@ button:active{transform:scale(.97)}
       <div class="card">
         <div class="st">Grupo 6 · Datos de la Funeraria</div>
         <div class="g2">
-          <div class="f"><label class="lbl">Nombre</label><input id="rc-fun-nombre" type="text" value="Servicios Funerarios Huerta" readonly/></div>
-          <div class="f"><label class="lbl">Ciudad</label><input id="rc-fun-ciudad" type="text" value="Xalapa" readonly/></div>
+          <div class="f"><label class="lbl">Nombre</label><input id="rc-fun-nombre" type="text" value="Servicios Funerarios Huerta"/></div>
+          <div class="f"><label class="lbl">Ciudad</label><input id="rc-fun-ciudad" type="text" value="Xalapa"/></div>
         </div>
-        <div class="f"><label class="lbl">Teléfono</label><input id="rc-fun-telefono" type="text" value="2281845114" readonly/></div>
+        <div class="f"><label class="lbl">Teléfono</label><input id="rc-fun-telefono" type="text" value="2281845114"/></div>
         <div class="f"><label class="lbl">Funerario que Asiste</label><select id="rc-fun-asiste" onchange="rcToggleFunerarioOtro()"></select></div>
         <div class="f" id="rc-blq-fun-otro" style="display:none"><label class="lbl">Especificar</label><input id="rc-fun-asiste-otro" type="text"/></div>
       </div>
@@ -5870,6 +5870,11 @@ function rcCargar(folio){
     // al entrar a esta pestaña (sin pasar por rcInit — ver ahí el porqué).
     rcAplicarPrecargaCert(folio);
   }
+  // Datos de la funeraria: editables libremente; si no hay nada guardado se
+  // proponen los de Huerta.
+  g('rc-fun-nombre',(rc&&rc.rcFunerariaNombre)||'Servicios Funerarios Huerta');
+  g('rc-fun-ciudad',(rc&&rc.rcFunerariaCiudad)||'Xalapa');
+  g('rc-fun-telefono',(rc&&rc.rcFunerariaTelefono)||'2281845114');
 
   rcToggleConyuge();
   rcToggleVivoRC('cony');rcToggleVivoRC('pa');rcToggleVivoRC('ma');
